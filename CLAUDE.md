@@ -210,7 +210,7 @@ Required (at least one provider):
 Provider Configuration:
 - `{PROVIDER}_API_FORMAT` - API format: "openai" (default) or "anthropic"
 - `{PROVIDER}_BASE_URL` - Base URL for the provider
-- `DEFAULT_PROVIDER` - Default provider to use (defaults to "openai")
+- `VDM_DEFAULT_PROVIDER` - Default provider to use (defaults to "openai")
 
 Examples:
 ```bash
@@ -280,7 +280,7 @@ ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY="exact-matching-key" 
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_BASE_URL=https://api.anthropic.com
 ANTHROPIC_API_FORMAT=anthropic
-DEFAULT_PROVIDER=anthropic
+VDM_DEFAULT_PROVIDER=anthropic
 ```
 
 #### AWS Bedrock
@@ -289,7 +289,7 @@ DEFAULT_PROVIDER=anthropic
 BEDROCK_API_KEY=your-aws-key
 BEDROCK_BASE_URL=https://bedrock-runtime.us-east-1.amazonaws.com
 BEDROCK_API_FORMAT=anthropic
-DEFAULT_PROVIDER=bedrock
+VDM_DEFAULT_PROVIDER=bedrock
 
 # Use with specific model
 ANTHROPIC_BASE_URL=http://localhost:8082 claude --model bedrock:anthropic.claude-3-sonnet-20240229-v1:0
@@ -301,14 +301,14 @@ ANTHROPIC_BASE_URL=http://localhost:8082 claude --model bedrock:anthropic.claude
 VERTEX_API_KEY=your-vertex-key
 VERTEX_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 VERTEX_API_FORMAT=anthropic
-DEFAULT_PROVIDER=vertex
+VDM_DEFAULT_PROVIDER=vertex
 ```
 
 #### Provider Selection in Requests
 
 You can specify which provider to use per request:
 
-1. **Default Provider**: Uses the configured `DEFAULT_PROVIDER`
+1. **Default Provider**: Uses the configured `VDM_DEFAULT_PROVIDER`
    ```bash
    # Uses default provider
    claude --model claude-3-5-sonnet-20241022
@@ -325,7 +325,7 @@ You can specify which provider to use per request:
 3. **Environment Override**: Override default provider temporarily
    ```bash
    # Temporarily use different provider
-   DEFAULT_PROVIDER=anthropic claude
+   VDM_DEFAULT_PROVIDER=anthropic claude
    ```
 
 ### Testing Endpoints

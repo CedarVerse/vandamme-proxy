@@ -60,13 +60,13 @@ class ProviderManager:
 
     def _load_default_provider(self) -> None:
         """Load the default provider configuration"""
-        # For backward compatibility, we support both OPENAI_* and DEFAULT_PROVIDER_*
+        # For backward compatibility, we support both OPENAI_* and VDM_DEFAULT_PROVIDER*
         api_key = os.environ.get("OPENAI_API_KEY")
         base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         api_version = os.environ.get("AZURE_API_VERSION")
 
         if self.default_provider != "openai":
-            # Try to load from VDM_DEFAULT_PROVIDER_*
+            # Try to load from VDM_DEFAULT_PROVIDER
             provider_prefix = f"{self.default_provider.upper()}_"
             api_key = os.environ.get(f"{provider_prefix}API_KEY")
             base_url = os.environ.get(f"{provider_prefix}BASE_URL", "https://api.openai.com/v1")

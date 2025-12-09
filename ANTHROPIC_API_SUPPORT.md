@@ -60,7 +60,7 @@ BEDROCK_API_FORMAT=anthropic
 ### Usage
 
 #### Provider Selection
-1. **Default Provider**: Uses `DEFAULT_PROVIDER` setting
+1. **Default Provider**: Uses `VDM_DEFAULT_PROVIDER` setting
    ```bash
    claude --model claude-3-5-sonnet-20241022
    ```
