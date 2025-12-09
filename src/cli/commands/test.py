@@ -123,12 +123,7 @@ def providers() -> None:
         for provider_name, provider_config in providers.items():
             is_default = "✓" if provider_name == config.provider_manager.default_provider else ""
             api_version = provider_config.api_version or "N/A"
-            table.add_row(
-                provider_name,
-                provider_config.base_url,
-                api_version,
-                is_default
-            )
+            table.add_row(provider_name, provider_config.base_url, api_version, is_default)
 
         console.print(table)
         console.print()
