@@ -20,14 +20,14 @@ A proxy server that converts Claude API requests to OpenAI-compatible API calls.
 ### 1. Install Dependencies
 
 ```bash
+# Quick start (recommended)
+make init-dev
+
 # Using UV (recommended)
-uv sync
+uv sync --extra cli
 
 # Or using pip
 pip install -r requirements.txt
-
-# Install CLI dependencies
-uv sync --extra cli
 ```
 
 ### 2. Configure
@@ -263,8 +263,14 @@ claude
 Test proxy functionality and configuration:
 
 ```bash
-# Run comprehensive tests
-python src/test_claude_to_openai.py
+# Run all tests
+make test
+
+# Run comprehensive integration tests
+make test-integration
+
+# Run unit tests
+make test-unit
 
 # Test configuration
 vdm test connection
@@ -312,6 +318,31 @@ vdm version
 
 ## Development
 
+### Using Make (recommended)
+
+```bash
+# Initialize development environment
+make init-dev
+
+# Run server using CLI
+vdm start
+
+# Run development server with hot reload
+make dev
+
+# Format code
+make format
+
+# Type checking
+make type-check
+
+# Run all code quality checks
+make check
+
+# Run tests
+make test
+```
+
 ### Using UV
 
 ```bash
@@ -325,11 +356,13 @@ vdm start
 uv run python start_proxy.py
 
 # Format code
-uv run black src/
-uv run isort src/
+make format
 
 # Type checking
-uv run mypy src/
+make type-check
+
+# Run all code quality checks
+make check
 ```
 
 ### Project Structure

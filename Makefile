@@ -11,10 +11,11 @@ SHELL := /bin/bash
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
-.PHONY: help install install-dev clean test test-unit test-integration \
-        format lint type-check check build run dev docker-build docker-up \
-        docker-down docker-logs health ci coverage pre-commit all watch \
-        deps-check security-check validate quick-check
+.PHONY: help install install-deps install-dev install-pip clean \
+        test test-unit test-integration format lint type-check check build \
+        run dev docker-build docker-up docker-down docker-logs health \
+        ci coverage pre-commit all watch deps-check security-check validate \
+        quick-check init-dev check-install
 
 # ============================================================================
 # Configuration
@@ -54,15 +55,16 @@ RED := \033[31m
 # ============================================================================
 
 help: ## Show this help message
-	@echo "$(BOLD)$(CYAN)Claude Code Proxy - Makefile Commands$(RESET)"
+	@echo "$(BOLD)$(CYAN)Vandamme Proxy - Makefile Commands$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Quick Start:$(RESET)"
-	@echo "  $(GREEN)make install-dev$(RESET)    - Install all dependencies"
+	@echo "  $(GREEN)make init-dev$(RESET)       - Initialize development environment"
+	@echo "  $(GREEN)make install-dev$(RESET)    - Install in development mode"
 	@echo "  $(GREEN)make dev$(RESET)            - Start development server"
 	@echo "  $(GREEN)make validate$(RESET)       - Quick check + tests (fast)"
 	@echo ""
 	@echo "$(BOLD)Setup & Installation:$(RESET)"
-	@grep -E '^(install|deps-check).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(install|install-|deps-check|init-dev|check-install).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(BOLD)Development:$(RESET)"
 	@grep -E '^(run|dev|health|clean|watch):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -95,12 +97,21 @@ ifndef HAS_UV
 endif
 	$(UV) sync --no-dev
 
-install-dev: ## Install all dependencies including dev tools (UV)
+install-deps: ## Install all dependencies including dev tools (UV)
 	@echo "$(BOLD)$(GREEN)Installing all dependencies (including dev)...$(RESET)"
 ifndef HAS_UV
 	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
 endif
 	$(UV) sync
+
+install-dev: ## Install in development/editable mode (enables hot reload)
+	@echo "$(BOLD)$(GREEN)Installing in development mode...$(RESET)"
+ifndef HAS_UV
+	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
+endif
+	$(UV) sync --extra cli --editable
+	@echo "$(BOLD)$(CYAN)✅ Package installed in development mode$(RESET)"
+	@echo "$(BOLD)$(YELLOW)💡 The 'vdm' command is now available$(RESET)"
 
 install-pip: ## Install dependencies using pip (fallback)
 	@echo "$(BOLD)$(GREEN)Installing dependencies with pip...$(RESET)"
@@ -114,21 +125,52 @@ else
 	@$(PYTHON) -m pip list --outdated || echo "$(GREEN)✓ All dependencies up to date$(RESET)"
 endif
 
+init-dev: ## Initialize development environment
+	@echo "$(BOLD)$(BLUE)🚀 Initializing development environment...$(RESET)"
+	$(MAKE) install-dev
+	$(MAKE) check-install
+	@echo ""
+	@echo "$(BOLD)$(GREEN)✅ Development environment ready!$(RESET)"
+	@echo ""
+	@echo "$(BOLD)$(CYAN)Next steps:$(RESET)"
+	@echo "  $(CYAN)• The 'vdm' command is now available$(RESET)"
+	@echo "  $(CYAN)• Start server: make dev$(RESET)"
+	@echo "  $(CYAN)• Run tests: make test$(RESET)"
+	@echo "  $(CYAN)• See all commands: make help$(RESET)"
+
 # ============================================================================
 # Development
 # ============================================================================
 
 run: ## Run the proxy server
-	@echo "$(BOLD)$(BLUE)Starting Claude Code Proxy...$(RESET)"
+	@echo "$(BOLD)$(BLUE)Starting Vandamme Proxy...$(RESET)"
 	$(PYTHON) start_proxy.py
 
 dev: install-dev ## Setup dev environment and run server with hot reload
 	@echo "$(BOLD)$(BLUE)Starting development server with auto-reload...$(RESET)"
-	$(UV) run uvicorn src.main:app --host $(HOST) --port $(PORT) --reload --log-level $(LOG_LEVEL)
+	$(UV) run uvicorn src.main:app --host $(HOST) --port $(PORT) --reload --log-level $(shell echo $(LOG_LEVEL) | tr '[:upper:]' '[:lower:]')
 
 health: ## Check proxy server health
 	@echo "$(BOLD)$(CYAN)Checking server health...$(RESET)"
 	@curl -s http://localhost:$(PORT)/health | $(PYTHON) -m json.tool || echo "$(YELLOW)Server not running on port $(PORT)$(RESET)"
+
+check-install: ## Verify that installation was successful
+	@echo "$(BOLD)$(BLUE)🔍 Verifying installation...$(RESET)"
+	@echo "$(CYAN)Checking vdm command...$(RESET)"
+	@if [ -f ".venv/bin/vdm" ]; then \
+		echo "$(GREEN)✅ vdm command found$(RESET)"; \
+		.venv/bin/vdm version; \
+	else \
+		echo "$(RED)❌ vdm command not found$(RESET)"; \
+		echo "$(YELLOW)💡 Run 'make install-dev' to install CLI$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Checking Python imports...$(RESET)"
+ifndef HAS_UV
+	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
+endif
+	@$(UV) run python -c "import src.cli.main; print('$(GREEN)✅ CLI module imports successfully$(RESET)')" || exit 1
+	@echo "$(BOLD)$(GREEN)✅ Installation verified successfully$(RESET)"
 
 clean: ## Clean temporary files and caches
 	@echo "$(BOLD)$(YELLOW)Cleaning temporary files...$(RESET)"

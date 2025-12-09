@@ -11,7 +11,15 @@ Vandamme Proxy is a FastAPI-based proxy server that converts Claude API requests
 ### Setup and Installation
 
 ```bash
-# Using UV (recommended)
+# Quick start (recommended)
+make init-dev
+
+# Or step by step
+make venv
+make install-dev
+make check-install
+
+# Using UV directly
 uv sync --extra cli
 
 # Or using pip
@@ -34,28 +42,85 @@ docker compose up -d
 ### Testing
 
 ```bash
+# Run all tests
+make test
+
 # Run comprehensive integration tests
-python src/test_claude_to_openai.py
+make test-integration
+
+# Run unit tests
+make test-unit
+
+# Quick tests without coverage
+make test-quick
 
 # Test configuration and connectivity
 vdm test connection
 vdm test models
 vdm health upstream
 vdm config validate
-
-# Run unit tests (if available)
-pytest tests/
 ```
 
 ### Code Quality
 
 ```bash
 # Format code
-uv run black src/
-uv run isort src/
+make format
 
 # Type checking
-uv run mypy src/
+make type-check
+
+# Run all code quality checks
+make check
+
+# Quick check (format + lint only, skip type-check)
+make quick-check
+
+# Pre-commit checks (format + all checks)
+make pre-commit
+```
+
+### Common Development Tasks
+
+```bash
+# Install dependencies (production)
+make install
+
+# Install in development mode (editable)
+make install-dev
+
+# Create virtual environment
+make venv
+
+# Initialize complete development environment
+make init-dev
+
+# Verify installation
+make check-install
+
+# Run development server with hot reload
+make dev
+
+# Check proxy server health
+make health
+
+# Run full CI pipeline (install, check, test, build)
+make ci
+
+# Build distribution packages
+make build
+
+# Clean temporary files and caches
+make clean
+
+# Show all available targets
+make help
+
+# Show project version
+make version
+
+# Generate .env template file
+make env-template
 ```
 
 ## Architecture
