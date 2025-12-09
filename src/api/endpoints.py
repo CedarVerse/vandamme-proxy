@@ -54,9 +54,9 @@ async def validate_api_key(
 
 
 @router.post("/v1/messages")
-async def create_message(
+async def create_message(  # type: ignore[no-untyped-def]
     request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)
-) -> Union[JSONResponse, StreamingResponse]:
+):
     # Generate unique request ID for tracking
     request_id = str(uuid.uuid4())
 

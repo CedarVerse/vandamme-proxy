@@ -43,7 +43,7 @@ class Config:
         self._provider_manager: Optional["ProviderManager"] = None
 
     @property
-    def provider_manager(self) -> ProviderManager:
+    def provider_manager(self) -> "ProviderManager":
         """Lazy initialization of provider manager to avoid circular imports"""
         if self._provider_manager is None:
             from src.core.provider_manager import ProviderManager
