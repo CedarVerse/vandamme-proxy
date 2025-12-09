@@ -10,9 +10,18 @@ if TYPE_CHECKING:
 # Configuration
 class Config:
     def __init__(self) -> None:
-        self.openai_api_key = os.environ.get("OPENAI_API_KEY")
+        # Determine default provider first
+        self.default_provider = os.environ.get("VDM_DEFAULT_PROVIDER", "openai")
+
+        # Get API key for the default provider
+        provider_upper = self.default_provider.upper()
+        api_key_env_var = f"{provider_upper}_API_KEY"
+        self.openai_api_key = os.environ.get(api_key_env_var)
+
         if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
+            raise ValueError(
+                f"{api_key_env_var} not found in environment variables. Please set it to use {self.default_provider} as the default provider."
+            )
 
         # Add Anthropic API key for client validation
         self.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -32,12 +41,9 @@ class Config:
         self.max_retries = int(os.environ.get("MAX_RETRIES", "2"))
 
         # Model settings
-        self.big_model = os.environ.get("BIG_MODEL", "gpt-4o")
-        self.middle_model = os.environ.get("MIDDLE_MODEL", self.big_model)
         self.small_model = os.environ.get("SMALL_MODEL", "gpt-4o-mini")
-
-        # Default provider for models without prefixes
-        self.default_provider = os.environ.get("VDM_DEFAULT_PROVIDER", "openai")
+        self.middle_model = os.environ.get("MIDDLE_MODEL", self.small_model)
+        self.big_model = os.environ.get("BIG_MODEL", "gpt-4o")
 
         # Provider manager will be initialized lazily
         self._provider_manager: Optional["ProviderManager"] = None
@@ -91,8 +97,8 @@ class Config:
         return custom_headers
 
     @property
-    def openai_api_key_hash(self) -> str:
-        """Get the first few characters of SHA256 hash of the OpenAI API key.
+    def api_key_hash(self) -> str:
+        """Get the first few characters of SHA256 hash of the default provider's API key.
 
         This provides a secure way to identify the API key without exposing it.
         Returns '<not-set>' if the API key is not configured.
@@ -105,6 +111,11 @@ class Config:
             if not self.openai_api_key
             else "sha256:" + hashlib.sha256(self.openai_api_key.encode()).hexdigest()[:16] + "..."
         )
+
+    @property
+    def openai_api_key_hash(self) -> str:
+        """Deprecated: Use api_key_hash instead. Kept for backward compatibility."""
+        return self.api_key_hash
 
 
 try:

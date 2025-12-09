@@ -270,7 +270,7 @@ class ProviderManager:
                 name=self.default_provider,
                 status="success",
                 api_key_hash=self.get_api_key_hash(default_config.api_key),
-                base_url=default_config.base_url
+                base_url=default_config.base_url,
             )
             all_results.insert(0, default_result)  # Insert at beginning
 
@@ -290,15 +290,23 @@ class ProviderManager:
 
             if result.status == "success":
                 if is_default:
-                    print(f"   ✅ {result.api_key_hash:<10}{default_indicator}\033[92m{result.name:<12}\033[0m {result.base_url}")
+                    print(
+                        f"   ✅ {result.api_key_hash:<10}{default_indicator}\033[92m{result.name:<12}\033[0m {result.base_url}"
+                    )
                 else:
-                    print(f"   ✅ {result.api_key_hash:<10}{default_indicator}{result.name:<12} {result.base_url}")
+                    print(
+                        f"   ✅ {result.api_key_hash:<10}{default_indicator}{result.name:<12} {result.base_url}"
+                    )
                 success_count += 1
             else:  # partial
                 if is_default:
-                    print(f"   ⚠️ {result.api_key_hash:<10}{default_indicator}\033[92m{result.name:<12}\033[0m {result.message}")
+                    print(
+                        f"   ⚠️ {result.api_key_hash:<10}{default_indicator}\033[92m{result.name:<12}\033[0m {result.message}"
+                    )
                 else:
-                    print(f"   ⚠️ {result.api_key_hash:<10}{default_indicator}{result.name:<12} {result.message}")
+                    print(
+                        f"   ⚠️ {result.api_key_hash:<10}{default_indicator}{result.name:<12} {result.message}"
+                    )
 
         print(f"\n{success_count} provider{'s' if success_count != 1 else ''} ready for requests")
         print(f"  * = default provider")
