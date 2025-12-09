@@ -1,30 +1,37 @@
+from typing import Tuple
+
 from src.core.config import config
+
 
 class ModelManager:
     def __init__(self, config):
         self.config = config
-    
-    def map_claude_model_to_openai(self, claude_model: str) -> str:
-        """Map Claude model names to OpenAI model names based on BIG/SMALL pattern"""
-        # If it's already an OpenAI model, return as-is
-        if claude_model.startswith("gpt-") or claude_model.startswith("o1-"):
-            return claude_model
+        self.provider_manager = config.provider_manager
 
-        # If it's other supported models (ARK/Doubao/DeepSeek), return as-is
-        if (claude_model.startswith("ep-") or claude_model.startswith("doubao-") or 
-            claude_model.startswith("deepseek-")):
-            return claude_model
-        
-        # Map based on model naming patterns
-        model_lower = claude_model.lower()
-        if 'haiku' in model_lower:
-            return self.config.small_model
-        elif 'sonnet' in model_lower:
-            return self.config.middle_model
-        elif 'opus' in model_lower:
-            return self.config.big_model
-        else:
-            # Default to big model for unknown models
-            return self.config.big_model
+    def resolve_model(self, model: str) -> Tuple[str, str]:
+        """Resolve model name to (provider, actual_model)
+
+        Parses provider prefixes and applies model mappings for Claude models
+        when no provider is specified.
+
+        Returns:
+            Tuple[str, str]: (provider_name, actual_model_name)
+        """
+        # Parse provider prefix
+        provider_name, actual_model = self.provider_manager.parse_model_name(model)
+
+        # If no provider prefix, check if we need to map Claude models
+        if provider_name == self.provider_manager.default_provider:
+            # Check if this is a Claude model that needs mapping
+            model_lower = actual_model.lower()
+            if "haiku" in model_lower:
+                actual_model = self.config.small_model
+            elif "sonnet" in model_lower:
+                actual_model = self.config.middle_model
+            elif "opus" in model_lower:
+                actual_model = self.config.big_model
+
+        return provider_name, actual_model
+
 
 model_manager = ModelManager(config)

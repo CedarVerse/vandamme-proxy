@@ -1,10 +1,12 @@
 """Test commands for the vdm CLI."""
 
 import sys
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+
 from src.core.config import config
 
 app = typer.Typer(help="Test commands")
@@ -25,6 +27,7 @@ def connection() -> None:
             sys.exit(1)
 
         console.print(f"✅ API Key configured: {config.openai_api_key_hash}")
+        console.print(f"✅ Default Provider: {config.default_provider}")
         console.print(f"✅ Base URL: {config.openai_base_url}")
         console.print(f"✅ Big Model: {config.big_model}")
         console.print(f"✅ Middle Model: {config.middle_model}")
@@ -70,9 +73,7 @@ def models() -> None:
         model_type = (
             "Small"
             if "haiku" in claude_model.lower()
-            else "Middle"
-            if "sonnet" in claude_model.lower()
-            else "Big"
+            else "Middle" if "sonnet" in claude_model.lower() else "Big"
         )
         table.add_row(claude_model, openai_model, model_type)
 
@@ -86,3 +87,68 @@ def models() -> None:
             expand=False,
         )
     )
+
+
+@app.command()
+def providers() -> None:
+    """List all configured providers."""
+    console = Console()
+
+    console.print("[bold cyan]Configured Providers[/bold cyan]")
+    console.print()
+
+    # Load providers
+    try:
+        config.provider_manager.load_provider_configs()
+        providers = config.provider_manager.list_providers()
+
+        if not providers:
+            console.print("[yellow]No providers configured[/yellow]")
+            console.print()
+            console.print(
+                Panel(
+                    "Configure providers by setting {PROVIDER}_API_KEY and {PROVIDER}_BASE_URL environment variables.",
+                    title="Provider Configuration",
+                    expand=False,
+                )
+            )
+            return
+
+        table = Table(title="Provider Configuration")
+        table.add_column("Provider", style="cyan")
+        table.add_column("Base URL", style="green")
+        table.add_column("API Version", style="yellow")
+        table.add_column("Default", style="magenta")
+
+        for provider_name, provider_config in providers.items():
+            is_default = "✓" if provider_name == config.provider_manager.default_provider else ""
+            api_version = provider_config.api_version or "N/A"
+            table.add_row(
+                provider_name,
+                provider_config.base_url,
+                api_version,
+                is_default
+            )
+
+        console.print(table)
+        console.print()
+
+        # Show default provider
+        console.print(f"Default Provider: [bold]{config.provider_manager.default_provider}[/bold]")
+        console.print()
+
+        # Show examples
+        console.print(
+            Panel(
+                f"Use providers with model prefixes:\n"
+                f"• [cyan]openrouter:gpt-4o[/cyan] → Uses OpenRouter\n"
+                f"• [cyan]poe:gemini-3-pro[/cyan] → Uses Poe\n"
+                f"• [cyan]claude-3-5-sonnet[/cyan] → Uses default provider ({config.provider_manager.default_provider})",
+                title="Usage Examples",
+                expand=False,
+            )
+        )
+
+    except Exception as e:
+        console.print(f"[red]❌ Error loading providers: {str(e)}[/red]")
+        sys.exit(1)

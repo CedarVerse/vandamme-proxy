@@ -16,8 +16,8 @@ def convert_claude_to_openai(
 ) -> Dict[str, Any]:
     """Convert Claude API request format to OpenAI format."""
 
-    # Map model
-    openai_model = model_manager.map_claude_model_to_openai(claude_request.model)
+    # Resolve provider and model
+    provider_name, openai_model = model_manager.resolve_model(claude_request.model)
 
     # Log model mapping and calculate metrics if enabled
     if LOG_REQUEST_METRICS:
@@ -74,7 +74,9 @@ def convert_claude_to_openai(
             f"Tools: {len(claude_request.tools) if claude_request.tools else 0}"
         )
 
-        conversation_logger.debug(f"🔄 MODEL MAP | {claude_request.model} → {openai_model}")
+        conversation_logger.debug(
+            f"🔄 MODEL MAP | {claude_request.model} → {provider_name}:{openai_model}"
+        )
 
     # Convert messages
     openai_messages = []
@@ -180,7 +182,8 @@ def convert_claude_to_openai(
         else:
             openai_request["tool_choice"] = "auto"
 
-    return openai_request
+    # Include provider information for endpoints.py
+    return openai_request, provider_name
 
 
 def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:

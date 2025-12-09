@@ -26,16 +26,7 @@ from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
 
 router = APIRouter()
 
-# Get custom headers from config
-custom_headers = config.get_custom_headers()
-
-openai_client = OpenAIClient(
-    config.openai_api_key,
-    config.openai_base_url,
-    config.request_timeout,
-    api_version=config.azure_api_version,
-    custom_headers=custom_headers,
-)
+# Custom headers are now handled per provider
 
 
 async def validate_api_key(
@@ -112,13 +103,17 @@ async def create_message(
         start_time = time.time()
 
         try:
-            # Convert Claude request to OpenAI format
-            openai_request = convert_claude_to_openai(request, model_manager)
+            # Convert Claude request to OpenAI format and get provider
+            openai_request, provider_name = convert_claude_to_openai(request, model_manager)
 
-            # Update metrics with OpenAI model
+            # Get the appropriate client for this provider
+            openai_client = config.provider_manager.get_client(provider_name)
+
+            # Update metrics with OpenAI model and provider
             if LOG_REQUEST_METRICS and metrics:
                 openai_model = openai_request.get("model", "unknown")
                 metrics.openai_model = openai_model
+                metrics.provider = provider_name
 
             # Check if client disconnected before processing
             if await http_request.is_disconnected():
@@ -307,10 +302,13 @@ async def health_check():
 
 @router.get("/test-connection")
 async def test_connection():
-    """Test API connectivity to OpenAI"""
+    """Test API connectivity to the default provider"""
     try:
+        # Get the default provider client
+        default_client = config.provider_manager.get_client(config.provider_manager.default_provider)
+
         # Simple test request to verify API connectivity
-        test_response = await openai_client.create_chat_completion(
+        test_response = await default_client.create_chat_completion(
             {
                 "model": config.small_model,
                 "messages": [{"role": "user", "content": "Hello"}],
@@ -320,7 +318,8 @@ async def test_connection():
 
         return {
             "status": "success",
-            "message": "Successfully connected to OpenAI API",
+            "message": f"Successfully connected to {config.provider_manager.default_provider} API",
+            "provider": config.provider_manager.default_provider,
             "model_used": config.small_model,
             "timestamp": datetime.now().isoformat(),
             "response_id": test_response.get("id", "unknown"),
