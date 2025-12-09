@@ -35,12 +35,12 @@ def start(
     table.add_column("Setting", style="cyan")
     table.add_column("Value", style="green")
 
-    table.add_row("Host", server_host)
-    table.add_row("Port", str(server_port))
+    table.add_row("Server URL", f"http://{server_host}:{server_port}")
     table.add_row("OpenAI Base URL", config.openai_base_url)
-    table.add_row("Big Model", config.big_model)
-    table.add_row("Small Model", config.small_model)
     table.add_row("API Key", config.openai_api_key_hash)
+    table.add_row("Small Model", config.small_model)
+    table.add_row("Middle Model", config.middle_model)
+    table.add_row("Big Model", config.big_model)
 
     console.print(table)
 
