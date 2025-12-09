@@ -94,20 +94,21 @@ def providers() -> None:
     """List all configured providers."""
     console = Console()
 
-    console.print("[bold cyan]Configured Providers[/bold cyan]")
+    console.print("[bold cyan]Provider Status[/bold cyan]")
     console.print()
 
     # Load providers
     try:
         config.provider_manager.load_provider_configs()
-        providers = config.provider_manager.list_providers()
+        load_results = config.provider_manager.get_load_results()
 
-        if not providers:
+        if not load_results:
             console.print("[yellow]No providers configured[/yellow]")
             console.print()
             console.print(
                 Panel(
-                    "Configure providers by setting {PROVIDER}_API_KEY and {PROVIDER}_BASE_URL environment variables.",
+                    "Configure providers by setting {PROVIDER}_API_KEY environment variables.\n"
+                    "For OpenAI and Poe, BASE_URL is optional (defaults will be used).",
                     title="Provider Configuration",
                     expand=False,
                 )
@@ -116,16 +117,35 @@ def providers() -> None:
 
         table = Table(title="Provider Configuration")
         table.add_column("Provider", style="cyan")
-        table.add_column("Base URL", style="green")
-        table.add_column("API Version", style="yellow")
+        table.add_column("API Key", style="green")
+        table.add_column("Base URL", style="blue")
+        table.add_column("Status", style="yellow")
         table.add_column("Default", style="magenta")
 
-        for provider_name, provider_config in providers.items():
-            is_default = "✓" if provider_name == config.provider_manager.default_provider else ""
-            api_version = provider_config.api_version or "N/A"
-            table.add_row(provider_name, provider_config.base_url, api_version, is_default)
+        success_count = 0
+        for result in load_results:
+            if result.status == "success":
+                status = "[green]✓ Ready[/green]"
+                success_count += 1
+            else:  # partial
+                status = f"[yellow]⚠️ {result.message}[/yellow]"
+
+            is_default = "✓" if result.name == config.provider_manager.default_provider else ""
+            table.add_row(
+                result.name,
+                f"[dim]{result.api_key_hash}[/dim]",
+                result.base_url or "[dim]N/A[/dim]",
+                status,
+                is_default,
+            )
 
         console.print(table)
+        console.print()
+
+        # Show summary
+        console.print(
+            f"[bold green]{success_count}[/bold green] provider{'s' if success_count != 1 else ''} ready for requests"
+        )
         console.print()
 
         # Show default provider

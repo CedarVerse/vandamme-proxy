@@ -223,6 +223,49 @@ SMALL_MODEL="llama3.1:8b"
 
 Any OpenAI-compatible API can be used by setting the appropriate `OPENAI_BASE_URL`.
 
+## Provider Loading Behavior
+
+The proxy automatically discovers and loads providers based on environment variables:
+
+### Provider Discovery
+
+- Only providers with `{PROVIDER}_API_KEY` set are discovered
+- Providers without an API key are silently ignored (no warnings)
+- For special providers (OpenAI, Poe), `BASE_URL` defaults to their standard endpoints if not provided
+
+### Provider Status
+
+When the proxy starts, it displays a summary of active providers:
+
+```
+📊 Active Providers:
+   openai (a1b2c3d4) - https://api.openai.com/v1
+   poe (e5f6g7h8) - https://api.poe.com/v1
+   ⚠️ openrouter (i9j0k1l2) - Missing BASE_URL
+
+2 providers ready for requests
+```
+
+- ✅ **Success**: Provider is fully configured and ready
+- ⚠️ **Partial**: Provider has API key but missing BASE_URL (configure it to enable)
+- The 8-character hash identifies which API key is being used
+
+### Special Provider Defaults
+
+| Provider | Default BASE_URL | API Key Required |
+|----------|------------------|------------------|
+| OpenAI   | `https://api.openai.com/v1` | Yes |
+| Poe      | `https://api.poe.com/v1` | Yes |
+| Others   | None (must be provided) | Yes |
+
+### Troubleshooting
+
+**Q: Why do I see warnings about failed providers?**
+A: The proxy only warns about providers that have an API key but are missing configuration. Providers without any configuration are not mentioned.
+
+**Q: How do I check which providers are loaded?**
+A: Run `vdm test providers` to see the current provider status.
+
 ## Usage Examples
 
 ### Basic Chat

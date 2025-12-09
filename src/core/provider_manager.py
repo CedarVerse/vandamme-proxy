@@ -1,8 +1,21 @@
+import hashlib
 import os
-from typing import Dict, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 from src.core.client import OpenAIClient
 from src.core.provider_config import ProviderConfig
+
+
+@dataclass
+class ProviderLoadResult:
+    """Result of loading a provider configuration"""
+
+    name: str
+    status: str  # "success", "partial"
+    message: Optional[str] = None
+    api_key_hash: Optional[str] = None
+    base_url: Optional[str] = None
 
 
 class ProviderManager:
@@ -13,11 +26,29 @@ class ProviderManager:
         self._clients: Dict[str, OpenAIClient] = {}
         self._configs: Dict[str, ProviderConfig] = {}
         self._loaded = False
+        self._load_results: List[ProviderLoadResult] = []
+
+    @staticmethod
+    def get_api_key_hash(api_key: str) -> str:
+        """Return first 8 chars of sha256 hash"""
+        return hashlib.sha256(api_key.encode()).hexdigest()[:8]
+
+    @staticmethod
+    def get_default_base_url(provider_name: str) -> Optional[str]:
+        """Return default base URL for special providers"""
+        defaults = {
+            "openai": "https://api.openai.com/v1",
+            "poe": "https://api.poe.com/v1",
+        }
+        return defaults.get(provider_name.lower())
 
     def load_provider_configs(self) -> None:
         """Load all provider configurations from environment variables"""
         if self._loaded:
             return
+
+        # Reset load results
+        self._load_results = []
 
         # Load default provider (OpenAI)
         self._load_default_provider()
@@ -70,19 +101,57 @@ class ProviderManager:
                     continue
 
                 # Load provider configuration
-                try:
-                    self._load_provider_config(provider_name)
-                except ValueError as e:
-                    # Log warning but continue loading other providers
-                    import sys
+                self._load_provider_config_with_result(provider_name)
 
-                    print(
-                        f"Warning: Failed to load provider '{provider_name}': {e}", file=sys.stderr
-                    )
-                    continue
+    def _load_provider_config_with_result(self, provider_name: str) -> None:
+        """Load configuration for a specific provider and track the result"""
+        provider_upper = provider_name.upper()
+
+        api_key = os.environ.get(f"{provider_upper}_API_KEY")
+        if not api_key:
+            # Skip entirely if no API key - don't even track it
+            return
+
+        # Check if we have a base URL or can use a default
+        base_url = os.environ.get(f"{provider_upper}_BASE_URL")
+        if not base_url:
+            base_url = self.get_default_base_url(provider_name)
+            if not base_url:
+                # Create result for partial configuration (missing base URL)
+                result = ProviderLoadResult(
+                    name=provider_name,
+                    status="partial",
+                    message=f"Missing BASE_URL (configure {provider_upper}_BASE_URL)",
+                    api_key_hash=self.get_api_key_hash(api_key),
+                    base_url=None,
+                )
+                self._load_results.append(result)
+                return
+
+        # Create result for successful configuration
+        result = ProviderLoadResult(
+            name=provider_name,
+            status="success",
+            api_key_hash=self.get_api_key_hash(api_key),
+            base_url=base_url,
+        )
+        self._load_results.append(result)
+
+        # Create the config
+        config = ProviderConfig(
+            name=provider_name,
+            api_key=api_key,
+            base_url=base_url,
+            api_version=os.environ.get(f"{provider_upper}_API_VERSION"),
+            timeout=int(os.environ.get("REQUEST_TIMEOUT", "90")),
+            max_retries=int(os.environ.get("MAX_RETRIES", "2")),
+            custom_headers=self._get_provider_custom_headers(provider_upper),
+        )
+
+        self._configs[provider_name] = config
 
     def _load_provider_config(self, provider_name: str) -> None:
-        """Load configuration for a specific provider"""
+        """Load configuration for a specific provider (legacy method for default provider)"""
         provider_upper = provider_name.upper()
 
         api_key = os.environ.get(f"{provider_upper}_API_KEY")
@@ -93,9 +162,12 @@ class ProviderManager:
 
         base_url = os.environ.get(f"{provider_upper}_BASE_URL")
         if not base_url:
-            raise ValueError(
-                f"Base URL not found for provider '{provider_name}'. Please set {provider_upper}_BASE_URL environment variable."
-            )
+            # For default provider, also try defaults
+            base_url = self.get_default_base_url(provider_name)
+            if not base_url:
+                raise ValueError(
+                    f"Base URL not found for provider '{provider_name}'. Please set {provider_upper}_BASE_URL environment variable."
+                )
 
         config = ProviderConfig(
             name=provider_name,
@@ -179,3 +251,29 @@ class ProviderManager:
         if not self._loaded:
             self.load_provider_configs()
         return self._configs.copy()
+
+    def print_provider_summary(self) -> None:
+        """Print a summary of loaded providers"""
+        if not self._loaded:
+            self.load_provider_configs()
+
+        if not self._load_results:
+            return
+
+        print("\n📊 Active Providers:")
+        success_count = 0
+
+        for result in self._load_results:
+            if result.status == "success":
+                print(f"   {result.name} ({result.api_key_hash}) - {result.base_url}")
+                success_count += 1
+            else:  # partial
+                print(f"   ⚠️ {result.name} ({result.api_key_hash}) - {result.message}")
+
+        print(f"\n{success_count} provider{'s' if success_count != 1 else ''} ready for requests")
+
+    def get_load_results(self) -> List[ProviderLoadResult]:
+        """Get the load results for all providers"""
+        if not self._loaded:
+            self.load_provider_configs()
+        return self._load_results.copy()
