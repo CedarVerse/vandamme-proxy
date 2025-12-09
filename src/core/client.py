@@ -214,7 +214,7 @@ class OpenAIClient:
 
         # Model not found
         if "model" in error_str and ("not found" in error_str or "does not exist" in error_str):
-            return "Model not found. Please check your BIG_MODEL and SMALL_MODEL configuration."
+            return "Model not found."
 
         # Billing issues
         if "billing" in error_str or "payment" in error_str:

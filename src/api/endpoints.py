@@ -324,7 +324,7 @@ async def test_connection() -> JSONResponse:
         # Simple test request to verify API connectivity
         test_response = await default_client.create_chat_completion(
             {
-                "model": config.small_model,
+                "model": "gpt-4o-mini",  # Use a common model that most providers support
                 "messages": [{"role": "user", "content": "Hello"}],
                 "max_tokens": 5,
             }
@@ -336,7 +336,7 @@ async def test_connection() -> JSONResponse:
                 "status": "success",
                 "message": f"Successfully connected to {config.provider_manager.default_provider} API",
                 "provider": config.provider_manager.default_provider,
-                "model_used": config.small_model,
+                "model_used": "gpt-4o-mini",
                 "timestamp": datetime.now().isoformat(),
                 "response_id": test_response.get("id", "unknown"),
             },
@@ -371,8 +371,6 @@ async def root() -> Dict[str, Any]:
             "max_tokens_limit": config.max_tokens_limit,
             "api_key_configured": bool(config.openai_api_key),
             "client_api_key_validation": bool(config.anthropic_api_key),
-            "big_model": config.big_model,
-            "small_model": config.small_model,
         },
         "endpoints": {
             "messages": "/v1/messages",

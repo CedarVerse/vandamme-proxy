@@ -14,7 +14,7 @@ class ModelManager:
     def resolve_model(self, model: str) -> Tuple[str, str]:
         """Resolve model name to (provider, actual_model)
 
-        Parses provider prefixes and applies model mappings for Claude models
+        Parses provider prefixes and passes through model names unchanged
         when no provider is specified.
 
         Returns:
@@ -23,17 +23,7 @@ class ModelManager:
         # Parse provider prefix
         provider_name, actual_model = self.provider_manager.parse_model_name(model)
 
-        # If no provider prefix, check if we need to map Claude models
-        if provider_name == self.provider_manager.default_provider:
-            # Check if this is a Claude model that needs mapping
-            model_lower = actual_model.lower()
-            if "haiku" in model_lower:
-                actual_model = self.config.small_model
-            elif "sonnet" in model_lower:
-                actual_model = self.config.middle_model
-            elif "opus" in model_lower:
-                actual_model = self.config.big_model
-
+        # No model mapping needed - pass through the model name as-is
         return provider_name, actual_model
 
 

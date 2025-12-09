@@ -8,7 +8,7 @@ A proxy server that converts Claude API requests to OpenAI-compatible API calls.
 
 - **Full Claude API Compatibility**: Complete `/v1/messages` endpoint support
 - **Multiple Provider Support**: OpenAI, Azure OpenAI, local models (Ollama), and any OpenAI-compatible API
-- **Smart Model Mapping**: Configure BIG and SMALL models via environment variables
+- **Model Pass-through**: Claude model names are passed through unchanged
 - **Function Calling**: Complete tool use support with proper conversion
 - **Streaming Responses**: Real-time SSE streaming support
 - **Image Support**: Base64 encoded image input
@@ -99,9 +99,9 @@ The application automatically loads environment variables from a `.env` file in 
 
 **Model Configuration:**
 
-- `BIG_MODEL` - Model for Claude opus requests (default: `gpt-4o`)
-- `MIDDLE_MODEL` - Model for Claude opus requests (default: `gpt-4o`)
-- `SMALL_MODEL` - Model for Claude haiku requests (default: `gpt-4o-mini`)
+- `ANTHROPIC_DEFAULT_HAIKU_MODEL` - Choose a model that is cheap and fast
+- `ANTHROPIC_DEFAULT_SONNET_MODEL` - Choose a middle-ground model (`glm-4.6` for instance)
+- `ANTHROPIC_DEFAULT_OPUS_MODEL` - Choose a model that gives the very best results
 
 **API Configuration:**
 
@@ -177,16 +177,6 @@ CUSTOM_HEADER_AUTHORIZATION="Bearer my-token"
 
 The proxy will automatically include these headers in all API requests to the target LLM provider.
 
-### Model Mapping
-
-The proxy maps Claude model requests to your configured models:
-
-| Claude Request                 | Mapped To     | Environment Variable   |
-| ------------------------------ | ------------- | ---------------------- |
-| Models with "haiku"            | `SMALL_MODEL` | Default: `gpt-4o-mini` |
-| Models with "sonnet"           | `MIDDLE_MODEL`| Default: `BIG_MODEL`   |
-| Models with "opus"             | `BIG_MODEL`   | Default: `gpt-4o`      |
-
 ### Provider Examples
 
 #### OpenAI
@@ -194,9 +184,6 @@ The proxy maps Claude model requests to your configured models:
 ```bash
 OPENAI_API_KEY="sk-your-openai-key"
 OPENAI_BASE_URL="https://api.openai.com/v1"
-BIG_MODEL="gpt-4o"
-MIDDLE_MODEL="gpt-4o"
-SMALL_MODEL="gpt-4o-mini"
 ```
 
 #### Azure OpenAI
@@ -204,9 +191,7 @@ SMALL_MODEL="gpt-4o-mini"
 ```bash
 OPENAI_API_KEY="your-azure-key"
 OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-BIG_MODEL="gpt-4"
-MIDDLE_MODEL="gpt-4"
-SMALL_MODEL="gpt-35-turbo"
+AZURE_API_VERSION="2024-02-15-preview"
 ```
 
 #### Local Models (Ollama)
@@ -214,9 +199,6 @@ SMALL_MODEL="gpt-35-turbo"
 ```bash
 OPENAI_API_KEY="dummy-key"  # Required but can be dummy
 OPENAI_BASE_URL="http://localhost:11434/v1"
-BIG_MODEL="llama3.1:70b"
-MIDDLE_MODEL="llama3.1:70b"
-SMALL_MODEL="llama3.1:8b"
 ```
 
 #### Other Providers
@@ -276,7 +258,7 @@ import httpx
 response = httpx.post(
     "http://localhost:8082/v1/messages",
     json={
-        "model": "claude-3-5-sonnet-20241022",  # Maps to MIDDLE_MODEL
+        "model": "claude-3-5-sonnet-20241022",  # Passed through unchanged
         "max_tokens": 100,
         "messages": [
             {"role": "user", "content": "Hello!"}

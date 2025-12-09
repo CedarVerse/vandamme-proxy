@@ -132,7 +132,7 @@ make env-template
    - `src/conversion/request_converter.py` - Converts Claude API format to OpenAI format
    - `src/conversion/response_converter.py` - Converts OpenAI responses back to Claude format
    - `src/core/client.py` - OpenAI API client with retry logic and connection pooling
-   - `src/core/model_manager.py` - Model mapping (haiku→SMALL_MODEL, sonnet→MIDDLE_MODEL, opus→BIG_MODEL)
+   - `src/core/model_manager.py` - Model name resolution (passes through Claude model names unchanged)
 
 2. **Authentication & Security**:
    - Optional client API key validation via `ANTHROPIC_API_KEY` environment variable
@@ -158,12 +158,12 @@ The converter handles:
 - **Images**: Converts base64-encoded images in content blocks
 - **Streaming**: Full Server-Sent Events (SSE) support with cancellation handling
 
-### Model Mapping
+### Model Names
 
-Default mappings (configurable via environment variables):
-- Models with "haiku" → `SMALL_MODEL` (default: gpt-4o-mini)
-- Models with "sonnet" → `MIDDLE_MODEL` (default: same as BIG_MODEL)
-- Models with "opus" → `BIG_MODEL` (default: gpt-4o)
+The proxy passes Claude model names through unchanged. Claude Code handles model mapping via its own environment variables:
+- `ANTHROPIC_DEFAULT_HAIKU_MODEL`
+- `ANTHROPIC_DEFAULT_SONNET_MODEL`
+- `ANTHROPIC_DEFAULT_OPUS_MODEL`
 
 ### Custom Headers
 
@@ -191,10 +191,6 @@ Required:
 Security:
 - `ANTHROPIC_API_KEY` - If set, clients must provide this exact key
 
-Model Configuration:
-- `BIG_MODEL` - For opus requests (default: gpt-4o)
-- `MIDDLE_MODEL` - For sonnet requests (default: value of BIG_MODEL)
-- `SMALL_MODEL` - For haiku requests (default: gpt-4o-mini)
 
 API Configuration:
 - `OPENAI_BASE_URL` - API base URL (default: https://api.openai.com/v1)

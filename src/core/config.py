@@ -51,11 +51,6 @@ class Config:
         self.request_timeout = int(os.environ.get("REQUEST_TIMEOUT", "90"))
         self.max_retries = int(os.environ.get("MAX_RETRIES", "2"))
 
-        # Model settings
-        self.small_model = os.environ.get("SMALL_MODEL", "gpt-4o-mini")
-        self.middle_model = os.environ.get("MIDDLE_MODEL", self.small_model)
-        self.big_model = os.environ.get("BIG_MODEL", "gpt-4o")
-
         # Provider manager will be initialized lazily
         self._provider_manager: Optional["ProviderManager"] = None
 

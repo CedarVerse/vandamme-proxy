@@ -20,8 +20,6 @@ Choose your LLM provider and configure accordingly:
 cp .env.example .env
 # Edit .env:
 # OPENAI_API_KEY="sk-your-openai-key"
-# BIG_MODEL="gpt-4o"
-# SMALL_MODEL="gpt-4o-mini"
 ```
 
 #### Azure OpenAI
@@ -30,8 +28,7 @@ cp .env.example .env
 # Edit .env:
 # OPENAI_API_KEY="your-azure-key"
 # OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-# BIG_MODEL="gpt-4"
-# SMALL_MODEL="gpt-35-turbo"
+# AZURE_API_VERSION="2024-02-15-preview"
 ```
 
 #### Local Models (Ollama)
@@ -40,8 +37,6 @@ cp .env.example .env
 # Edit .env:
 # OPENAI_API_KEY="dummy-key"
 # OPENAI_BASE_URL="http://localhost:11434/v1"
-# BIG_MODEL="llama3.1:70b"
-# SMALL_MODEL="llama3.1:8b"
 ```
 
 ### Step 3: Start and Use
@@ -58,8 +53,8 @@ ANTHROPIC_BASE_URL=http://localhost:8082 claude
 
 | Your Input | Proxy Action | Result |
 |-----------|--------------|--------|
-| Claude Code sends `claude-3-5-sonnet-20241022` | Maps to your `BIG_MODEL` | Uses `gpt-4o` (or whatever you configured) |
-| Claude Code sends `claude-3-5-haiku-20241022` | Maps to your `SMALL_MODEL` | Uses `gpt-4o-mini` (or whatever you configured) |
+| Claude Code sends `claude-3-5-sonnet-20241022` | Passes through unchanged | Provider receives `claude-3-5-sonnet-20241022` |
+| Claude Code sends `claude-3-5-haiku-20241022` | Passes through unchanged | Provider receives `claude-3-5-haiku-20241022` |
 
 ## 📋 What You Need
 
@@ -70,7 +65,7 @@ ANTHROPIC_BASE_URL=http://localhost:8082 claude
 
 ## 🔧 Default Settings
 - Server runs on `http://localhost:8082`
-- Maps haiku → SMALL_MODEL, sonnet/opus → BIG_MODEL
+- Model names are passed through unchanged
 - Supports streaming, function calling, images
 
 ## 🧪 Test Your Setup

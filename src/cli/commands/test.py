@@ -30,9 +30,6 @@ def connection() -> None:
         console.print(f"✅ API Key configured: {config.api_key_hash}")
         console.print(f"✅ Default Provider: {config.default_provider}")
         console.print(f"✅ Base URL: {config.base_url}")
-        console.print(f"✅ Big Model: {config.big_model}")
-        console.print(f"✅ Middle Model: {config.middle_model}")
-        console.print(f"✅ Small Model: {config.small_model}")
 
         console.print()
         console.print(
@@ -46,48 +43,6 @@ def connection() -> None:
     except Exception as e:
         console.print(f"[red]❌ Configuration test failed: {str(e)}[/red]")
         sys.exit(1)
-
-
-@app.command()
-def models() -> None:
-    """Test model mappings."""
-    console = Console()
-
-    console.print("[bold cyan]Testing Model Mappings[/bold cyan]")
-    console.print()
-
-    # Define test mappings
-    test_models = [
-        ("claude-3-haiku", config.small_model),
-        ("claude-3-5-haiku", config.small_model),
-        ("claude-3-sonnet", config.middle_model),
-        ("claude-3-5-sonnet", config.middle_model),
-        ("claude-3-opus", config.big_model),
-    ]
-
-    table = Table(title="Model Mappings")
-    table.add_column("Claude Model", style="cyan")
-    table.add_column("Maps To", style="green")
-    table.add_column("Type", style="yellow")
-
-    for claude_model, openai_model in test_models:
-        model_type = (
-            "Small"
-            if "haiku" in claude_model.lower()
-            else "Middle" if "sonnet" in claude_model.lower() else "Big"
-        )
-        table.add_row(claude_model, openai_model, model_type)
-
-    console.print(table)
-
-    console.print()
-    console.print(
-        Panel(
-            "These mappings are applied automatically when requests are processed.",
-            title="Model Mapping Information",
-            expand=False,
-        )
-    )
 
 
 @app.command()
