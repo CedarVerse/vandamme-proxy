@@ -107,8 +107,19 @@ class OpenAIClient:
             if LOG_REQUEST_METRICS:
                 conversation_logger.debug(f"📡 API RESPONSE | Duration: {api_duration_ms:.0f}ms")
 
+            # Debug: Log completion object before conversion
+            if LOG_REQUEST_METRICS:
+                conversation_logger.debug(f"📡 RAW RESPONSE TYPE: {type(completion)}")
+                conversation_logger.debug(f"📡 RAW RESPONSE: {completion}")
+
             # Convert to dict format that matches the original interface
-            return cast(Dict[str, Any], completion.model_dump())
+            response_dict = completion.model_dump()
+
+            # Debug: Log converted response
+            if LOG_REQUEST_METRICS:
+                conversation_logger.debug(f"📡 CONVERTED RESPONSE TYPE: {type(response_dict)}")
+
+            return cast(Dict[str, Any], response_dict)
 
         except AuthenticationError as e:
             if LOG_REQUEST_METRICS and metrics:

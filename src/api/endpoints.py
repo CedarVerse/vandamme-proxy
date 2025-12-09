@@ -188,20 +188,41 @@ async def create_message(  # type: ignore[no-untyped-def]
                     openai_request, request_id
                 )
 
+                # Add defensive check
+                if openai_response is None:
+                    logger.error(f"Received None response from provider {provider_name}")
+                    logger.error(f"Request was: {openai_request}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Provider {provider_name} returned None response"
+                    )
+
                 # Calculate response size
                 response_json = json.dumps(openai_response)
                 response_size = len(response_json)
 
                 # Extract token usage
-                usage = openai_response.get("usage", {})
-                input_tokens = usage.get("prompt_tokens", 0)
-                output_tokens = usage.get("completion_tokens", 0)
+                usage = openai_response.get("usage")
+                if usage is None:
+                    # Handle missing usage field
+                    input_tokens = 0
+                    output_tokens = 0
+                    if LOG_REQUEST_METRICS:
+                        conversation_logger.warning("No usage information in response")
+                else:
+                    input_tokens = usage.get("prompt_tokens", 0)
+                    output_tokens = usage.get("completion_tokens", 0)
 
                 # Update metrics
                 if LOG_REQUEST_METRICS and metrics:
                     metrics.response_size = response_size
                     metrics.input_tokens = input_tokens
                     metrics.output_tokens = output_tokens
+
+                # Debug: Log the response structure
+                if LOG_REQUEST_METRICS:
+                    conversation_logger.debug(f"📡 RESPONSE STRUCTURE: {list(openai_response.keys())}")
+                    conversation_logger.debug(f"📡 FULL RESPONSE: {openai_response}")
 
                 claude_response = convert_openai_to_claude_response(openai_response, request)
 
@@ -232,6 +253,11 @@ async def create_message(  # type: ignore[no-untyped-def]
             import traceback
 
             duration_ms = (time.time() - start_time) * 1000
+
+            # Debug: Check if we have an openai_response when error occurs
+            if 'openai_response' in locals() and openai_response is not None:
+                logger.error(f"Error occurred with response: {openai_response}")
+
             # Use openai_client if available, otherwise use a generic error message
             if openai_client is not None:
                 error_message = openai_client.classify_openai_error(str(e))
@@ -329,6 +355,18 @@ async def test_connection() -> JSONResponse:
                 "max_tokens": 5,
             }
         )
+
+        # Add defensive check
+        if test_response is None:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "failed",
+                    "message": f"Provider {config.provider_manager.default_provider} returned None response",
+                    "provider": config.provider_manager.default_provider,
+                    "error": "None response from provider",
+                },
+            )
 
         return JSONResponse(
             status_code=200,
