@@ -1,10 +1,12 @@
 import json
-from typing import Dict, Any, List
-from venv import logger
-from src.core.constants import Constants
-from src.models.claude import ClaudeMessagesRequest, ClaudeMessage
-from src.core.config import config
 import logging
+from typing import Any, Dict, List
+from venv import logger
+
+from src.core.config import config
+from src.core.constants import Constants
+from src.core.logging import LOG_REQUEST_METRICS, conversation_logger
+from src.models.claude import ClaudeMessage, ClaudeMessagesRequest
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,63 @@ def convert_claude_to_openai(
 
     # Map model
     openai_model = model_manager.map_claude_model_to_openai(claude_request.model)
+
+    # Log model mapping and calculate metrics if enabled
+    if LOG_REQUEST_METRICS:
+        # Determine model category
+        model_category = "unknown"
+        model_lower = claude_request.model.lower()
+        if "haiku" in model_lower:
+            model_category = "small"
+        elif "sonnet" in model_lower:
+            model_category = "medium"
+        elif "opus" in model_lower:
+            model_category = "large"
+        elif claude_request.model.startswith(("gpt-", "o1-")):
+            model_category = "openai-native"
+        elif claude_request.model.startswith(("ep-", "doubao-", "deepseek-")):
+            model_category = "third-party"
+
+        # Count characters for token estimation
+        total_chars = 0
+        message_count = len(claude_request.messages)
+
+        # Count system message characters
+        if claude_request.system:
+            message_count += 1
+            if isinstance(claude_request.system, str):
+                total_chars += len(claude_request.system)
+            elif isinstance(claude_request.system, list):
+                for block in claude_request.system:
+                    if hasattr(block, "text"):
+                        total_chars += len(block.text)
+                    elif isinstance(block, dict) and block.get("text"):
+                        total_chars += len(block["text"])
+
+        # Count message characters
+        for msg in claude_request.messages:
+            if msg.content is None:
+                continue
+            elif isinstance(msg.content, str):
+                total_chars += len(msg.content)
+            elif isinstance(msg.content, list):
+                for block in msg.content:
+                    if hasattr(block, "text") and block.text is not None:
+                        total_chars += len(block.text)
+                    elif isinstance(block, dict) and block.get("text"):
+                        total_chars += len(block["text"])
+
+        # Estimate tokens (4 chars ≈ 1 token)
+        estimated_tokens = max(1, total_chars // 4)
+
+        conversation_logger.debug(
+            f"🔧 CONVERT | Category: {model_category} | "
+            f"Messages: {message_count} | "
+            f"Est. Tokens: {estimated_tokens:,} | "
+            f"Tools: {len(claude_request.tools) if claude_request.tools else 0}"
+        )
+
+        conversation_logger.debug(f"🔄 MODEL MAP | {claude_request.model} → {openai_model}")
 
     # Convert messages
     openai_messages = []
@@ -30,17 +89,12 @@ def convert_claude_to_openai(
             for block in claude_request.system:
                 if hasattr(block, "type") and block.type == Constants.CONTENT_TEXT:
                     text_parts.append(block.text)
-                elif (
-                    isinstance(block, dict)
-                    and block.get("type") == Constants.CONTENT_TEXT
-                ):
+                elif isinstance(block, dict) and block.get("type") == Constants.CONTENT_TEXT:
                     text_parts.append(block.get("text", ""))
             system_text = "\n\n".join(text_parts)
 
         if system_text.strip():
-            openai_messages.append(
-                {"role": Constants.ROLE_SYSTEM, "content": system_text.strip()}
-            )
+            openai_messages.append({"role": Constants.ROLE_SYSTEM, "content": system_text.strip()})
 
     # Process Claude messages
     i = 0
@@ -133,7 +187,7 @@ def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
     """Convert Claude user message to OpenAI format."""
     if msg.content is None:
         return {"role": Constants.ROLE_USER, "content": ""}
-    
+
     if isinstance(msg.content, str):
         return {"role": Constants.ROLE_USER, "content": msg.content}
 
@@ -172,7 +226,7 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
 
     if msg.content is None:
         return {"role": Constants.ROLE_ASSISTANT, "content": None}
-    
+
     if isinstance(msg.content, str):
         return {"role": Constants.ROLE_ASSISTANT, "content": msg.content}
 
