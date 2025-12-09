@@ -4,7 +4,7 @@ from src.core.config import config
 
 
 class ModelManager:
-    def __init__(self, config):
+    def __init__(self, config: "Config") -> None:
         self.config = config
         self.provider_manager = config.provider_manager
 

@@ -63,7 +63,7 @@ async def create_message(
     # Start request tracking if metrics are enabled
     if LOG_REQUEST_METRICS:
         metrics = request_tracker.start_request(
-            request_id=request_id, claude_model=request.model, is_streaming=request.stream
+            request_id=request_id, claude_model=request.model, is_streaming=request.stream or False
         )
 
         # Calculate request size
@@ -103,8 +103,11 @@ async def create_message(
         start_time = time.time()
 
         try:
-            # Convert Claude request to OpenAI format and get provider
-            openai_request, provider_name = convert_claude_to_openai(request, model_manager)
+            # Convert Claude request to OpenAI format
+            openai_request = convert_claude_to_openai(request, model_manager)
+
+            # Extract provider from request
+            provider_name = openai_request.pop("_provider", "openai")
 
             # Get the appropriate client for this provider
             openai_client = config.provider_manager.get_client(provider_name)
@@ -305,7 +308,9 @@ async def test_connection():
     """Test API connectivity to the default provider"""
     try:
         # Get the default provider client
-        default_client = config.provider_manager.get_client(config.provider_manager.default_provider)
+        default_client = config.provider_manager.get_client(
+            config.provider_manager.default_provider
+        )
 
         # Simple test request to verify API connectivity
         test_response = await default_client.create_chat_completion(

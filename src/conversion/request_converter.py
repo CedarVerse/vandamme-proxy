@@ -183,7 +183,8 @@ def convert_claude_to_openai(
             openai_request["tool_choice"] = "auto"
 
     # Include provider information for endpoints.py
-    return openai_request, provider_name
+    openai_request["_provider"] = provider_name
+    return openai_request
 
 
 def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:

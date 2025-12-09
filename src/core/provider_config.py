@@ -5,6 +5,7 @@ from typing import Dict, Optional
 @dataclass
 class ProviderConfig:
     """Configuration for a specific provider"""
+
     name: str
     api_key: str
     base_url: str
@@ -18,7 +19,7 @@ class ProviderConfig:
         """Check if this is an Azure OpenAI provider"""
         return self.api_version is not None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration after initialization"""
         if not self.name:
             raise ValueError("Provider name is required")

@@ -5,7 +5,7 @@ import sys
 
 # Configuration
 class Config:
-    def __init__(self):
+    def __init__(self) -> None:
         self.openai_api_key = os.environ.get("OPENAI_API_KEY")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
@@ -43,10 +43,11 @@ class Config:
         """Lazy initialization of provider manager to avoid circular imports"""
         if self._provider_manager is None:
             from src.core.provider_manager import ProviderManager
+
             self._provider_manager = ProviderManager(default_provider=self.default_provider)
         return self._provider_manager
 
-    def validate_api_key(self):
+    def validate_api_key(self) -> bool:
         """Basic API key validation"""
         if not self.openai_api_key:
             return False
@@ -55,7 +56,7 @@ class Config:
             return False
         return True
 
-    def validate_client_api_key(self, client_api_key):
+    def validate_client_api_key(self, client_api_key: str) -> bool:
         """Validate client's Anthropic API key"""
         # If no ANTHROPIC_API_KEY is set in environment, skip validation
         if not self.anthropic_api_key:
@@ -64,7 +65,7 @@ class Config:
         # Check if the client's API key matches the expected value
         return client_api_key == self.anthropic_api_key
 
-    def get_custom_headers(self):
+    def get_custom_headers(self) -> dict[str, str]:
         """Get custom headers from environment variables"""
         custom_headers = {}
 
@@ -86,7 +87,7 @@ class Config:
         return custom_headers
 
     @property
-    def openai_api_key_hash(self):
+    def openai_api_key_hash(self) -> str:
         """Get the first few characters of SHA256 hash of the OpenAI API key.
 
         This provides a secure way to identify the API key without exposing it.

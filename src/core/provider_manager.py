@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 
 from src.core.client import OpenAIClient
 from src.core.provider_config import ProviderConfig
@@ -8,7 +8,7 @@ from src.core.provider_config import ProviderConfig
 class ProviderManager:
     """Manages multiple OpenAI clients for different providers"""
 
-    def __init__(self, default_provider: str = "openai"):
+    def __init__(self, default_provider: str = "openai") -> None:
         self.default_provider = default_provider
         self._clients: Dict[str, OpenAIClient] = {}
         self._configs: Dict[str, ProviderConfig] = {}
@@ -108,7 +108,9 @@ class ProviderManager:
         for env_key, env_value in env_vars.items():
             if env_key.startswith(f"{provider_prefix}_CUSTOM_HEADER_"):
                 # Convert PROVIDER_CUSTOM_HEADER_KEY to Header-Key
-                header_name = env_key[len(provider_prefix) + 15:]  # Remove 'PROVIDER_CUSTOM_HEADER_' prefix
+                header_name = env_key[
+                    len(provider_prefix) + 15 :
+                ]  # Remove 'PROVIDER_CUSTOM_HEADER_' prefix
 
                 if header_name:  # Make sure it's not empty
                     # Convert underscores to hyphens for HTTP header format
