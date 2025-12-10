@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, Optional, Union
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.conversion.request_converter import convert_claude_to_openai
@@ -648,14 +649,49 @@ async def test_connection() -> JSONResponse:
         )
 
 
+async def fetch_models_unauthenticated(
+    base_url: str, custom_headers: Dict[str, str]
+) -> Dict[str, Any]:
+    """Fetch models from endpoint using raw HTTP client without authentication"""
+    # Prepare headers without authentication
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "claude-proxy/1.0.0",
+        **custom_headers,  # Note: exclude any auth-related custom headers
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(f"{base_url}/models", headers=headers)
+        response.raise_for_status()
+        # Type: ignore because we're trusting the API to return the expected format
+        return response.json()  # type: ignore[no-any-return]
+
+
 @router.get("/v1/models")
-async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
-    """List available models from the default provider or specified provider"""
+async def list_models(
+    _: None = Depends(validate_api_key),
+    provider: Optional[str] = Query(
+        None,
+        description="Provider name to fetch models from (defaults to configured default provider)",
+    ),
+) -> JSONResponse:
+    """List available models from the specified provider or default provider"""
     try:
-        # Get the default provider client
-        default_provider = config.provider_manager.default_provider
-        default_client = config.provider_manager.get_client(default_provider)
-        provider_config = config.provider_manager.get_provider_config(default_provider)
+        # Get the provider name from query param or use default
+        provider_name = provider if provider else config.provider_manager.default_provider
+
+        # Check if provider exists
+        all_providers = config.provider_manager.list_providers()
+        if provider_name not in all_providers:
+            available_providers = ", ".join(sorted(all_providers.keys()))
+            raise HTTPException(
+                status_code=404,
+                detail=f"Provider '{provider_name}' not found. Available providers: {available_providers}",
+            )
+
+        # Get the provider client and config
+        default_client = config.provider_manager.get_client(provider_name)
+        provider_config = config.provider_manager.get_provider_config(provider_name)
 
         if provider_config and provider_config.is_anthropic_format:
             # For Anthropic-compatible APIs, models list is typically static
@@ -696,14 +732,13 @@ async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
                 ],
             }
         else:
-            # For OpenAI format, try to get models from the provider
+            # OpenAI format - use unauthenticated HTTP client for all providers
             try:
-                # Use the client's underlying HTTP client to fetch models
-                response = await default_client.client.get(  # type: ignore[call-overload]
-                    f"{default_client.base_url}/models"
+                # Use unauthenticated HTTP client (no provider requires auth for /models)
+                openai_models = await fetch_models_unauthenticated(
+                    default_client.base_url,
+                    provider_config.custom_headers if provider_config else {},
                 )
-                response.raise_for_status()
-                openai_models = response.json()
 
                 # Transform OpenAI models format to Claude format
                 openai_models_response: Dict[str, Any] = {"object": "list", "data": []}
@@ -720,8 +755,11 @@ async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
                     models_list.append(claude_model)
                 models = openai_models_response
 
-            except Exception:
-                # Fallback to common models if provider doesn't support /models
+            except Exception as e:
+                # Log the error and fall back to common models if provider doesn't support /models
+                logger.warning(f"Failed to fetch models from {provider_name}: {e}")
+
+                # Fallback to common models
                 models = {
                     "object": "list",
                     "data": [

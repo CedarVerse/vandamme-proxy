@@ -4,9 +4,9 @@ from io import StringIO
 import pytest
 
 from src.core.logging import (
+    NOISY_HTTP_LOGGERS,
     CorrelationFormatter,
     HttpRequestLogDowngradeFilter,
-    NOISY_HTTP_LOGGERS,
     set_noisy_http_logger_levels,
 )
 
