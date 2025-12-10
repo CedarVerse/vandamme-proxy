@@ -36,10 +36,10 @@ class RequestContext:
     conversation_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def with_updates(self, **kwargs) -> "RequestContext":
+    def with_updates(self, **kwargs: Any) -> "RequestContext":
         """Create a new context with specified fields updated."""
         # Create a new dict with current values, then update with kwargs
-        current_values = {
+        current_values: Dict[str, Any] = {
             "messages": self.messages,
             "provider": self.provider,
             "model": self.model,
@@ -48,7 +48,7 @@ class RequestContext:
             "metadata": self.metadata.copy(),
         }
         current_values.update(kwargs)
-        return RequestContext(**current_values)
+        return RequestContext(**current_values)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -64,16 +64,16 @@ class ResponseContext:
     is_streaming: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def with_updates(self, **kwargs) -> "ResponseContext":
+    def with_updates(self, **kwargs: Any) -> "ResponseContext":
         """Create a new context with specified fields updated."""
-        current_values = {
+        current_values: Dict[str, Any] = {
             "response": self.response,
             "request_context": self.request_context,
             "is_streaming": self.is_streaming,
             "metadata": self.metadata.copy(),
         }
         current_values.update(kwargs)
-        return ResponseContext(**current_values)
+        return ResponseContext(**current_values)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -192,7 +192,7 @@ class MiddlewareChain:
     with proper error handling and performance monitoring.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._middlewares: List[Middleware] = []
         self._initialized = False
         self.logger = logging.getLogger(f"{__name__}.MiddlewareChain")
@@ -271,10 +271,9 @@ class MiddlewareChain:
             return context
 
         self.logger.debug(
-            f"Processing request through {len(applicable_middlewares)} middlewares",
-            provider=context.provider,
-            model=context.model,
-            middlewares=[m.name for m in applicable_middlewares],
+            f"Processing request through {len(applicable_middlewares)} middlewares, "
+            f"provider={context.provider}, model={context.model}, "
+            f"middlewares={[m.name for m in applicable_middlewares]}"
         )
 
         # Execute middleware chain

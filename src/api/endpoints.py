@@ -130,13 +130,13 @@ async def create_message(  # type: ignore[no-untyped-def]
                 )
                 if processed_context.messages != request_context.messages:
                     openai_request["messages"] = processed_context.messages
-                    logger.debug("Request modified by middleware", provider=provider_name)
+                    logger.debug(f"Request modified by middleware, provider={provider_name}")
 
             # Update metrics with OpenAI model and provider
             if LOG_REQUEST_METRICS and metrics:
                 openai_model = openai_request.get("model", "unknown")
                 metrics.openai_model = openai_model
-                metrics.provider = provider_name
+                metrics.provider = provider_name  # type: ignore[assignment]
 
             # Check if client disconnected before processing
             if await http_request.is_disconnected():
@@ -155,12 +155,14 @@ async def create_message(  # type: ignore[no-untyped-def]
                     # Passthrough streaming for Anthropic-compatible APIs
                     # Convert request to dict directly (no format conversion)
                     # Get the actual model name without provider prefix
-                    _, actual_model = model_manager.resolve_model(request.model)
+                    provider_name_for_model, resolved_model = model_manager.resolve_model(
+                        request.model
+                    )
                     claude_request_dict = request.model_dump(exclude_none=True)
 
                     # Add provider tracking
                     claude_request_dict["_provider"] = provider_name
-                    claude_request_dict["model"] = actual_model  # Use stripped model name
+                    claude_request_dict["model"] = resolved_model  # Use stripped model name
 
                     try:
                         # Direct streaming with passthrough
@@ -272,12 +274,14 @@ async def create_message(  # type: ignore[no-untyped-def]
                     # Passthrough mode for Anthropic-compatible APIs
                     # Convert request to dict directly (no format conversion)
                     # Get the actual model name without provider prefix
-                    _, actual_model = model_manager.resolve_model(request.model)
+                    provider_name_for_model, resolved_model = model_manager.resolve_model(
+                        request.model
+                    )
                     claude_request_dict = request.model_dump(exclude_none=True)
 
                     # Add provider tracking
                     claude_request_dict["_provider"] = provider_name
-                    claude_request_dict["model"] = actual_model  # Use stripped model name
+                    claude_request_dict["model"] = resolved_model  # Use stripped model name
 
                     # Make API call
                     anthropic_response = await openai_client.create_chat_completion(
@@ -454,23 +458,24 @@ async def count_tokens(
         if provider_config and provider_config.is_anthropic_format:
             # For Anthropic-compatible APIs, use their token counting if available
             # Create request for token counting
+            messages_list: list[dict[str, Any]] = []
             count_request = {
                 "model": actual_model,
-                "messages": [],
+                "messages": messages_list,
             }
 
             # Add system message
             if request.system:
-                count_request["messages"].append(
+                messages_list.append(
                     {
-                        "role": "user",
+                        "role": "user",  # type: ignore[assignment]
                         "content": request.system if isinstance(request.system, str) else "",
                     }
                 )
 
             # Add messages (excluding content for counting)
             for msg in request.messages:
-                msg_dict = {"role": msg.role}
+                msg_dict: Dict[str, Any] = {"role": msg.role}
                 if isinstance(msg.content, str):
                     msg_dict["content"] = msg.content
                 elif isinstance(msg.content, list):
@@ -481,7 +486,7 @@ async def count_tokens(
                             text_parts.append(block.text)
                     msg_dict["content"] = "".join(text_parts)
 
-                count_request["messages"].append(msg_dict)
+                messages_list.append(msg_dict)
 
             # Try to get token count from provider
             try:
@@ -508,7 +513,7 @@ async def count_tokens(
             if isinstance(request.system, str):
                 total_chars += len(request.system)
             elif isinstance(request.system, list):
-                for block in request.system:
+                for block in request.system:  # type: ignore[assignment]
                     if hasattr(block, "text"):
                         total_chars += len(block.text)
 
@@ -540,7 +545,7 @@ async def health_check() -> Dict[str, Any]:
         # Gather provider information
         providers = {}
         try:
-            for provider_name in config.provider_manager.provider_configs.keys():
+            for provider_name in config.provider_manager.list_providers().keys():
                 provider_config = config.provider_manager.get_provider_config(provider_name)
                 providers[provider_name] = {
                     "name": provider_name,
@@ -694,12 +699,15 @@ async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
             # For OpenAI format, try to get models from the provider
             try:
                 # Use the client's underlying HTTP client to fetch models
-                response = await default_client.client.get(f"{default_client.base_url}/models")
+                response = await default_client.client.get(  # type: ignore[call-overload]
+                    f"{default_client.base_url}/models"
+                )
                 response.raise_for_status()
                 openai_models = response.json()
 
                 # Transform OpenAI models format to Claude format
-                models = {"object": "list", "data": []}
+                openai_models_response: Dict[str, Any] = {"object": "list", "data": []}
+                models_list: list[Dict[str, Any]] = openai_models_response["data"]  # type: ignore[assignment]
 
                 for model in openai_models.get("data", []):
                     # Create a Claude-compatible model entry
@@ -709,7 +717,8 @@ async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
                         "created": model.get("created", 0),
                         "display_name": model.get("id", "").replace("-", " ").title(),
                     }
-                    models["data"].append(claude_model)
+                    models_list.append(claude_model)
+                models = openai_models_response
 
             except Exception:
                 # Fallback to common models if provider doesn't support /models

@@ -8,8 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.endpoints import router
-from src.core.provider_manager import ProviderManager
 from src.core.provider_config import ProviderConfig
+from src.core.provider_manager import ProviderManager
 
 
 def test_provider_config_api_format():
@@ -19,16 +19,14 @@ def test_provider_config_api_format():
         name="test",
         api_key="test-key",
         base_url="https://api.anthropic.com",
-        api_format="anthropic"
+        api_format="anthropic",
     )
     assert config.is_anthropic_format is True
     assert config.api_format == "anthropic"
 
     # Test with default format
     config_default = ProviderConfig(
-        name="test2",
-        api_key="test-key",
-        base_url="https://api.openai.com"
+        name="test2", api_key="test-key", base_url="https://api.openai.com"
     )
     assert config_default.is_anthropic_format is False
     assert config_default.api_format == "openai"
@@ -82,11 +80,13 @@ def test_anthropic_client_selection():
     # Should return OpenAI client for openai provider
     openai_client = manager.get_client("openai")
     from src.core.client import OpenAIClient
+
     assert isinstance(openai_client, OpenAIClient)
 
     # Should return Anthropic client for anthropic provider
     anthropic_client = manager.get_client("anthropic")
     from src.core.anthropic_client import AnthropicClient
+
     assert isinstance(anthropic_client, AnthropicClient)
 
 
@@ -99,7 +99,7 @@ def test_models_endpoint_anthropic_format():
     client = TestClient(app)
 
     # Mock config and provider manager
-    with patch('src.api.endpoints.config') as mock_config:
+    with patch("src.api.endpoints.config") as mock_config:
         # Setup mock provider config
         mock_provider_config = MagicMock()
         mock_provider_config.is_anthropic_format = True
@@ -136,7 +136,7 @@ def test_models_endpoint_openai_format():
     client = TestClient(app)
 
     # Mock config and provider manager
-    with patch('src.api.endpoints.config') as mock_config:
+    with patch("src.api.endpoints.config") as mock_config:
         # Setup mock provider config
         mock_provider_config = MagicMock()
         mock_provider_config.is_anthropic_format = False
@@ -150,7 +150,7 @@ def test_models_endpoint_openai_format():
             "data": [
                 {"id": "gpt-4o", "created": 1699905200},
                 {"id": "gpt-4o-mini", "created": 1699905200},
-            ]
+            ],
         }
         mock_response.raise_for_status.return_value = None
         mock_client.client.get.return_value = mock_response
@@ -185,7 +185,7 @@ def test_health_check_provider_status():
     client = TestClient(app)
 
     # Mock config and provider manager
-    with patch('src.api.endpoints.config') as mock_config:
+    with patch("src.api.endpoints.config") as mock_config:
         # Setup mock provider configs
         mock_anthropic_config = MagicMock()
         mock_anthropic_config.api_format = "anthropic"
@@ -202,6 +202,10 @@ def test_health_check_provider_status():
         mock_provider_manager = MagicMock()
         mock_provider_manager.default_provider = "openai"
         mock_provider_manager.provider_configs = {
+            "anthropic": mock_anthropic_config,
+            "openai": mock_openai_config,
+        }
+        mock_provider_manager.list_providers.return_value = {
             "anthropic": mock_anthropic_config,
             "openai": mock_openai_config,
         }
@@ -241,21 +245,18 @@ def test_anthropic_passthrough_message_format():
     from src.core.anthropic_client import AnthropicClient
 
     # Create Anthropic client
-    client = AnthropicClient(
-        api_key="test-key",
-        base_url="https://api.anthropic.com"
-    )
+    client = AnthropicClient(api_key="test-key", base_url="https://api.anthropic.com")
 
     # Test request format
     request = {
         "model": "claude-3-5-sonnet-20241022",
         "messages": [
             {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi there!"}
+            {"role": "assistant", "content": "Hi there!"},
         ],
         "max_tokens": 100,
         "stream": False,
-        "_provider": "anthropic"
+        "_provider": "anthropic",
     }
 
     # Verify the request structure

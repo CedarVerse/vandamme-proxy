@@ -15,7 +15,8 @@ import logging
 from typing import Any, AsyncGenerator, Dict, Optional
 
 from src.core.config import config
-from src.middleware import MiddlewareChain, RequestContext, ResponseContext, StreamChunkContext
+from src.middleware import MiddlewareChain, RequestContext, ResponseContext
+from src.middleware.base import StreamChunkContext
 from src.models.claude import ClaudeMessagesRequest
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class MiddlewareAwareRequestProcessor:
     needing to understand the internal middleware architecture.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.middleware_chain = MiddlewareChain()
         self.logger = logging.getLogger(f"{__name__}.MiddlewareAwareRequestProcessor")
 
@@ -87,11 +88,9 @@ class MiddlewareAwareRequestProcessor:
             # Note: This is a simplified conversion. In a production system,
             # you'd want to preserve the full message structure
             self.logger.debug(
-                "Request modified by middleware",
-                provider=provider_name,
-                model=request.model,
-                original_messages=len(context.messages),
-                modified_messages=len(processed_context.messages),
+                f"Request modified by middleware, provider={provider_name}, "
+                f"model={request.model}, original_messages={len(context.messages)}, "
+                f"modified_messages={len(processed_context.messages)}"
             )
 
         return request  # Return original for now - full conversion would be more complex
@@ -121,7 +120,7 @@ class MiddlewareAwareRequestProcessor:
         # Process through middleware chain
         processed_context = await self.middleware_chain.process_response(response_context)
 
-        return processed_context.response
+        return processed_context.response  # type: ignore[return-value]
 
     async def process_stream_chunk(
         self,
@@ -154,7 +153,7 @@ class MiddlewareAwareRequestProcessor:
         # Update accumulated metadata from middleware
         accumulated_metadata.update(processed_context.accumulated_metadata)
 
-        return processed_context.delta
+        return processed_context.delta  # type: ignore[return-value]
 
     async def finalize_stream(
         self,

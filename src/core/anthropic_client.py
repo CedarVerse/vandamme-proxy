@@ -56,7 +56,9 @@ class AnthropicClient:
 
         # Log the request
         if LOG_REQUEST_METRICS:
-            conversation_logger.debug(f"📤 ANTHROPIC REQUEST | Model: {request.get('model', 'unknown')}")
+            conversation_logger.debug(
+                f"📤 ANTHROPIC REQUEST | Model: {request.get('model', 'unknown')}"
+            )
 
         try:
             # Direct API call to Anthropic-compatible endpoint
@@ -68,7 +70,7 @@ class AnthropicClient:
             response.raise_for_status()
 
             # Parse response
-            response_data = response.json()
+            response_data: Dict[str, Any] = response.json()
 
             # Log timing
             if LOG_REQUEST_METRICS:
@@ -80,26 +82,20 @@ class AnthropicClient:
         except httpx.HTTPStatusError as e:
             # Convert HTTP errors to our format
             error_detail = e.response.json() if e.response.text else str(e)
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=error_detail
-            )
+            raise HTTPException(status_code=e.response.status_code, detail=error_detail)
         except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Anthropic API error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Anthropic API error: {str(e)}")
 
     async def create_chat_completion_stream(
-        self,
-        request: Dict[str, Any],
-        request_id: Optional[str] = None
+        self, request: Dict[str, Any], request_id: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to Anthropic API with SSE passthrough."""
         start_time = time.time()
 
         if LOG_REQUEST_METRICS:
-            conversation_logger.debug(f"📤 ANTHROPIC STREAM | Model: {request.get('model', 'unknown')}")
+            conversation_logger.debug(
+                f"📤 ANTHROPIC STREAM | Model: {request.get('model', 'unknown')}"
+            )
 
         try:
             async with self.client.stream(
@@ -119,15 +115,9 @@ class AnthropicClient:
 
         except httpx.HTTPStatusError as e:
             error_detail = e.response.json() if e.response.text else str(e)
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=error_detail
-            )
+            raise HTTPException(status_code=e.response.status_code, detail=error_detail)
         except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Anthropic API streaming error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Anthropic API streaming error: {str(e)}")
 
     def classify_openai_error(self, error_message: str) -> str:
         """Classify error message for Anthropic API (passthrough)."""

@@ -109,7 +109,7 @@ class ThoughtSignatureStore:
         """Start the background cleanup task."""
         if self._cleanup_task is None:
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-            self.logger.debug("Started background cleanup task")
+            self.logger.debug(f"Started background cleanup task")
 
     async def stop(self) -> None:
         """Stop the background cleanup task."""
@@ -120,7 +120,7 @@ class ThoughtSignatureStore:
             except asyncio.CancelledError:
                 pass
             self._cleanup_task = None
-            self.logger.debug("Stopped background cleanup task")
+            self.logger.debug(f"Stopped background cleanup task")
 
     async def store(self, entry: ThoughtSignatureEntry) -> None:
         """
@@ -153,11 +153,10 @@ class ThoughtSignatureStore:
             self._conversation_index[entry.conversation_id].add(entry.message_id)
 
             self.logger.debug(
-                "Stored thought signature entry",
-                message_id=entry.message_id,
-                tool_calls=len(entry.tool_call_ids),
-                conversation_id=entry.conversation_id,
-                total_entries=len(self._entries),
+                f"Stored thought signature entry: message_id={entry.message_id}, "
+                f"tool_calls={len(entry.tool_call_ids)}, "
+                f"conversation_id={entry.conversation_id}, "
+                f"total_entries={len(self._entries)}"
             )
 
     async def retrieve_by_tool_calls(
@@ -202,9 +201,7 @@ class ThoughtSignatureStore:
 
             if entry and self._is_entry_valid(entry):
                 self.logger.debug(
-                    "Retrieved thought signatures",
-                    message_id=message_id,
-                    tool_calls=len(tool_call_ids),
+                    f"Retrieved thought signatures for message_id={message_id}, tool_calls={len(tool_call_ids)}"
                 )
                 return entry.reasoning_details
 
@@ -250,9 +247,7 @@ class ThoughtSignatureStore:
                 await self._remove_entry(message_id)
 
             self.logger.debug(
-                "Cleared conversation",
-                conversation_id=conversation_id,
-                cleared_entries=len(message_ids),
+                f"Cleared conversation {conversation_id}, cleared_entries={len(message_ids)}"
             )
 
     async def get_stats(self) -> Dict[str, Any]:
@@ -307,7 +302,7 @@ class ThoughtSignatureStore:
 
     async def _cleanup_loop(self) -> None:
         """Background task to periodically clean up expired entries."""
-        self.logger.info("Starting cleanup loop")
+        self.logger.info(f"Starting cleanup loop")
 
         while True:
             try:
@@ -318,7 +313,7 @@ class ThoughtSignatureStore:
             except Exception as e:
                 self.logger.error(f"Error in cleanup loop: {e}")
 
-        self.logger.info("Cleanup loop stopped")
+        self.logger.info(f"Cleanup loop stopped")
 
     async def _cleanup_expired(self) -> None:
         """Remove expired entries."""
@@ -334,9 +329,7 @@ class ThoughtSignatureStore:
 
             if expired_message_ids:
                 self.logger.debug(
-                    "Cleaned up expired entries",
-                    count=len(expired_message_ids),
-                    remaining=len(self._entries),
+                    f"Cleaned up expired entries: count={len(expired_message_ids)}, remaining={len(self._entries)}"
                 )
 
 
@@ -365,12 +358,12 @@ class ThoughtSignatureMiddleware(Middleware):
     async def initialize(self) -> None:
         """Initialize the middleware."""
         await self.store.start()
-        self.logger.info("Thought signature middleware initialized")
+        self.logger.info(f"Thought signature middleware initialized")
 
     async def cleanup(self) -> None:
         """Cleanup resources."""
         await self.store.stop()
-        self.logger.info("Thought signature middleware cleaned up")
+        self.logger.info(f"Thought signature middleware cleaned up")
 
     async def should_handle(self, provider: str, model: str) -> bool:
         """
@@ -435,18 +428,12 @@ class ThoughtSignatureMiddleware(Middleware):
                         injected_count += 1
 
                         self.logger.debug(
-                            "Injected thought signatures",
-                            message_index=i,
-                            tool_calls=len(tool_call_ids),
-                            reasoning_blocks=len(reasoning_details),
+                            f"Injected thought signatures: message_index={i}, tool_calls={len(tool_call_ids)}, reasoning_blocks={len(reasoning_details)}"
                         )
 
         if modified:
             self.logger.info(
-                "Injected thought signatures into request",
-                conversation_id=context.conversation_id,
-                injected_messages=injected_count,
-                total_messages=len(messages),
+                f"Injected thought signatures into request: conversation_id={context.conversation_id}, injected_messages={injected_count}, total_messages={len(messages)}"
             )
             return context.with_updates(messages=messages)
 
@@ -497,9 +484,7 @@ class ThoughtSignatureMiddleware(Middleware):
                 context.accumulated_metadata["reasoning_details"] = current_details
 
                 self.logger.debug(
-                    "Accumulated reasoning details from stream",
-                    chunk_blocks=len(reasoning_details),
-                    total_blocks=len(current_details),
+                    f"Accumulated reasoning details from stream: chunk_blocks={len(reasoning_details)}, total_blocks={len(current_details)}"
                 )
 
         # Track tool call IDs
@@ -538,10 +523,7 @@ class ThoughtSignatureMiddleware(Middleware):
             await self._extract_and_store(response=mock_response, request_context=context)
 
             self.logger.info(
-                "Stored thought signatures from streaming response",
-                conversation_id=context.conversation_id,
-                reasoning_blocks=len(reasoning_details),
-                tool_calls=len(tool_call_ids),
+                f"Stored thought signatures from streaming response: conversation_id={context.conversation_id}, reasoning_blocks={len(reasoning_details)}, tool_calls={len(tool_call_ids)}"
             )
 
     async def _extract_and_store(
@@ -599,9 +581,5 @@ class ThoughtSignatureMiddleware(Middleware):
         await self.store.store(entry)
 
         self.logger.info(
-            "Stored thought signatures from response",
-            message_id=message_id,
-            conversation_id=request_context.conversation_id,
-            reasoning_blocks=len(reasoning_details),
-            tool_calls=len(tool_call_ids),
+            f"Stored thought signatures from response: message_id={message_id}, conversation_id={request_context.conversation_id}, reasoning_blocks={len(reasoning_details)}, tool_calls={len(tool_call_ids)}"
         )

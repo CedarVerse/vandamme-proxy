@@ -1,11 +1,14 @@
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from src.core.client import OpenAIClient
 from src.core.provider_config import ProviderConfig
 from src.middleware import MiddlewareChain, ThoughtSignatureMiddleware
+
+if TYPE_CHECKING:
+    from src.core.anthropic_client import AnthropicClient
 
 
 @dataclass
@@ -24,7 +27,7 @@ class ProviderManager:
 
     def __init__(self, default_provider: str = "openai") -> None:
         self.default_provider = default_provider
-        self._clients: Dict[str, OpenAIClient] = {}
+        self._clients: Dict[str, Union[OpenAIClient, "AnthropicClient"]] = {}
         self._configs: Dict[str, ProviderConfig] = {}
         self._loaded = False
         self._load_results: List[ProviderLoadResult] = []
@@ -116,8 +119,10 @@ class ProviderManager:
             # Try to load from VDM_DEFAULT_PROVIDER
             provider_prefix = f"{self.default_provider.upper()}_"
             api_key = os.environ.get(f"{provider_prefix}API_KEY")
-            base_url = os.environ.get(f"{provider_prefix}BASE_URL") or self.get_default_base_url(
-                self.default_provider
+            base_url = (
+                os.environ.get(f"{provider_prefix}BASE_URL")
+                or self.get_default_base_url(self.default_provider)
+                or "https://api.openai.com/v1"
             )
             api_version = os.environ.get(f"{provider_prefix}API_VERSION")
 
@@ -276,7 +281,7 @@ class ProviderManager:
             return provider.lower(), actual_model
         return self.default_provider, model
 
-    def get_client(self, provider_name: str):
+    def get_client(self, provider_name: str) -> Union[OpenAIClient, "AnthropicClient"]:
         """Get or create a client for the specified provider"""
         if not self._loaded:
             self.load_provider_configs()
