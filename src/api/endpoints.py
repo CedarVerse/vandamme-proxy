@@ -403,7 +403,7 @@ async def create_message(  # type: ignore[no-untyped-def]
 
                     # Count tool calls in response (OpenAI function calls)
                     response_message = openai_response.get("choices", [{}])[0].get("message", {})
-                    tool_calls = response_message.get("tool_calls", [])
+                    tool_calls = response_message.get("tool_calls", []) or []
                     tool_call_count = len(tool_calls)
 
                     # Update metrics
