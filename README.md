@@ -1,14 +1,14 @@
 # Vandamme Proxy
 
-A proxy server that converts Claude API requests to OpenAI-compatible API calls. Enables **Claude Code** to work with various LLM providers including OpenAI, Azure OpenAI, and any OpenAI-compatible API.
+A proxy server that converts Claude API requests to OpenAI-compatible API calls. Enables **Claude Code** to simultaneously work with various LLM providers including Poe, OpenAI, Azure OpenAI, and any OpenAI- or Anthropic-compatible API.
 
 ![Vandamme Proxy](demo.png)
 
 ## Features
 
 - **Full Claude API Compatibility**: Complete `/v1/messages` endpoint support
-- **Multiple Provider Support**: OpenAI, Azure OpenAI, local models (Ollama), and any OpenAI-compatible API
-- **Model Pass-through**: Claude model names are passed through unchanged
+- **Multiple Provider Support**: Poe, OpenAI, Azure OpenAI, local models (Ollama), etc
+- **Model Routing**: Claude model names are routed to the corresponding provider (according to the provider prefix)
 - **Function Calling**: Complete tool use support with proper conversion
 - **Streaming Responses**: Real-time SSE streaming support
 - **Image Support**: Base64 encoded image input
@@ -22,12 +22,7 @@ A proxy server that converts Claude API requests to OpenAI-compatible API calls.
 ```bash
 # Quick start (recommended)
 make init-dev
-
-# Using UV (recommended)
-uv sync --extra cli
-
-# Or using pip
-pip install -r requirements.txt
+source .venv/bin/activate
 ```
 
 ### 2. Configure
