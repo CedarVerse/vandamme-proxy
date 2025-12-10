@@ -599,16 +599,13 @@ async def health_check() -> PlainTextResponse:
             for provider_name in config.provider_manager.list_providers().keys():
                 provider_config = config.provider_manager.get_provider_config(provider_name)
                 providers[provider_name] = {
-                    "name": provider_name,
                     "api_format": provider_config.api_format if provider_config else "unknown",
                     "base_url": provider_config.base_url if provider_config else None,
-                    "api_key_configured": (
-                        bool(provider_config.api_key) if provider_config else False
+                    "api_key_hash": (
+                        f"sha256:{config.provider_manager.get_api_key_hash(provider_config.api_key)}"
+                        if provider_config and provider_config.api_key
+                        else "<not set>"
                     ),
-                    "is_anthropic_format": (
-                        provider_config.is_anthropic_format if provider_config else False
-                    ),
-                    "is_default": provider_name == config.provider_manager.default_provider,
                 }
         except Exception as e:
             # If provider manager fails, include error in response
