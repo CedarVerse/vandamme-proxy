@@ -1,13 +1,14 @@
 """Server management utilities for integration tests."""
 
 import asyncio
+import os
 import subprocess
 import sys
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
+
 import httpx
-import os
 
 
 class TestServerManager:
@@ -31,32 +32,31 @@ class TestServerManager:
 
         # Use uv to run the server
         cmd = [
-            sys.executable, "-m", "uvicorn",
+            sys.executable,
+            "-m",
+            "uvicorn",
             "src.main:app",
-            "--host", "localhost",
-            "--port", str(self.port),
-            "--log-level", "debug"
+            "--host",
+            "localhost",
+            "--port",
+            str(self.port),
+            "--log-level",
+            "debug",
         ]
 
         # Check if we're in a virtual environment
-        if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+        if hasattr(sys, "real_prefix") or (
+            hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
+        ):
             # We're in a virtual environment
             self.process = subprocess.Popen(
-                cmd,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
         else:
             # Try to use uv if available
             cmd = ["uv", "run"] + cmd
             self.process = subprocess.Popen(
-                cmd,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
 
         # Wait for server to be ready

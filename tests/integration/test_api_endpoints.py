@@ -2,8 +2,9 @@
 
 import json
 import os
-import pytest
+
 import httpx
+import pytest
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -256,9 +257,7 @@ async def test_conversation_with_tool_use():
             json={
                 "model": "claude-3-5-sonnet-20241022",
                 "max_tokens": 200,
-                "messages": [
-                    {"role": "user", "content": "Calculate 25 * 4"}
-                ],
+                "messages": [{"role": "user", "content": "Calculate 25 * 4"}],
                 "tools": [
                     {
                         "name": "calculator",
@@ -283,8 +282,7 @@ async def test_conversation_with_tool_use():
 
         # Should have tool_use in response
         tool_use_blocks = [
-            block for block in result1.get("content", [])
-            if block.get("type") == "tool_use"
+            block for block in result1.get("content", []) if block.get("type") == "tool_use"
         ]
         assert len(tool_use_blocks) > 0, "Expected tool_use block in response"
 

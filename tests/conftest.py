@@ -1,13 +1,14 @@
 """Shared pytest configuration and fixtures for Vandamme Proxy tests."""
 
-import pytest
 import os
-from unittest.mock import MagicMock, AsyncMock
-from typing import Generator, AsyncGenerator
+from typing import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from dotenv import load_dotenv
 
 # Load test environment variables
-load_dotenv('.env.test')
+load_dotenv(".env.test")
 
 
 @pytest.fixture
@@ -69,9 +70,7 @@ def base_url(integration_test_port):
 
 def pytest_configure(config):
     """Register custom markers."""
-    config.addinivalue_line(
-        "markers", "unit: marks tests as unit tests (fast, no external deps)"
-    )
+    config.addinivalue_line("markers", "unit: marks tests as unit tests (fast, no external deps)")
     config.addinivalue_line(
         "markers", "integration: marks tests as integration tests (requires services)"
     )

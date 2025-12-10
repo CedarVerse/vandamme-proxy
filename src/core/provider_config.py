@@ -34,4 +34,6 @@ class ProviderConfig:
         if not self.base_url:
             raise ValueError(f"Base URL is required for provider '{self.name}'")
         if self.api_format not in ["openai", "anthropic"]:
-            raise ValueError(f"Invalid API format '{self.api_format}' for provider '{self.name}'. Must be 'openai' or 'anthropic'")
+            raise ValueError(
+                f"Invalid API format '{self.api_format}' for provider '{self.name}'. Must be 'openai' or 'anthropic'"
+            )
