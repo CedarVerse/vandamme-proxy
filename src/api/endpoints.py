@@ -22,6 +22,7 @@ from src.core.logging import (
     request_tracker,
 )
 from src.core.model_manager import model_manager
+from src.middleware import RequestContext, ResponseContext
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
 
 router = APIRouter()
@@ -115,6 +116,22 @@ async def create_message(  # type: ignore[no-untyped-def]
             # Get the appropriate client for this provider
             openai_client = config.provider_manager.get_client(provider_name)
 
+            # Apply middleware to request (e.g., inject thought signatures)
+            if hasattr(config.provider_manager, "middleware_chain"):
+                request_context = RequestContext(
+                    messages=openai_request.get("messages", []),
+                    provider=provider_name,
+                    model=request.model,
+                    request_id=request_id,
+                    conversation_id=None,  # Could be extracted from request if needed
+                )
+                processed_context = await config.provider_manager.middleware_chain.process_request(
+                    request_context
+                )
+                if processed_context.messages != request_context.messages:
+                    openai_request["messages"] = processed_context.messages
+                    logger.debug("Request modified by middleware", provider=provider_name)
+
             # Update metrics with OpenAI model and provider
             if LOG_REQUEST_METRICS and metrics:
                 openai_model = openai_request.get("model", "unknown")
@@ -201,7 +218,9 @@ async def create_message(  # type: ignore[no-untyped-def]
                         # Wrap streaming to capture metrics
                         async def streaming_with_metrics() -> AsyncGenerator[str, None]:
                             try:
-                                async for chunk in convert_openai_streaming_to_claude_with_cancellation(
+                                async for (
+                                    chunk
+                                ) in convert_openai_streaming_to_claude_with_cancellation(
                                     openai_stream,
                                     request,
                                     logger,
@@ -265,6 +284,25 @@ async def create_message(  # type: ignore[no-untyped-def]
                         claude_request_dict, request_id
                     )
 
+                    # Apply middleware to response (e.g., extract thought signatures)
+                    if hasattr(config.provider_manager, "middleware_chain"):
+                        response_context = ResponseContext(
+                            response=anthropic_response,
+                            request_context=RequestContext(
+                                messages=claude_request_dict.get("messages", []),
+                                provider=provider_name,
+                                model=request.model,
+                                request_id=request_id,
+                            ),
+                            is_streaming=False,
+                        )
+                        processed_response = (
+                            await config.provider_manager.middleware_chain.process_response(
+                                response_context
+                            )
+                        )
+                        anthropic_response = processed_response.response
+
                     # Update metrics
                     if LOG_REQUEST_METRICS and metrics:
                         response_json = json.dumps(anthropic_response)
@@ -283,13 +321,32 @@ async def create_message(  # type: ignore[no-untyped-def]
                         openai_request, request_id
                     )
 
+                    # Apply middleware to response (e.g., extract thought signatures)
+                    if hasattr(config.provider_manager, "middleware_chain"):
+                        response_context = ResponseContext(
+                            response=openai_response,
+                            request_context=RequestContext(
+                                messages=openai_request.get("messages", []),
+                                provider=provider_name,
+                                model=request.model,
+                                request_id=request_id,
+                            ),
+                            is_streaming=False,
+                        )
+                        processed_response = (
+                            await config.provider_manager.middleware_chain.process_response(
+                                response_context
+                            )
+                        )
+                        openai_response = processed_response.response
+
                     # Add defensive check
                     if openai_response is None:
                         logger.error(f"Received None response from provider {provider_name}")
                         logger.error(f"Request was: {openai_request}")
                         raise HTTPException(
                             status_code=500,
-                            detail=f"Provider {provider_name} returned None response"
+                            detail=f"Provider {provider_name} returned None response",
                         )
 
                     # Calculate response size
@@ -316,7 +373,9 @@ async def create_message(  # type: ignore[no-untyped-def]
 
                     # Debug: Log the response structure
                     if LOG_REQUEST_METRICS:
-                        conversation_logger.debug(f"📡 RESPONSE STRUCTURE: {list(openai_response.keys())}")
+                        conversation_logger.debug(
+                            f"📡 RESPONSE STRUCTURE: {list(openai_response.keys())}"
+                        )
                         conversation_logger.debug(f"📡 FULL RESPONSE: {openai_response}")
 
                     claude_response = convert_openai_to_claude_response(openai_response, request)
@@ -350,7 +409,7 @@ async def create_message(  # type: ignore[no-untyped-def]
             duration_ms = (time.time() - start_time) * 1000
 
             # Debug: Check if we have an openai_response when error occurs
-            if 'openai_response' in locals() and openai_response is not None:
+            if "openai_response" in locals() and openai_response is not None:
                 logger.error(f"Error occurred with response: {openai_response}")
 
             # Use openai_client if available, otherwise use a generic error message
@@ -388,6 +447,7 @@ async def count_tokens(
     try:
         # Get provider and model
         from src.core.model_manager import model_manager
+
         provider_name, actual_model = model_manager.resolve_model(request.model)
         provider_config = config.provider_manager.get_provider_config(provider_name)
 
@@ -401,10 +461,12 @@ async def count_tokens(
 
             # Add system message
             if request.system:
-                count_request["messages"].append({
-                    "role": "user",
-                    "content": request.system if isinstance(request.system, str) else ""
-                })
+                count_request["messages"].append(
+                    {
+                        "role": "user",
+                        "content": request.system if isinstance(request.system, str) else "",
+                    }
+                )
 
             # Add messages (excluding content for counting)
             for msg in request.messages:
@@ -425,11 +487,7 @@ async def count_tokens(
             try:
                 client = config.provider_manager.get_client(provider_name)
                 count_response = await client.create_chat_completion(
-                    {
-                        **count_request,
-                        "max_tokens": 1  # We just want token count
-                    },
-                    "count_tokens"
+                    {**count_request, "max_tokens": 1}, "count_tokens"  # We just want token count
                 )
 
                 # Extract usage if available
@@ -488,8 +546,12 @@ async def health_check() -> Dict[str, Any]:
                     "name": provider_name,
                     "api_format": provider_config.api_format if provider_config else "unknown",
                     "base_url": provider_config.base_url if provider_config else None,
-                    "api_key_configured": bool(provider_config.api_key) if provider_config else False,
-                    "is_anthropic_format": provider_config.is_anthropic_format if provider_config else False,
+                    "api_key_configured": (
+                        bool(provider_config.api_key) if provider_config else False
+                    ),
+                    "is_anthropic_format": (
+                        provider_config.is_anthropic_format if provider_config else False
+                    ),
                     "is_default": provider_name == config.provider_manager.default_provider,
                 }
         except Exception as e:
@@ -502,7 +564,7 @@ async def health_check() -> Dict[str, Any]:
             "openai_api_configured": bool(config.openai_api_key),
             "api_key_valid": config.validate_api_key(),
             "client_api_key_validation": bool(config.anthropic_api_key),
-            "default_provider": getattr(config.provider_manager, 'default_provider', 'unknown'),
+            "default_provider": getattr(config.provider_manager, "default_provider", "unknown"),
             "providers": providers,
         }
     except Exception as e:
@@ -516,8 +578,8 @@ async def health_check() -> Dict[str, Any]:
             "suggestions": [
                 "Set OPENAI_API_KEY environment variable for OpenAI provider",
                 "Set VDM_DEFAULT_PROVIDER to specify your preferred provider",
-                "Check .env file for required configuration"
-            ]
+                "Check .env file for required configuration",
+            ],
         }
 
 
@@ -626,7 +688,7 @@ async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
                         "created": 1699905200,
                         "display_name": "Claude 3 Haiku",
                     },
-                ]
+                ],
             }
         else:
             # For OpenAI format, try to get models from the provider
@@ -637,10 +699,7 @@ async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
                 openai_models = response.json()
 
                 # Transform OpenAI models format to Claude format
-                models = {
-                    "object": "list",
-                    "data": []
-                }
+                models = {"object": "list", "data": []}
 
                 for model in openai_models.get("data", []):
                     # Create a Claude-compatible model entry
@@ -681,7 +740,7 @@ async def list_models(_: None = Depends(validate_api_key)) -> JSONResponse:
                             "created": 1699905200,
                             "display_name": "GPT-3.5 Turbo",
                         },
-                    ]
+                    ],
                 }
 
         return JSONResponse(status_code=200, content=models)

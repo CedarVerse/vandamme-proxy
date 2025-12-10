@@ -19,7 +19,9 @@ class Config:
         self.openai_api_key = os.environ.get(api_key_env_var)
 
         if not self.openai_api_key:
-            print(f"Warning: {api_key_env_var} not found in environment variables. {self.default_provider} provider will not be available.")
+            print(
+                f"Warning: {api_key_env_var} not found in environment variables. {self.default_provider} provider will not be available."
+            )
             # Don't raise error - allow server to start for testing
 
         # Add Anthropic API key for client validation
@@ -49,6 +51,20 @@ class Config:
         # Connection settings
         self.request_timeout = int(os.environ.get("REQUEST_TIMEOUT", "90"))
         self.max_retries = int(os.environ.get("MAX_RETRIES", "2"))
+
+        # Thought signature middleware settings
+        self.gemini_thought_signatures_enabled = (
+            os.environ.get("GEMINI_THOUGHT_SIGNATURES_ENABLED", "true").lower() == "true"
+        )
+        self.thought_signature_cache_ttl = float(
+            os.environ.get("THOUGHT_SIGNATURE_CACHE_TTL", "3600")
+        )  # 1 hour
+        self.thought_signature_max_cache_size = int(
+            os.environ.get("THOUGHT_SIGNATURE_MAX_CACHE_SIZE", "1000")
+        )
+        self.thought_signature_cleanup_interval = float(
+            os.environ.get("THOUGHT_SIGNATURE_CLEANUP_INTERVAL", "300")
+        )  # 5 minutes
 
         # Provider manager will be initialized lazily
         self._provider_manager: Optional["ProviderManager"] = None

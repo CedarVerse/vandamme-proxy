@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 from src.core.client import OpenAIClient
 from src.core.provider_config import ProviderConfig
+from src.middleware import MiddlewareChain, ThoughtSignatureMiddleware
 
 
 @dataclass
@@ -27,6 +28,10 @@ class ProviderManager:
         self._configs: Dict[str, ProviderConfig] = {}
         self._loaded = False
         self._load_results: List[ProviderLoadResult] = []
+
+        # Initialize middleware chain
+        self.middleware_chain = MiddlewareChain()
+        self._middleware_initialized = False
 
     @staticmethod
     def get_api_key_hash(api_key: str) -> str:
@@ -58,6 +63,48 @@ class ProviderManager:
 
         self._loaded = True
 
+        # Initialize middleware after loading providers
+        self._initialize_middleware()
+
+    def _initialize_middleware(self) -> None:
+        """Initialize and register middleware based on loaded providers"""
+        if self._middleware_initialized:
+            return
+
+        # Register thought signature middleware for Gemini/Vertex providers
+        # Check if any provider needs thought signature support
+        has_gemini_provider = any(
+            provider.lower() in ["vertex", "google", "gemini"]
+            or (config and "gemini" in (config.base_url or "").lower())
+            for provider, config in self._configs.items()
+        )
+
+        # Check if thought signatures are enabled in configuration
+        from src.core.config import config as app_config
+
+        if has_gemini_provider and app_config.gemini_thought_signatures_enabled:
+            # Create store with configuration options
+            from src.middleware.thought_signature import ThoughtSignatureStore
+
+            store = ThoughtSignatureStore(
+                max_size=app_config.thought_signature_max_cache_size,
+                ttl_seconds=app_config.thought_signature_cache_ttl,
+                cleanup_interval=app_config.thought_signature_cleanup_interval,
+            )
+            self.middleware_chain.add(ThoughtSignatureMiddleware(store=store))
+
+        self._middleware_initialized = True
+
+    async def initialize_middleware(self) -> None:
+        """Asynchronously initialize the middleware chain"""
+        if not self._middleware_initialized:
+            self._initialize_middleware()
+        await self.middleware_chain.initialize()
+
+    async def cleanup_middleware(self) -> None:
+        """Cleanup middleware resources"""
+        await self.middleware_chain.cleanup()
+
     def _load_default_provider(self) -> None:
         """Load the default provider configuration"""
         # For backward compatibility, we support both OPENAI_* and VDM_DEFAULT_PROVIDER*
@@ -69,7 +116,9 @@ class ProviderManager:
             # Try to load from VDM_DEFAULT_PROVIDER
             provider_prefix = f"{self.default_provider.upper()}_"
             api_key = os.environ.get(f"{provider_prefix}API_KEY")
-            base_url = os.environ.get(f"{provider_prefix}BASE_URL") or self.get_default_base_url(self.default_provider)
+            base_url = os.environ.get(f"{provider_prefix}BASE_URL") or self.get_default_base_url(
+                self.default_provider
+            )
             api_version = os.environ.get(f"{provider_prefix}API_VERSION")
 
         if not api_key:
@@ -232,6 +281,12 @@ class ProviderManager:
         if not self._loaded:
             self.load_provider_configs()
 
+        # Ensure middleware is initialized when clients are accessed
+        # Note: We can't await here, so we do sync initialization
+        # The full async initialization should be called during app startup
+        if not self._middleware_initialized:
+            self._initialize_middleware()
+
         # Check if provider exists
         if provider_name not in self._configs:
             raise ValueError(
@@ -247,6 +302,7 @@ class ProviderManager:
             if config.is_anthropic_format:
                 # Import here to avoid circular imports
                 from src.core.anthropic_client import AnthropicClient
+
                 self._clients[provider_name] = AnthropicClient(
                     api_key=config.api_key,
                     base_url=config.base_url,
