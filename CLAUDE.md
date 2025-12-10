@@ -8,22 +8,22 @@ Vandamme Proxy is a FastAPI-based proxy server that converts Claude API requests
 
 ## Development Commands
 
+**IMPORTANT: Always use Makefile targets for standard operations.** The Makefile provides standardized commands that align with CI/CD pipelines and encode project-specific best practices.
+
 ### Setup and Installation
 
 ```bash
-# Quick start (recommended)
+# Quick start (recommended) - sets up everything
 make init-dev
 
-# Or step by step
-make venv
+# Or install in development mode only
 make install-dev
+
+# Verify installation succeeded
 make check-install
 
-# Using UV directly
+# Using UV directly (if needed)
 uv sync --extra cli
-
-# Or using pip
-pip install -r requirements.txt
 ```
 
 ### Running the Server
@@ -64,17 +64,23 @@ vdm config validate
 ### Code Quality
 
 ```bash
-# Format code
+# Format code (black + isort)
 make format
+
+# Lint check only (doesn't modify files)
+make lint
 
 # Type checking
 make type-check
 
-# Run all code quality checks
+# Run all code quality checks (lint + type-check)
 make check
 
 # Quick check (format + lint only, skip type-check)
 make quick-check
+
+# Fast validation (quick-check + quick tests)
+make validate
 
 # Pre-commit checks (format + all checks)
 make pre-commit
@@ -83,19 +89,13 @@ make pre-commit
 ### Common Development Tasks
 
 ```bash
-# Install dependencies (production)
-make install
-
-# Install in development mode (editable)
+# Install in development mode (editable, includes CLI)
 make install-dev
 
-# Create virtual environment
-make venv
-
-# Initialize complete development environment
+# Initialize complete development environment (recommended for first-time setup)
 make init-dev
 
-# Verify installation
+# Verify that vdm CLI is installed correctly
 make check-install
 
 # Run development server with hot reload
@@ -104,23 +104,11 @@ make dev
 # Check proxy server health
 make health
 
-# Run full CI pipeline (install, check, test, build)
-make ci
-
-# Build distribution packages
-make build
-
 # Clean temporary files and caches
 make clean
 
 # Show all available targets
 make help
-
-# Show project version
-make version
-
-# Generate .env template file
-make env-template
 ```
 
 ## Architecture
@@ -141,13 +129,23 @@ make env-template
    - **Anthropic Mode**: Direct passthrough for Anthropic-compatible APIs without conversion
    - Mode is automatically selected based on provider's `api_format` configuration
 
-3. **Provider Management**:
-   - Support for multiple LLM providers (OpenAI, Anthropic, Azure, custom endpoints)
+3. **Middleware System**:
+   - Elegant chain-of-responsibility pattern for request/response processing
+   - `src/middleware/base.py` - Base middleware interface and MiddlewareChain
+   - `src/middleware/thought_signature.py` - Google Gemini thought signature persistence
+   - `src/api/middleware_integration.py` - Integration layer for API endpoints
+   - Middleware operates transparently on both streaming and non-streaming responses
+   - Activated per-provider based on configuration (e.g., `GEMINI_THOUGHT_SIGNATURES_ENABLED`)
+
+4. **Provider Management**:
+   - Support for multiple LLM providers (OpenAI, Anthropic, Azure, Google Gemini, custom endpoints)
    - Each provider can be configured as `api_format=openai` or `api_format=anthropic`
    - Provider selection via model prefix: `provider:model_name` (e.g., `anthropic:claude-3-sonnet`)
    - Falls back to default provider if no prefix specified
+   - Providers auto-discovered from environment variables (`{PROVIDER}_API_KEY`)
+   - Special defaults: OpenAI and Poe providers have default BASE_URLs if not specified
 
-4. **Authentication & Security**:
+5. **Authentication & Security**:
    - **Proxy Authentication**: Optional client API key validation via `ANTHROPIC_API_KEY` environment variable
      - This controls access TO the proxy itself, not to external providers
      - If `ANTHROPIC_API_KEY` is set, clients must provide this exact key to use the proxy
@@ -156,13 +154,13 @@ make env-template
      - These are separate from proxy authentication
      - Used to authenticate with the actual LLM providers
 
-5. **Configuration**:
+6. **Configuration**:
    - `src/core/config.py` - Central configuration management
    - `src/core/provider_config.py` - Per-provider configuration management
    - Environment variables loaded from `.env` file via `python-dotenv`
-   - Custom headers support via `CUSTOM_HEADER_*` environment variables
+   - Custom headers support via `CUSTOM_HEADER_*` environment variables (auto-converted to HTTP headers)
 
-6. **Data Models**:
+7. **Data Models**:
    - `src/models/claude.py` - Pydantic models for Claude API format
    - `src/models/openai.py` - Pydantic models for OpenAI API format
 
@@ -257,6 +255,12 @@ Performance:
 - `REQUEST_TIMEOUT` - Request timeout in seconds (default: 90)
 - `MAX_RETRIES` - Retry attempts (default: 2)
 
+Middleware Configuration:
+- `GEMINI_THOUGHT_SIGNATURES_ENABLED` - Enable thought signature middleware for Google Gemini (default: true)
+- `THOUGHT_SIGNATURE_MAX_CACHE_SIZE` - Maximum cache entries (default: 10000)
+- `THOUGHT_SIGNATURE_CACHE_TTL` - Cache TTL in seconds (default: 3600)
+- `THOUGHT_SIGNATURE_CLEANUP_INTERVAL` - Cleanup interval in seconds (default: 300)
+
 ## Common Tasks
 
 ### Testing with Claude Code CLI
@@ -350,14 +354,18 @@ curl -X POST http://localhost:8082/v1/messages \
 
 ### Debugging
 
-- Set `LOG_LEVEL=DEBUG` to see detailed request/response conversions
+- Set `LOG_LEVEL=DEBUG` to see detailed request/response conversions and middleware operations
 - Check `src/core/logging.py` for logging configuration
-- Request/response conversion is logged in `request_converter.py:88`
+- Request/response conversion is logged in `request_converter.py`
+- Middleware chain execution logged in `src/middleware/base.py`
+- Thought signature operations logged in `src/middleware/thought_signature.py`
 
 ## Important Notes
 
 - The proxy uses async/await throughout for high concurrency
-- Connection pooling is managed by the OpenAI client
+- Connection pooling is managed by OpenAI/Anthropic clients
 - Streaming responses support client disconnection/cancellation
 - Token counting endpoint uses character-based estimation (4 chars ≈ 1 token)
 - Error responses are classified and converted to Claude API format
+- Middleware system is transparent to both streaming and non-streaming flows
+- Google Gemini thought signatures are automatically handled when enabled (required for multi-turn function calling)
