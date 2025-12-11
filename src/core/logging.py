@@ -55,10 +55,19 @@ def hash_api_keys_in_message(message: str) -> str:
     # Pattern for API keys in various formats
     # Matches: sk-xxx, Bearer xxx, x-api-key: xxx, Authorization: xxx
     patterns = [
-        (r'(sk-[a-zA-Z0-9]{20,})', lambda m: f"sk-{get_api_key_hash(m.group(1)[3:])}"),
-        (r'(Bearer\s+[a-zA-Z0-9\-_\.]{20,})', lambda m: f"Bearer {get_api_key_hash(m.group(0)[7:])}"),
-        (r'(x-api-key:\s*[a-zA-Z0-9\-_\.]{20,})', lambda m: f"x-api-key: {get_api_key_hash(m.group(0)[11:])}"),
-        (r'("api_key":\s*"[a-zA-Z0-9\-_\.]{20,}")', lambda m: f'"api_key": "{get_api_key_hash(m.group(0)[13:-1])}"'),
+        (r"(sk-[a-zA-Z0-9]{20,})", lambda m: f"sk-{get_api_key_hash(m.group(1)[3:])}"),
+        (
+            r"(Bearer\s+[a-zA-Z0-9\-_\.]{20,})",
+            lambda m: f"Bearer {get_api_key_hash(m.group(0)[7:])}",
+        ),
+        (
+            r"(x-api-key:\s*[a-zA-Z0-9\-_\.]{20,})",
+            lambda m: f"x-api-key: {get_api_key_hash(m.group(0)[11:])}",
+        ),
+        (
+            r'("api_key":\s*"[a-zA-Z0-9\-_\.]{20,}")',
+            lambda m: f'"api_key": "{get_api_key_hash(m.group(0)[13:-1])}"',
+        ),
     ]
 
     for pattern, replacement in patterns:
@@ -114,7 +123,7 @@ class RequestMetrics:
     @property
     def start_time_iso(self) -> str:
         """Get start time as ISO format with second precision"""
-        return datetime.fromtimestamp(self.start_time).strftime('%Y-%m-%dT%H:%M:%S')
+        return datetime.fromtimestamp(self.start_time).strftime("%Y-%m-%dT%H:%M:%S")
 
 
 @dataclass
@@ -218,9 +227,9 @@ class RequestTracker:
             self.request_count = 0
             self.total_completed_requests = 0
             self.last_accessed_timestamps = {
-                "models": {},      # provider:model -> timestamp
-                "providers": {},   # provider -> timestamp
-                "top": None        # overall -> timestamp
+                "models": {},  # provider:model -> timestamp
+                "providers": {},  # provider -> timestamp
+                "top": None,  # overall -> timestamp
             }
             self.initialized = True
 
@@ -275,8 +284,7 @@ class RequestTracker:
         # Update provider timestamp (take max if exists)
         if provider in self.last_accessed_timestamps["providers"]:
             self.last_accessed_timestamps["providers"][provider] = max(
-                self.last_accessed_timestamps["providers"][provider],
-                timestamp
+                self.last_accessed_timestamps["providers"][provider], timestamp
             )
         else:
             self.last_accessed_timestamps["providers"][provider] = timestamp
@@ -284,8 +292,7 @@ class RequestTracker:
         # Update top timestamp (take max if exists)
         if self.last_accessed_timestamps["top"]:
             self.last_accessed_timestamps["top"] = max(
-                self.last_accessed_timestamps["top"],
-                timestamp
+                self.last_accessed_timestamps["top"], timestamp
             )
         else:
             self.last_accessed_timestamps["top"] = timestamp
@@ -755,7 +762,9 @@ class CorrelationHashingFormatter(HashingFormatter):
 
 
 # Configure root logger with combined formatter
-formatter = CorrelationHashingFormatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S")
+formatter = CorrelationHashingFormatter(
+    "%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S"
+)
 
 
 class HttpRequestLogDowngradeFilter(logging.Filter):

@@ -4,8 +4,8 @@ import sys
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from src.core.provider_manager import ProviderManager
     from src.core.alias_manager import AliasManager
+    from src.core.provider_manager import ProviderManager
 
 
 # Configuration

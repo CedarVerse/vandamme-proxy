@@ -60,7 +60,7 @@ class AnthropicClient:
         self,
         request: Dict[str, Any],
         request_id: Optional[str] = None,
-        api_key: Optional[str] = None  # Override API key for this request
+        api_key: Optional[str] = None,  # Override API key for this request
     ) -> Dict[str, Any]:
         """Send chat completion to Anthropic API with passthrough."""
         start_time = time.time()
@@ -77,9 +77,7 @@ class AnthropicClient:
         # Log the request with API key hash
         if LOG_REQUEST_METRICS:
             key_hash = hashlib.sha256(effective_api_key.encode()).hexdigest()[:8]
-            conversation_logger.debug(
-                f"🔑 API KEY HASH {key_hash} @ {self.base_url}"
-            )
+            conversation_logger.debug(f"🔑 API KEY HASH {key_hash} @ {self.base_url}")
             conversation_logger.debug(
                 f"📤 ANTHROPIC REQUEST | Model: {request.get('model', 'unknown')}"
             )
@@ -120,7 +118,7 @@ class AnthropicClient:
         self,
         request: Dict[str, Any],
         request_id: Optional[str] = None,
-        api_key: Optional[str] = None  # Override API key for this request
+        api_key: Optional[str] = None,  # Override API key for this request
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to Anthropic API with SSE passthrough."""
         start_time = time.time()
@@ -136,9 +134,7 @@ class AnthropicClient:
 
         if LOG_REQUEST_METRICS:
             key_hash = hashlib.sha256(effective_api_key.encode()).hexdigest()[:8]
-            conversation_logger.debug(
-                f"🔑 API KEY HASH {key_hash} @ {self.base_url}"
-            )
+            conversation_logger.debug(f"🔑 API KEY HASH {key_hash} @ {self.base_url}")
             conversation_logger.debug(
                 f"📤 ANTHROPIC STREAM | Model: {request.get('model', 'unknown')}"
             )
@@ -163,7 +159,7 @@ class AnthropicClient:
             # For streaming responses, we need to read the content first
             try:
                 content = await e.response.read()
-                error_detail = json.loads(content.decode('utf-8')) if content else str(e)
+                error_detail = json.loads(content.decode("utf-8")) if content else str(e)
             except Exception:
                 error_detail = str(e)
             raise HTTPException(status_code=e.response.status_code, detail=error_detail)

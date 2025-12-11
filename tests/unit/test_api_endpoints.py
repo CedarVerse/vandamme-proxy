@@ -344,12 +344,12 @@ class TestListAliases:
         """Test listing aliases when aliases are configured."""
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.return_value = {
-            'haiku': 'poe:gpt-4o-mini',
-            'fast': 'openai:gpt-4o-mini',
-            'plain': 'gpt-4',
+            "haiku": "poe:gpt-4o-mini",
+            "fast": "openai:gpt-4o-mini",
+            "plain": "gpt-4",
         }
 
-        with patch('src.api.endpoints.config') as mock_config:
+        with patch("src.api.endpoints.config") as mock_config:
             mock_config.alias_manager = mock_alias_manager
 
             response = await list_aliases(_=None)
@@ -377,7 +377,7 @@ class TestListAliases:
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.return_value = {}
 
-        with patch('src.api.endpoints.config') as mock_config:
+        with patch("src.api.endpoints.config") as mock_config:
             mock_config.alias_manager = mock_alias_manager
 
             response = await list_aliases(_=None)
@@ -393,7 +393,7 @@ class TestListAliases:
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.side_effect = Exception("Test error")
 
-        with patch('src.api.endpoints.config') as mock_config:
+        with patch("src.api.endpoints.config") as mock_config:
             mock_config.alias_manager = mock_alias_manager
 
             response = await list_aliases(_=None)

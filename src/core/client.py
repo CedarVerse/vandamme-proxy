@@ -40,7 +40,10 @@ class OpenAIClient:
         # Use cache to avoid recreating clients for the same API key
         if api_key not in self._client_cache:
             # Prepare default headers
-            default_headers = {"Content-Type": "application/json", "User-Agent": "claude-proxy/1.0.0"}
+            default_headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "claude-proxy/1.0.0",
+            }
 
             # Merge custom headers with default headers
             all_headers = {**default_headers, **self.custom_headers}
@@ -59,7 +62,7 @@ class OpenAIClient:
                     api_key=api_key,
                     base_url=self.base_url,
                     timeout=self.timeout,
-                    default_headers=all_headers
+                    default_headers=all_headers,
                 )
 
         return self._client_cache[api_key]
@@ -68,7 +71,7 @@ class OpenAIClient:
         self,
         request: Dict[str, Any],
         request_id: Optional[str] = None,
-        api_key: Optional[str] = None  # Override API key for this request
+        api_key: Optional[str] = None,  # Override API key for this request
     ) -> Dict[str, Any]:
         """Send chat completion to OpenAI API with cancellation support."""
 
@@ -185,7 +188,7 @@ class OpenAIClient:
         self,
         request: Dict[str, Any],
         request_id: Optional[str] = None,
-        api_key: Optional[str] = None  # Override API key for this request
+        api_key: Optional[str] = None,  # Override API key for this request
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to OpenAI API with cancellation support."""
 

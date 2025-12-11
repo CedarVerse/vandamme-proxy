@@ -83,7 +83,9 @@ async def validate_api_key(
 
 @router.post("/v1/messages")
 async def create_message(  # type: ignore[no-untyped-def]
-    request: ClaudeMessagesRequest, http_request: Request, client_api_key: Optional[str] = Depends(validate_api_key)
+    request: ClaudeMessagesRequest,
+    http_request: Request,
+    client_api_key: Optional[str] = Depends(validate_api_key),
 ):
     # Generate unique request ID for tracking
     request_id = str(uuid.uuid4())
@@ -156,7 +158,7 @@ async def create_message(  # type: ignore[no-untyped-def]
                     raise HTTPException(
                         status_code=401,
                         detail=f"Provider '{provider_name}' requires API key passthrough, "
-                               f"but no client API key was provided"
+                        f"but no client API key was provided",
                     )
                 logger.debug(f"Using client API key for provider '{provider_name}'")
 
@@ -188,9 +190,7 @@ async def create_message(  # type: ignore[no-untyped-def]
 
                 # Update last_accessed timestamp
                 request_tracker.update_last_accessed(
-                    provider=provider_name,
-                    model=openai_model,
-                    timestamp=metrics.start_time_iso
+                    provider=provider_name, model=openai_model, timestamp=metrics.start_time_iso
                 )
 
             # Check if client disconnected before processing
@@ -224,7 +224,11 @@ async def create_message(  # type: ignore[no-untyped-def]
                         anthropic_stream = openai_client.create_chat_completion_stream(
                             claude_request_dict,
                             request_id,
-                            api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
+                            api_key=(
+                                client_api_key
+                                if provider_config and provider_config.uses_passthrough
+                                else None
+                            ),
                         )
 
                         # Wrap streaming to capture metrics
@@ -273,7 +277,11 @@ async def create_message(  # type: ignore[no-untyped-def]
                         openai_stream = openai_client.create_chat_completion_stream(
                             openai_request,
                             request_id,
-                            api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
+                            api_key=(
+                                client_api_key
+                                if provider_config and provider_config.uses_passthrough
+                                else None
+                            ),
                         )
 
                         # Wrap streaming to capture metrics
@@ -346,7 +354,11 @@ async def create_message(  # type: ignore[no-untyped-def]
                     anthropic_response = await openai_client.create_chat_completion(
                         claude_request_dict,
                         request_id,
-                        api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
+                        api_key=(
+                            client_api_key
+                            if provider_config and provider_config.uses_passthrough
+                            else None
+                        ),
                     )
 
                     # Apply middleware to response (e.g., extract thought signatures)
@@ -387,7 +399,11 @@ async def create_message(  # type: ignore[no-untyped-def]
                     openai_response = await openai_client.create_chat_completion(
                         openai_request,
                         request_id,
-                        api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
+                        api_key=(
+                            client_api_key
+                            if provider_config and provider_config.uses_passthrough
+                            else None
+                        ),
                     )
 
                     # Apply middleware to response (e.g., extract thought signatures)
@@ -926,19 +942,21 @@ async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
             if ":" in target:
                 provider, model = target.split(":", 1)
 
-            alias_data.append({
-                "alias": alias,
-                "target": target,
-                "provider": provider,
-                "model": model,
-            })
+            alias_data.append(
+                {
+                    "alias": alias,
+                    "target": target,
+                    "provider": provider,
+                    "model": model,
+                }
+            )
 
         return JSONResponse(
             status_code=200,
             content={
                 "object": "list",
                 "data": alias_data,
-            }
+            },
         )
     except Exception as e:
         logger.error(f"Error listing aliases: {e}")
