@@ -1,77 +1,256 @@
 # Quick Start Guide
 
-## 🚀 Get Started in 3 Steps
+Get up and running with Vandamme Proxy in 3 minutes.
 
-### Step 1: Install Dependencies
+## 🚀 Installation
+
+### Option 1: Install from PyPI (Recommended)
+
 ```bash
-# Using UV (recommended)
-uv sync
+# Using pip
+pip install vandamme-proxy
 
-# Or using pip
-pip install -r requirements.txt
+# Or using uv (fastest)
+uv pip install vandamme-proxy
+
+# Verify installation
+vdm version
 ```
 
-### Step 2: Configure Your Provider
+### Option 2: Install from Source (Development)
 
-Choose your LLM provider and configure accordingly:
+```bash
+# Clone the repository
+git clone https://github.com/stellar-amenities/vandamme-proxy.git
+cd vandamme-proxy
+
+# Install with development dependencies
+make install-dev
+
+# Verify installation
+vdm version
+```
+
+## ⚙️ Configuration
+
+### Interactive Setup (Easiest)
+
+```bash
+# Interactive configuration wizard
+vdm config setup
+```
+
+The wizard will guide you through:
+- Selecting your LLM provider(s)
+- Entering API keys
+- Setting default provider
+- Configuring optional features
+
+### Manual Configuration
+
+Create a `.env` file with your provider configuration:
 
 #### OpenAI
 ```bash
-cp .env.example .env
-# Edit .env:
-# OPENAI_API_KEY="sk-your-openai-key"
+OPENAI_API_KEY="sk-your-openai-key"
+```
+
+#### Poe.com
+```bash
+POE_API_KEY="your-poe-api-key"
+VDM_DEFAULT_PROVIDER="poe"
+```
+
+#### Anthropic (Direct)
+```bash
+ANTHROPIC_API_KEY="sk-ant-your-key"
+ANTHROPIC_BASE_URL="https://api.anthropic.com"
+ANTHROPIC_API_FORMAT="anthropic"
+VDM_DEFAULT_PROVIDER="anthropic"
 ```
 
 #### Azure OpenAI
 ```bash
-cp .env.example .env
-# Edit .env:
-# OPENAI_API_KEY="your-azure-key"
-# OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-# AZURE_API_VERSION="2024-02-15-preview"
+AZURE_API_KEY="your-azure-key"
+AZURE_BASE_URL="https://your-resource.openai.azure.com/"
+AZURE_API_VERSION="2024-03-01-preview"
+VDM_DEFAULT_PROVIDER="azure"
 ```
 
 #### Local Models (Ollama)
 ```bash
-cp .env.example .env
-# Edit .env:
-# OPENAI_API_KEY="dummy-key"
-# OPENAI_BASE_URL="http://localhost:11434/v1"
+OLLAMA_API_KEY="dummy-key"
+OLLAMA_BASE_URL="http://localhost:11434/v1"
+VDM_DEFAULT_PROVIDER="ollama"
 ```
 
-### Step 3: Start and Use
+#### Multiple Providers
+```bash
+# Configure multiple providers simultaneously
+OPENAI_API_KEY="sk-..."
+POE_API_KEY="..."
+ANTHROPIC_API_KEY="sk-ant-..."
+ANTHROPIC_BASE_URL="https://api.anthropic.com"
+ANTHROPIC_API_FORMAT="anthropic"
+
+# Set default provider
+VDM_DEFAULT_PROVIDER="poe"
+```
+
+See `.env.example` for all configuration options.
+
+## 🎯 Usage
+
+### Start the Proxy Server
 
 ```bash
-# Start the proxy server
-python start_proxy.py
+# Development mode (hot reload)
+vdm server start --reload
 
-# In another terminal, use with Claude Code
-ANTHROPIC_BASE_URL=http://localhost:8082 claude
+# Production mode
+vdm server start
+
+# Custom host/port
+vdm server start --host 0.0.0.0 --port 8080
+```
+
+### Use with Claude Code CLI
+
+```bash
+# Configure Claude Code to use the proxy
+export ANTHROPIC_BASE_URL=http://localhost:8082
+
+# Use Claude Code normally - it now uses your configured provider(s)
+claude "Hello, world!"
+
+# Use specific provider via model prefix
+claude --model poe:gpt-4o "Quick response"
+claude --model anthropic:claude-3-5-sonnet-20241022 "Use Anthropic directly"
+```
+
+### Test Your Setup
+
+```bash
+# Check proxy health
+vdm health server
+
+# Test upstream provider connectivity
+vdm health upstream
+
+# Test specific model
+vdm test model claude-3-5-sonnet-20241022
+
+# Validate configuration
+vdm config validate
 ```
 
 ## 🎯 How It Works
 
-| Your Input | Proxy Action | Result |
-|-----------|--------------|--------|
-| Claude Code sends `claude-3-5-sonnet-20241022` | Passes through unchanged | Provider receives `claude-3-5-sonnet-20241022` |
-| Claude Code sends `claude-3-5-haiku-20241022` | Passes through unchanged | Provider receives `claude-3-5-haiku-20241022` |
+Vandamme Proxy sits between Claude Code and your LLM provider:
+
+```
+Claude Code → Vandamme Proxy → LLM Provider(s)
+              ↓ Converts
+              ↓ Routes
+              ↓ Manages
+```
+
+### Request Flow Examples
+
+| Your Request | Provider Selection | Result |
+|-------------|-------------------|---------|
+| `claude-3-5-sonnet-20241022` | Uses `VDM_DEFAULT_PROVIDER` | Routes to configured default |
+| `poe:gpt-4o` | Uses Poe provider | Routes to Poe with `gpt-4o` model |
+| `anthropic:claude-3-5-sonnet` | Uses Anthropic provider | Direct passthrough to Anthropic |
+| `openai:gpt-4o` | Uses OpenAI provider | Routes to OpenAI |
 
 ## 📋 What You Need
 
-- Python 3.9+
-- API key for your chosen provider
-- Claude Code CLI installed
-- 2 minutes to configure
+- **Python**: 3.10 or higher
+- **API Key**: At least one provider API key
+- **Claude Code**: Installed and configured
+- **Time**: ~3 minutes to set up
 
 ## 🔧 Default Settings
-- Server runs on `http://localhost:8082`
-- Model names are passed through unchanged
-- Supports streaming, function calling, images
 
-## 🧪 Test Your Setup
+- **Server**: `http://localhost:8082`
+- **Format**: Auto-detected based on provider (`openai` or `anthropic`)
+- **Features**: Streaming ✓ | Function calling ✓ | Vision ✓ | Tool use ✓
+
+## 🧪 Verify Your Setup
+
 ```bash
-# Quick test
-python src/test_claude_to_openai.py
+# 1. Check server is running
+vdm health server
+
+# 2. Test provider connectivity
+vdm health upstream
+
+# 3. Test actual message
+curl -X POST http://localhost:8082/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 100,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+
+# 4. List available models
+curl http://localhost:8082/v1/models
 ```
 
-That's it! Now Claude Code can use any OpenAI-compatible provider! 🎉
+## 🚦 Next Steps
+
+**Basic Usage:**
+- [Provider Routing Guide](docs/provider-routing-guide.md) - Multi-provider setup
+- [Model Aliases](docs/model-aliases.md) - Smart model shortcuts
+- [API Key Passthrough](docs/api-key-passthrough.md) - Multi-tenant deployments
+
+**Advanced:**
+- [Makefile Workflows](docs/makefile-workflows.md) - Development best practices
+- [Anthropic API Support](ANTHROPIC_API_SUPPORT.md) - Dual API format details
+- [Configuration Reference](.env.example) - All environment variables
+
+## 💡 Common Scenarios
+
+### Using Multiple Providers
+
+```bash
+# Configure in .env
+OPENAI_API_KEY="sk-..."
+POE_API_KEY="..."
+VDM_DEFAULT_PROVIDER="poe"
+
+# Use different providers per request
+claude --model openai:gpt-4o "Use OpenAI"
+claude --model poe:gemini-flash "Use Poe"
+claude "Use default (poe)"
+```
+
+### Smart Model Aliases
+
+```bash
+# Configure in .env
+VDM_ALIAS_FAST=poe:gpt-4o-mini
+VDM_ALIAS_SMART=anthropic:claude-3-5-sonnet-20241022
+
+# Use aliases in requests
+claude --model fast "Quick response"
+claude --model smart "Complex reasoning"
+```
+
+### API Key Passthrough (Multi-Tenant)
+
+```bash
+# Allow clients to use their own API keys
+export OPENAI_API_KEY="!PASSTHRU"
+
+# Clients pass their key in request headers
+claude --api-key "client-api-key" "Hello"
+```
+
+---
+
+**That's it!** 🎉 You now have a universal LLM gateway for Claude Code.
+
+Need help? Check the [main README](README.md) or [open an issue](https://github.com/stellar-amenities/vandamme-proxy/issues).
