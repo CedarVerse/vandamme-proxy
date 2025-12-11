@@ -1,7 +1,9 @@
 import fnmatch
+import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
 from collections import defaultdict
@@ -36,6 +38,45 @@ def set_noisy_http_logger_levels(current_log_level: str) -> None:
     noisy_level = logging.DEBUG if current_log_level == "DEBUG" else logging.WARNING
     for logger_name in NOISY_HTTP_LOGGERS:
         logging.getLogger(logger_name).setLevel(noisy_level)
+
+
+def get_api_key_hash(api_key: str) -> str:
+    """Return first 8 chars of sha256 hash for API keys"""
+    if not api_key or api_key == "REDACTED":
+        return "REDACTED"
+    return hashlib.sha256(api_key.encode()).hexdigest()[:8]
+
+
+def hash_api_keys_in_message(message: str) -> str:
+    """Replace API keys in log messages with their hashes"""
+    if not message:
+        return message
+
+    # Pattern for API keys in various formats
+    # Matches: sk-xxx, Bearer xxx, x-api-key: xxx, Authorization: xxx
+    patterns = [
+        (r'(sk-[a-zA-Z0-9]{20,})', lambda m: f"sk-{get_api_key_hash(m.group(1)[3:])}"),
+        (r'(Bearer\s+[a-zA-Z0-9\-_\.]{20,})', lambda m: f"Bearer {get_api_key_hash(m.group(0)[7:])}"),
+        (r'(x-api-key:\s*[a-zA-Z0-9\-_\.]{20,})', lambda m: f"x-api-key: {get_api_key_hash(m.group(0)[11:])}"),
+        (r'("api_key":\s*"[a-zA-Z0-9\-_\.]{20,}")', lambda m: f'"api_key": "{get_api_key_hash(m.group(0)[13:-1])}"'),
+    ]
+
+    for pattern, replacement in patterns:
+        message = re.sub(pattern, replacement, message, flags=re.IGNORECASE)
+
+    return message
+
+
+# Custom formatter that hashes API keys
+class HashingFormatter(logging.Formatter):
+    """Formatter that automatically hashes API keys in log messages"""
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Get the original formatted message
+        message = super().format(record)
+
+        # Hash API keys in the message
+        return hash_api_keys_in_message(message)
 
 
 # Enhanced Logging Infrastructure
@@ -691,7 +732,7 @@ class ConversationLogger:
             logging.setLogRecordFactory(old_factory)
 
 
-# Custom formatter with correlation ID
+# Custom formatter with correlation ID (for backward compatibility)
 class CorrelationFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Add correlation ID if available
@@ -700,8 +741,21 @@ class CorrelationFormatter(logging.Formatter):
         return super().format(record)
 
 
-# Configure root logger
-formatter = CorrelationFormatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S")
+# Custom formatter with correlation ID and API key hashing
+class CorrelationHashingFormatter(HashingFormatter):
+    """Formatter that adds correlation ID and hashes API keys"""
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Add correlation ID if available
+        if hasattr(record, "correlation_id"):
+            record.msg = f"[{record.correlation_id[:8]}] {record.msg}"
+
+        # Call parent to hash API keys
+        return super().format(record)
+
+
+# Configure root logger with combined formatter
+formatter = CorrelationHashingFormatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S")
 
 
 class HttpRequestLogDowngradeFilter(logging.Filter):

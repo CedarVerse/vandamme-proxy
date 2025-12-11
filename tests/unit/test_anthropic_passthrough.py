@@ -111,6 +111,7 @@ def test_models_endpoint_anthropic_format():
 
         mock_provider_manager = MagicMock()
         mock_provider_manager.default_provider = "anthropic"
+        mock_provider_manager.list_providers.return_value = {"anthropic": mock_provider_config}
         mock_provider_manager.get_client.return_value = MagicMock()
         mock_provider_manager.get_provider_config.return_value = mock_provider_config
         mock_config.provider_manager = mock_provider_manager
@@ -162,6 +163,7 @@ def test_models_endpoint_openai_format():
 
         mock_provider_manager = MagicMock()
         mock_provider_manager.default_provider = "openai"
+        mock_provider_manager.list_providers.return_value = {"openai": mock_provider_config}
         mock_provider_manager.get_client.return_value = mock_client
         mock_provider_manager.get_provider_config.return_value = mock_provider_config
         mock_config.provider_manager = mock_provider_manager

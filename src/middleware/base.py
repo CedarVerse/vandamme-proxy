@@ -35,6 +35,7 @@ class RequestContext:
     request_id: str = field(default_factory=lambda: str(uuid4()))
     conversation_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    client_api_key: Optional[str] = None  # Client's API key for passthrough
 
     def with_updates(self, **kwargs: Any) -> "RequestContext":
         """Create a new context with specified fields updated."""
@@ -46,6 +47,7 @@ class RequestContext:
             "request_id": self.request_id,
             "conversation_id": self.conversation_id,
             "metadata": self.metadata.copy(),
+            "client_api_key": self.client_api_key,
         }
         current_values.update(kwargs)
         return RequestContext(**current_values)  # type: ignore[arg-type]

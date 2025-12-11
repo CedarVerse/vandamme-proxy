@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from src.core.client import OpenAIClient
-from src.core.provider_config import ProviderConfig
+from src.core.provider_config import PASSTHROUGH_SENTINEL, ProviderConfig
 from src.middleware import MiddlewareChain, ThoughtSignatureMiddleware
 
 if TYPE_CHECKING:
@@ -39,6 +39,9 @@ class ProviderManager:
     @staticmethod
     def get_api_key_hash(api_key: str) -> str:
         """Return first 8 chars of sha256 hash"""
+        # Special handling for passthrough sentinel
+        if api_key == PASSTHROUGH_SENTINEL:
+            return "PASSTHRU"
         return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
     @staticmethod
@@ -274,7 +277,11 @@ class ProviderManager:
             return provider.lower(), actual_model
         return self.default_provider, model
 
-    def get_client(self, provider_name: str) -> Union[OpenAIClient, "AnthropicClient"]:
+    def get_client(
+        self,
+        provider_name: str,
+        client_api_key: Optional[str] = None,  # Client's API key for passthrough
+    ) -> Union[OpenAIClient, "AnthropicClient"]:
         """Get or create a client for the specified provider"""
         if not self._loaded:
             self.load_provider_configs()
@@ -292,31 +299,38 @@ class ProviderManager:
                 f"Available providers: {list(self._configs.keys())}"
             )
 
-        # Return cached client or create new one
-        if provider_name not in self._clients:
-            config = self._configs[provider_name]
+        config = self._configs[provider_name]
 
+        # For passthrough providers, we cache clients without API keys
+        # The actual API key will be provided per request
+        cache_key = provider_name
+
+        # Return cached client or create new one
+        if cache_key not in self._clients:
             # Create appropriate client based on API format
+            # For passthrough providers, pass None as API key
+            api_key_for_init = None if config.uses_passthrough else config.api_key
+
             if config.is_anthropic_format:
                 # Import here to avoid circular imports
                 from src.core.anthropic_client import AnthropicClient
 
-                self._clients[provider_name] = AnthropicClient(
-                    api_key=config.api_key,
+                self._clients[cache_key] = AnthropicClient(
+                    api_key=api_key_for_init,
                     base_url=config.base_url,
                     timeout=config.timeout,
                     custom_headers=config.custom_headers,
                 )
             else:
-                self._clients[provider_name] = OpenAIClient(
-                    api_key=config.api_key,
+                self._clients[cache_key] = OpenAIClient(
+                    api_key=api_key_for_init,
                     base_url=config.base_url,
                     timeout=config.timeout,
                     api_version=config.api_version,
                     custom_headers=config.custom_headers,
                 )
 
-        return self._clients[provider_name]
+        return self._clients[cache_key]
 
     def get_provider_config(self, provider_name: str) -> Optional[ProviderConfig]:
         """Get configuration for a specific provider"""

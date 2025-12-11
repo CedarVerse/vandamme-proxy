@@ -21,38 +21,57 @@ class AnthropicClient:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: Optional[str],  # Can be None for passthrough providers
         base_url: str,
         timeout: int = 90,
         custom_headers: Optional[Dict[str, str]] = None,
     ) -> None:
         """Initialize Anthropic client."""
-        self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.custom_headers = custom_headers or {}
+        self.default_api_key = api_key
 
-        # Build base headers
-        self.headers = {
-            "x-api-key": api_key,
-            "content-type": "application/json",
-            "anthropic-version": "2023-06-01",
-        }
+        # Don't create HTTP client yet - we'll create it per request
+        # This allows us to use different API keys per request
+        self._client_cache: Dict[str, httpx.AsyncClient] = {}
 
-        # Add custom headers
-        self.headers.update(self.custom_headers)
+    def _get_client(self, api_key: str) -> httpx.AsyncClient:
+        """Get or create an HTTP client for the specific API key"""
+        if api_key not in self._client_cache:
+            # Build headers for this specific API key
+            headers = {
+                "x-api-key": api_key,
+                "content-type": "application/json",
+                "anthropic-version": "2023-06-01",
+                **self.custom_headers,
+            }
 
-        # Create HTTP client
-        self.client = httpx.AsyncClient(
-            timeout=timeout,
-            headers=self.headers,
-        )
+            # Create HTTP client with these headers
+            self._client_cache[api_key] = httpx.AsyncClient(
+                timeout=self.timeout,
+                headers=headers,
+            )
+
+        return self._client_cache[api_key]
 
     async def create_chat_completion(
-        self, request: Dict[str, Any], request_id: Optional[str] = None
+        self,
+        request: Dict[str, Any],
+        request_id: Optional[str] = None,
+        api_key: Optional[str] = None  # Override API key for this request
     ) -> Dict[str, Any]:
         """Send chat completion to Anthropic API with passthrough."""
         start_time = time.time()
+
+        # Use provided API key or fall back to default
+        effective_api_key = api_key or self.default_api_key
+
+        if not effective_api_key:
+            raise ValueError("No API key available for request")
+
+        # Get client for this specific API key
+        client = self._get_client(effective_api_key)
 
         # Log the request
         if LOG_REQUEST_METRICS:
@@ -62,7 +81,7 @@ class AnthropicClient:
 
         try:
             # Direct API call to Anthropic-compatible endpoint
-            response = await self.client.post(
+            response = await client.post(
                 f"{self.base_url}/v1/messages",
                 json=request,
             )
@@ -87,10 +106,22 @@ class AnthropicClient:
             raise HTTPException(status_code=500, detail=f"Anthropic API error: {str(e)}")
 
     async def create_chat_completion_stream(
-        self, request: Dict[str, Any], request_id: Optional[str] = None
+        self,
+        request: Dict[str, Any],
+        request_id: Optional[str] = None,
+        api_key: Optional[str] = None  # Override API key for this request
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to Anthropic API with SSE passthrough."""
         start_time = time.time()
+
+        # Use provided API key or fall back to default
+        effective_api_key = api_key or self.default_api_key
+
+        if not effective_api_key:
+            raise ValueError("No API key available for request")
+
+        # Get client for this specific API key
+        client = self._get_client(effective_api_key)
 
         if LOG_REQUEST_METRICS:
             conversation_logger.debug(
@@ -98,7 +129,7 @@ class AnthropicClient:
             )
 
         try:
-            async with self.client.stream(
+            async with client.stream(
                 "POST",
                 f"{self.base_url}/v1/messages",
                 json=request,

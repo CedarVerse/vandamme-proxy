@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
+# Sentinel value for API key passthrough
+PASSTHROUGH_SENTINEL = "!PASSTHRU"
+
 
 @dataclass
 class ProviderConfig:
@@ -25,6 +28,24 @@ class ProviderConfig:
         """Check if this provider uses Anthropic API format"""
         return self.api_format == "anthropic"
 
+    @property
+    def uses_passthrough(self) -> bool:
+        """Check if this provider uses client API key passthrough"""
+        return self.api_key == PASSTHROUGH_SENTINEL
+
+    def get_effective_api_key(self, client_api_key: Optional[str] = None) -> Optional[str]:
+        """Get the API key to use for requests
+
+        Args:
+            client_api_key: The client's API key from request headers
+
+        Returns:
+            The API key to use for external requests
+        """
+        if self.uses_passthrough:
+            return client_api_key
+        return self.api_key
+
     def __post_init__(self) -> None:
         """Validate configuration after initialization"""
         if not self.name:
@@ -37,3 +58,9 @@ class ProviderConfig:
             raise ValueError(
                 f"Invalid API format '{self.api_format}' for provider '{self.name}'. Must be 'openai' or 'anthropic'"
             )
+
+        # Skip API key format validation for passthrough providers
+        if not self.uses_passthrough and self.api_format == "openai":
+            # Existing validation for OpenAI keys (can be extended based on requirements)
+            # For now, we just ensure it's not the sentinel value
+            pass

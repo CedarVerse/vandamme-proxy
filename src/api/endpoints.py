@@ -54,8 +54,11 @@ def count_tool_calls(request: ClaudeMessagesRequest) -> tuple[int, int]:
 
 async def validate_api_key(
     x_api_key: Optional[str] = Header(None), authorization: Optional[str] = Header(None)
-) -> None:
-    """Validate the client's API key from either x-api-key header or Authorization header."""
+) -> Optional[str]:
+    """
+    Validate and return the client's API key from either x-api-key header or
+    Authorization header. Returns the key if present, None otherwise.
+    """
     client_api_key = None
 
     # Extract API key from headers
@@ -66,7 +69,7 @@ async def validate_api_key(
 
     # Skip validation if ANTHROPIC_API_KEY is not set in the environment
     if not config.anthropic_api_key:
-        return
+        return client_api_key  # Return the key even if validation is disabled
 
     # Validate the client API key
     if not client_api_key or not config.validate_client_api_key(client_api_key):
@@ -75,10 +78,12 @@ async def validate_api_key(
             status_code=401, detail="Invalid API key. Please provide a valid Anthropic API key."
         )
 
+    return client_api_key
+
 
 @router.post("/v1/messages")
 async def create_message(  # type: ignore[no-untyped-def]
-    request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)
+    request: ClaudeMessagesRequest, http_request: Request, client_api_key: Optional[str] = Depends(validate_api_key)
 ):
     # Generate unique request ID for tracking
     request_id = str(uuid.uuid4())
@@ -143,8 +148,20 @@ async def create_message(  # type: ignore[no-untyped-def]
             # Extract provider from request
             provider_name = openai_request.pop("_provider", "openai")
 
+            # Get provider config to check if passthrough is needed
+            provider_config = config.provider_manager.get_provider_config(provider_name)
+
+            if provider_config and provider_config.uses_passthrough:
+                if not client_api_key:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"Provider '{provider_name}' requires API key passthrough, "
+                               f"but no client API key was provided"
+                    )
+                logger.debug(f"Using client API key for provider '{provider_name}'")
+
             # Get the appropriate client for this provider
-            openai_client = config.provider_manager.get_client(provider_name)
+            openai_client = config.provider_manager.get_client(provider_name, client_api_key)
 
             # Apply middleware to request (e.g., inject thought signatures)
             if hasattr(config.provider_manager, "middleware_chain"):
@@ -154,6 +171,7 @@ async def create_message(  # type: ignore[no-untyped-def]
                     model=request.model,
                     request_id=request_id,
                     conversation_id=None,  # Could be extracted from request if needed
+                    client_api_key=client_api_key,  # Pass client API key to middleware
                 )
                 processed_context = await config.provider_manager.middleware_chain.process_request(
                     request_context
@@ -204,7 +222,9 @@ async def create_message(  # type: ignore[no-untyped-def]
                     try:
                         # Direct streaming with passthrough
                         anthropic_stream = openai_client.create_chat_completion_stream(
-                            claude_request_dict, request_id
+                            claude_request_dict,
+                            request_id,
+                            api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
                         )
 
                         # Wrap streaming to capture metrics
@@ -251,7 +271,9 @@ async def create_message(  # type: ignore[no-untyped-def]
                     # OpenAI format streaming (existing logic)
                     try:
                         openai_stream = openai_client.create_chat_completion_stream(
-                            openai_request, request_id
+                            openai_request,
+                            request_id,
+                            api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
                         )
 
                         # Wrap streaming to capture metrics
@@ -322,7 +344,9 @@ async def create_message(  # type: ignore[no-untyped-def]
 
                     # Make API call
                     anthropic_response = await openai_client.create_chat_completion(
-                        claude_request_dict, request_id
+                        claude_request_dict,
+                        request_id,
+                        api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
                     )
 
                     # Apply middleware to response (e.g., extract thought signatures)
@@ -361,7 +385,9 @@ async def create_message(  # type: ignore[no-untyped-def]
                 else:
                     # OpenAI format path (existing logic)
                     openai_response = await openai_client.create_chat_completion(
-                        openai_request, request_id
+                        openai_request,
+                        request_id,
+                        api_key=client_api_key if provider_config and provider_config.uses_passthrough else None
                     )
 
                     # Apply middleware to response (e.g., extract thought signatures)
@@ -373,6 +399,7 @@ async def create_message(  # type: ignore[no-untyped-def]
                                 provider=provider_name,
                                 model=request.model,
                                 request_id=request_id,
+                                client_api_key=client_api_key,
                             ),
                             is_streaming=False,
                         )

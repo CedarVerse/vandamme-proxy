@@ -12,48 +12,76 @@ from src.core.logging import LOG_REQUEST_METRICS, conversation_logger, request_t
 
 
 class OpenAIClient:
-    """Async OpenAI client with cancellation support."""
+    """Async OpenAI client with cancellation support and per-request API key capability."""
 
     def __init__(
         self,
-        api_key: str,
+        api_key: Optional[str],  # Can be None for passthrough providers
         base_url: str,
         timeout: int = 90,
         api_version: Optional[str] = None,
         custom_headers: Optional[Dict[str, str]] = None,
     ):
-        self.api_key = api_key
         self.base_url = base_url
         self.custom_headers = custom_headers or {}
-        self.client: Union[AsyncOpenAI, AsyncAzureOpenAI]
+        self.api_version = api_version
+        self.timeout = timeout
 
-        # Prepare default headers
-        default_headers = {"Content-Type": "application/json", "User-Agent": "claude-proxy/1.0.0"}
+        # Store default API key but allow None for passthrough
+        self.default_api_key = api_key
 
-        # Merge custom headers with default headers
-        all_headers = {**default_headers, **self.custom_headers}
-
-        # Detect if using Azure and instantiate the appropriate client
-        if api_version:
-            self.client = AsyncAzureOpenAI(
-                api_key=api_key,
-                azure_endpoint=base_url,
-                api_version=api_version,
-                timeout=timeout,
-                default_headers=all_headers,
-            )
-        else:
-            self.client = AsyncOpenAI(
-                api_key=api_key, base_url=base_url, timeout=timeout, default_headers=all_headers
-            )
+        # Don't initialize the client yet - we'll create it per request
+        # This allows us to use different API keys per request
+        self._client_cache: Dict[str, Union[AsyncOpenAI, AsyncAzureOpenAI]] = {}
         self.active_requests: Dict[str, asyncio.Event] = {}
 
+    def _get_client(self, api_key: str) -> Union[AsyncOpenAI, AsyncAzureOpenAI]:
+        """Get or create a client for the specific API key"""
+        # Use cache to avoid recreating clients for the same API key
+        if api_key not in self._client_cache:
+            # Prepare default headers
+            default_headers = {"Content-Type": "application/json", "User-Agent": "claude-proxy/1.0.0"}
+
+            # Merge custom headers with default headers
+            all_headers = {**default_headers, **self.custom_headers}
+
+            # Detect if using Azure and instantiate the appropriate client
+            if self.api_version:
+                self._client_cache[api_key] = AsyncAzureOpenAI(
+                    api_key=api_key,
+                    azure_endpoint=self.base_url,
+                    api_version=self.api_version,
+                    timeout=self.timeout,
+                    default_headers=all_headers,
+                )
+            else:
+                self._client_cache[api_key] = AsyncOpenAI(
+                    api_key=api_key,
+                    base_url=self.base_url,
+                    timeout=self.timeout,
+                    default_headers=all_headers
+                )
+
+        return self._client_cache[api_key]
+
     async def create_chat_completion(
-        self, request: Dict[str, Any], request_id: Optional[str] = None
+        self,
+        request: Dict[str, Any],
+        request_id: Optional[str] = None,
+        api_key: Optional[str] = None  # Override API key for this request
     ) -> Dict[str, Any]:
         """Send chat completion to OpenAI API with cancellation support."""
 
         api_start = time.time()
+
+        # Use provided API key or fall back to default
+        effective_api_key = api_key or self.default_api_key
+
+        if not effective_api_key:
+            raise ValueError("No API key available for request")
+
+        # Get client for this specific API key
+        client = self._get_client(effective_api_key)
 
         # Get request metrics for updating
         metrics = (
@@ -68,12 +96,12 @@ class OpenAIClient:
         # Log API call start
         if LOG_REQUEST_METRICS:
             conversation_logger.debug(
-                f"📡 API CALL | Model: {request.get('model', 'unknown')} | Timeout: {self.client.timeout}"
+                f"📡 API CALL | Model: {request.get('model', 'unknown')} | Timeout: {client.timeout}"
             )
 
         try:
             # Create task that can be cancelled
-            completion_task = asyncio.create_task(self.client.chat.completions.create(**request))
+            completion_task = asyncio.create_task(client.chat.completions.create(**request))
 
             if request_id:
                 # Wait for either completion or cancellation
@@ -154,9 +182,21 @@ class OpenAIClient:
                 del self.active_requests[request_id]
 
     async def create_chat_completion_stream(
-        self, request: Dict[str, Any], request_id: Optional[str] = None
+        self,
+        request: Dict[str, Any],
+        request_id: Optional[str] = None,
+        api_key: Optional[str] = None  # Override API key for this request
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to OpenAI API with cancellation support."""
+
+        # Use provided API key or fall back to default
+        effective_api_key = api_key or self.default_api_key
+
+        if not effective_api_key:
+            raise ValueError("No API key available for request")
+
+        # Get client for this specific API key
+        client = self._get_client(effective_api_key)
 
         # Create cancellation token if request_id provided
         if request_id:
@@ -171,7 +211,7 @@ class OpenAIClient:
             request["stream_options"]["include_usage"] = True
 
             # Create the streaming completion
-            streaming_completion = await self.client.chat.completions.create(**request)
+            streaming_completion = await client.chat.completions.create(**request)
 
             async for chunk in streaming_completion:
                 # Check for cancellation before yielding each chunk
