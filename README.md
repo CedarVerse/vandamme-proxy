@@ -1,468 +1,389 @@
 # Vandamme Proxy
 
-A proxy server that converts Claude API requests to OpenAI-compatible API calls. Enables **Claude Code** to simultaneously work with various LLM providers including Poe, OpenAI, Azure OpenAI, and any OpenAI- or Anthropic-compatible API.
+**The Universal LLM Gateway for Multi-Provider AI Development**
 
-![Vandamme Proxy](demo.png)
+[![ci](https://github.com/CedarVerse/vandamme-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/CedarVerse/vandamme-proxy/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/vandamme-proxy)](https://pypi.org/project/vandamme-proxy/)
+[![Python](https://img.shields.io/pypi/pyversions/vandamme-proxy)](https://pypi.org/project/vandamme-proxy/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Features
+Transform any AI client into a powerful command center for OpenAI, Anthropic, Poe, Azure, Gemini, and any compatible API. Supercharge Claude Code CLI with intelligent routing, smart aliases, and zero-configuration provider switching.
 
-- **Full Claude API Compatibility**: Complete `/v1/messages` endpoint support
-- **Multiple Provider Support**: Poe, OpenAI, Azure OpenAI, local models (Ollama), etc
-- **Model Routing**: Claude model names are routed to the corresponding provider (according to the provider prefix)
-- **Model Aliases**: Create aliases for models using `VDM_ALIAS_*` environment variables
-- **Function Calling**: Complete tool use support with proper conversion
-- **Streaming Responses**: Real-time SSE streaming support
-- **Image Support**: Base64 encoded image input
-- **Custom Headers**: Automatic injection of custom HTTP headers for API requests
-- **Error Handling**: Comprehensive error handling and logging
+---
 
-## Quick Start
+## Why Vandamme Proxy?
 
-### 1. Install Dependencies
+### 🚀 For Claude Code Users
+
+Break free from single-provider limitations. Route requests to any LLM provider with simple model prefixes:
 
 ```bash
-# Quick start (recommended)
-make init-dev
-source .venv/bin/activate
+claude --model openai:gpt-4o "Analyze this code"
+claude --model poe:gemini-flash "Quick question"
+claude --model fast "Fast response needed"  # Smart alias
 ```
 
-### 2. Configure
+### 🌐 For LLM Gateway Users
+
+A lightweight, production-ready proxy with:
+- **Zero-Configuration Discovery** - Providers auto-configured from environment variables
+- **Dual API Format Support** - Native OpenAI conversion + Anthropic passthrough
+- **Smart Model Aliases** - Case-insensitive substring matching for cleaner workflows
+- **Secure API Key Passthrough** - Multi-tenant deployments with `!PASSTHRU` sentinel
+- **Extensible Middleware** - Chain-of-responsibility pattern for custom logic
+
+---
+
+## Features at a Glance
+
+### Core Capabilities
+- **Universal Provider Support** - OpenAI, Anthropic, Poe, Azure OpenAI, Google Gemini, AWS Bedrock, Google Vertex AI, or any OpenAI/Anthropic-compatible API
+- **Dynamic Provider Routing** - Route by model prefix (`provider:model`) with automatic fallback to default provider
+- **Smart Model Aliases** - `VDM_ALIAS_*` with case-insensitive substring matching ([Learn more →](docs/model-aliases.md))
+- **Dual API Formats** - Native OpenAI conversion + Anthropic passthrough in one instance ([Learn more →](ANTHROPIC_API_SUPPORT.md))
+
+### Security & Multi-Tenancy
+- **Secure API Key Passthrough** - `!PASSTHRU` sentinel for client-provided keys ([Learn more →](docs/api-key-passthrough.md))
+- **Mixed-Mode Authentication** - Static keys + passthrough simultaneously per provider
+- **Per-Provider Configuration** - Isolated settings, custom headers, API versions
+
+### Developer Experience
+- **Powerful CLI (`vdm`)** - Server management, health checks, configuration validation
+- **Auto-Discovery** - Providers configured via `{PROVIDER}_API_KEY` environment variables
+- **Production Features** - Metrics endpoints, observability, connection pooling, full streaming support
+- **Extensible Middleware** - Built-in support for Google Gemini thought signatures, easy to extend
+
+---
+
+## How It Works
+
+```
+┌──────────────────────────────────────────────────────┐
+│            Your AI Application                       │
+│      (Claude Code CLI, Custom Clients)               │
+└──────────────────────┬───────────────────────────────┘
+                       │
+                       ▼
+       ┌───────────────────────────────────┐
+       │    Vandamme Proxy Gateway         │
+       │    http://localhost:8082          │
+       │                                   │
+       │  ┌─────────────────────────────┐ │
+       │  │  Smart Alias Engine         │ │
+       │  │  "fast" → "poe:gemini-flash"│ │
+       │  └─────────────────────────────┘ │
+       │                                   │
+       │  ┌─────────────────────────────┐ │
+       │  │  Dynamic Provider Router    │ │
+       │  │  Dual Format Handler        │ │
+       │  └─────────────────────────────┘ │
+       └───────────────┬───────────────────┘
+                       │
+       ┌───────────────┼────────────┬─────────────┐
+       │               │            │             │
+       ▼               ▼            ▼             ▼
+   ┌────────┐     ┌─────────┐  ┌────────┐   ┌─────────┐
+   │ OpenAI │     │Anthropic│  │  Poe   │   │  Azure  │
+   │        │     │ Format: │  │(!PASS  │   │ Gemini  │
+   │ Static │     │Anthropic│  │ THRU)  │   │ Custom  │
+   │  Key   │     │         │  │        │   │         │
+   └────────┘     └─────────┘  └────────┘   └─────────┘
+```
+
+**Request Flow:**
+1. Client sends request to Vandamme Proxy
+2. Smart alias resolution (if applicable)
+3. Provider routing based on model prefix
+4. Format selection (OpenAI conversion vs Anthropic passthrough)
+5. Response transformation and middleware processing
+
+---
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
-# Interactive configuration setup
-vdm config setup
+# Using pip (recommended)
+pip install vandamme-proxy
 
-# Or manually create .env file
-cp .env.example .env
-# Edit .env and add your API configuration
-# Note: Environment variables are automatically loaded from .env file
-```
+# Or using uv (fastest)
+uv pip install vandamme-proxy
 
-### 3. Start Server
-
-```bash
-# Using the vdm CLI (recommended)
-vdm server start
-
-# Or with development mode
-vdm server start --reload
-
-# Or direct run
-python start_proxy.py
-
-# Or with docker compose
-docker compose up -d
-```
-
-### 4. Check Configuration
-
-```bash
-# Show current configuration
-vdm config show
-
-# Validate configuration
-vdm config validate
-
-# Check API connectivity
-vdm health upstream
-```
-
-### 5. Use with Claude Code
-
-```bash
-# If ANTHROPIC_API_KEY is not set in the proxy:
-ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY="any-value" claude
-
-# If ANTHROPIC_API_KEY is set in the proxy:
-ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY="exact-matching-key" claude
-```
-
-## Configuration
-
-The application automatically loads environment variables from a `.env` file in the project root using `python-dotenv`. You can also set environment variables directly in your shell.
-
-### Environment Variables
-
-**Required:**
-
-- `OPENAI_API_KEY` - Your API key for the target provider
-
-**Security:**
-
-- `ANTHROPIC_API_KEY` - Expected Anthropic API key for client validation
-  - If set, clients must provide this exact API key to access the proxy
-  - If not set, any API key will be accepted
-
-**Model Configuration:**
-
-- `ANTHROPIC_DEFAULT_HAIKU_MODEL` - Choose a model that is cheap and fast
-- `ANTHROPIC_DEFAULT_SONNET_MODEL` - Choose a middle-ground model (`glm-4.6` for instance)
-- `ANTHROPIC_DEFAULT_OPUS_MODEL` - Choose a model that gives the very best results
-
-**API Configuration:**
-
-- `OPENAI_BASE_URL` - API base URL (default: `https://api.openai.com/v1`)
-
-**Server Settings:**
-
-- `HOST` - Server host (default: `0.0.0.0`)
-- `PORT` - Server port (default: `8082`)
-- `LOG_LEVEL` - Logging level (default: `WARNING`)
-
-**Performance:**
-
-- `MAX_TOKENS_LIMIT` - Token limit (default: `4096`)
-- `REQUEST_TIMEOUT` - Request timeout in seconds (default: `90`)
-
-**Model Aliases:**
-
-- `VDM_ALIAS_*` - Create model aliases for flexible model selection
-  - Supports case-insensitive substring matching
-  - Example: `VDM_ALIAS_HAIKU=poe:gpt-4o-mini`
-
-**Custom Headers:**
-
-- `CUSTOM_HEADER_*` - Custom headers for API requests (e.g., `CUSTOM_HEADER_ACCEPT`, `CUSTOM_HEADER_AUTHORIZATION`)
-  - Uncomment in `.env` file to enable custom headers
-
-### Custom Headers Configuration
-
-Add custom headers to your API requests by setting environment variables with the `CUSTOM_HEADER_` prefix:
-
-```bash
-# Uncomment to enable custom headers
-# CUSTOM_HEADER_ACCEPT="application/jsonstream"
-# CUSTOM_HEADER_CONTENT_TYPE="application/json"
-# CUSTOM_HEADER_USER_AGENT="your-app/1.0.0"
-# CUSTOM_HEADER_AUTHORIZATION="Bearer your-token"
-# CUSTOM_HEADER_X_API_KEY="your-api-key"
-# CUSTOM_HEADER_X_CLIENT_ID="your-client-id"
-# CUSTOM_HEADER_X_CLIENT_VERSION="1.0.0"
-# CUSTOM_HEADER_X_REQUEST_ID="unique-request-id"
-# CUSTOM_HEADER_X_TRACE_ID="trace-123"
-# CUSTOM_HEADER_X_SESSION_ID="session-456"
-```
-
-### Header Conversion Rules
-
-Environment variables with the `CUSTOM_HEADER_` prefix are automatically converted to HTTP headers:
-
-- Environment variable: `CUSTOM_HEADER_ACCEPT`
-- HTTP Header: `ACCEPT`
-
-- Environment variable: `CUSTOM_HEADER_X_API_KEY`
-- HTTP Header: `X-API-KEY`
-
-- Environment variable: `CUSTOM_HEADER_AUTHORIZATION`
-- HTTP Header: `AUTHORIZATION`
-
-### Supported Header Types
-
-- **Content Type**: `ACCEPT`, `CONTENT-TYPE`
-- **Authentication**: `AUTHORIZATION`, `X-API-KEY`
-- **Client Identification**: `USER-AGENT`, `X-CLIENT-ID`, `X-CLIENT-VERSION`
-- **Tracking**: `X-REQUEST-ID`, `X-TRACE-ID`, `X-SESSION-ID`
-
-### Usage Example
-
-```bash
-# Basic configuration
-OPENAI_API_KEY="sk-your-openai-api-key-here"
-OPENAI_BASE_URL="https://api.openai.com/v1"
-
-# Enable custom headers (uncomment as needed)
-CUSTOM_HEADER_ACCEPT="application/jsonstream"
-CUSTOM_HEADER_CONTENT_TYPE="application/json"
-CUSTOM_HEADER_USER_AGENT="my-app/1.0.0"
-CUSTOM_HEADER_AUTHORIZATION="Bearer my-token"
-```
-
-The proxy will automatically include these headers in all API requests to the target LLM provider.
-
-### Model Aliases Configuration
-
-Model aliases allow you to create memorable names for models and enable case-insensitive substring matching for flexible model selection.
-
-```bash
-# Basic tier-based aliases
-VDM_ALIAS_HAIKU=poe:gpt-4o-mini
-VDM_ALIAS_SONNET=openai:gpt-4o
-VDM_ALIAS_OPUS=anthropic:claude-3-opus-20240229
-
-# Custom aliases
-VDM_ALIAS_CHAT=anthropic:claude-3-5-sonnet-20241022
-VDM_ALIAS_FAST=poe:gpt-4o-mini
-VDM_ALIAS_SMART=openai:o1-preview
-
-# Provider-specific aliases
-VDM_ALIAS_OPENAI_FAST=openai:gpt-4o-mini
-VDM_ANTHROPIC_FAST=anthropic:claude-3-5-haiku-20241022
-```
-
-#### Alias Resolution Rules
-
-1. **Case-Insensitive Matching**: `VDM_ALIAS_FAST` matches "fast", "FAST", "FastModel", etc.
-2. **Substring Matching**: Any model name containing "haiku" will match `VDM_ALIAS_HAIKU`
-3. **Flexible Hyphen/Underscore Matching**: Aliases match model names regardless of hyphen/underscore usage
-   - `VDM_ALIAS_MY_ALIAS` matches both "my-alias" and "my_alias"
-   - `VDM_ALIAS_MY_MODEL` matches "oh-this-is-my-model-right" and "oh-this-is-my_model-right"
-4. **Provider Prefix Support**: Alias values can include provider prefixes (e.g., "poe:gpt-4o-mini")
-5. **Priority Order**:
-   - Exact matches first
-   - Longest substring match
-   - Alphabetical order for ties
-
-#### API Usage
-
-```bash
-# List all configured aliases
-curl http://localhost:8082/v1/aliases
-
-# Use alias in requests (substring matching)
-curl -X POST http://localhost:8082/v1/messages \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "my-haiku-model",
-    "max_tokens": 100,
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-# This resolves to "poe:gpt-4o-mini" if VDM_ALIAS_HAIKU is set
-```
-
-### Provider Examples
-
-#### OpenAI
-
-```bash
-OPENAI_API_KEY="sk-your-openai-key"
-OPENAI_BASE_URL="https://api.openai.com/v1"
-```
-
-#### Azure OpenAI
-
-```bash
-OPENAI_API_KEY="your-azure-key"
-OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/deployments/your-deployment"
-AZURE_API_VERSION="2024-02-15-preview"
-```
-
-#### Local Models (Ollama)
-
-```bash
-OPENAI_API_KEY="dummy-key"  # Required but can be dummy
-OPENAI_BASE_URL="http://localhost:11434/v1"
-```
-
-#### Other Providers
-
-Any OpenAI-compatible API can be used by setting the appropriate `OPENAI_BASE_URL`.
-
-## Provider Loading Behavior
-
-The proxy automatically discovers and loads providers based on environment variables:
-
-### Provider Discovery
-
-- Only providers with `{PROVIDER}_API_KEY` set are discovered
-- Providers without an API key are silently ignored (no warnings)
-- For special providers (OpenAI, Poe), `BASE_URL` defaults to their standard endpoints if not provided
-
-### Provider Status
-
-When the proxy starts, it displays a summary of active providers:
-
-```
-📊 Active Providers:
-   openai (a1b2c3d4) - https://api.openai.com/v1
-   poe (e5f6g7h8) - https://api.poe.com/v1
-   ⚠️ openrouter (i9j0k1l2) - Missing BASE_URL
-
-2 providers ready for requests
-```
-
-- ✅ **Success**: Provider is fully configured and ready
-- ⚠️ **Partial**: Provider has API key but missing BASE_URL (configure it to enable)
-- The 8-character hash identifies which API key is being used
-
-### Special Provider Defaults
-
-| Provider | Default BASE_URL | API Key Required |
-|----------|------------------|------------------|
-| OpenAI   | `https://api.openai.com/v1` | Yes |
-| Poe      | `https://api.poe.com/v1` | Yes |
-| Others   | None (must be provided) | Yes |
-
-### Troubleshooting
-
-**Q: Why do I see warnings about failed providers?**
-A: The proxy only warns about providers that have an API key but are missing configuration. Providers without any configuration are not mentioned.
-
-**Q: How do I check which providers are loaded?**
-A: Run `vdm test providers` to see the current provider status.
-
-## Usage Examples
-
-### Basic Chat
-
-```python
-import httpx
-
-response = httpx.post(
-    "http://localhost:8082/v1/messages",
-    json={
-        "model": "claude-3-5-sonnet-20241022",  # Passed through unchanged
-        "max_tokens": 100,
-        "messages": [
-            {"role": "user", "content": "Hello!"}
-        ]
-    }
-)
-```
-
-## Integration with Claude Code
-
-This proxy is designed to work seamlessly with Claude Code CLI:
-
-```bash
-# Start the proxy
-python start_proxy.py
-
-# Use Claude Code with the proxy
-ANTHROPIC_BASE_URL=http://localhost:8082 claude
-
-# Or set permanently
-export ANTHROPIC_BASE_URL=http://localhost:8082
-claude
-```
-
-## Testing
-
-Test proxy functionality and configuration:
-
-```bash
-# Run all tests
-make test
-
-# Run comprehensive integration tests
-make test-integration
-
-# Run unit tests
-make test-unit
-
-# Test configuration
-vdm test connection
-
-# Test model mappings
-vdm test models
-
-# Check API connectivity
-vdm health upstream
-
-# Validate configuration
-vdm config validate
-```
-
-## VDM CLI Reference
-
-The `vdm` command-line tool provides elegant management of the proxy server:
-
-```bash
-# Get help
-vdm --help
-
-# Start the server
-vdm server start
-vdm server start --host 0.0.0.0 --port 8082
-vdm server start --reload  # Development mode
-
-# Configuration management
-vdm config show      # Show current configuration
-vdm config validate  # Validate configuration
-vdm config env       # Show environment variables
-vdm config setup     # Interactive setup
-
-# Health checks
-vdm health server    # Check proxy server
-vdm health upstream  # Check upstream API
-
-# Testing
-vdm test connection  # Test API connectivity
-vdm test models      # Test model mappings
-
-# Version info
+# Verify CLI is available
 vdm version
 ```
 
-## Development
+### Configure Providers
 
-### Using Make (recommended)
+```bash
+# Interactive setup (recommended)
+vdm config setup
+
+# Or manually create .env file
+cat > .env << 'EOF'
+# Provider API Keys
+OPENAI_API_KEY=sk-your-openai-key
+POE_API_KEY=!PASSTHRU  # Client provides key per-request
+ANTHROPIC_API_KEY=sk-ant-your-key
+ANTHROPIC_API_FORMAT=anthropic  # Direct passthrough (no conversion)
+
+# Smart Aliases
+VDM_ALIAS_FAST=poe:gemini-flash
+VDM_ALIAS_CHAT=anthropic:claude-3-5-sonnet-20241022
+VDM_ALIAS_CODE=openai:gpt-4o
+
+# Default Provider (when no prefix specified)
+VDM_DEFAULT_PROVIDER=openai
+EOF
+```
+
+### Start the Server
+
+```bash
+# Development mode (hot reload)
+vdm server start --reload
+
+# Production mode
+vdm server start --host 0.0.0.0 --port 8082
+```
+
+### Use with Claude Code CLI
+
+```bash
+# Point Claude Code to the proxy
+export ANTHROPIC_BASE_URL=http://localhost:8082
+
+# Use provider routing
+claude --model openai:gpt-4o "Analyze this code"
+claude --model poe:gemini-flash "Quick question"
+
+# Use smart aliases
+claude --model fast "Fast response needed"
+claude --model chat "Deep conversation"
+
+# For passthrough providers (!PASSTHRU), provide your API key
+ANTHROPIC_API_KEY=your-poe-key claude --model poe:gemini-flash "..."
+```
+
+### Verify Your Setup
+
+```bash
+# Check server health
+vdm health server
+
+# Test upstream provider connectivity
+vdm health upstream
+
+# Show current configuration
+vdm config show
+
+# View active model aliases
+curl http://localhost:8082/v1/aliases
+```
+
+**Next Steps:**
+- 📚 [Detailed Setup Guide](QUICKSTART.md)
+- 🔧 [Development Workflows](docs/makefile-workflows.md)
+
+---
+
+## 📖 Core Concepts
+
+### Provider Prefix Routing
+
+Route requests by prefixing model names with the provider identifier:
+
+```bash
+# Format: provider:model_name
+claude --model openai:gpt-4o         # Routes to OpenAI
+claude --model poe:gemini-flash      # Routes to Poe
+claude --model anthropic:claude-3    # Routes to Anthropic
+claude --model gpt-4o                # Routes to VDM_DEFAULT_PROVIDER
+```
+
+Providers are auto-discovered from environment variables:
+- `OPENAI_API_KEY` → creates "openai" provider
+- `POE_API_KEY` → creates "poe" provider
+- `CUSTOM_API_KEY` → creates "custom" provider
+
+**[Complete Routing Guide →](docs/provider-routing-guide.md)**
+
+---
+
+### Smart Model Aliases
+
+Create memorable shortcuts with powerful substring matching:
+
+```bash
+# .env configuration
+VDM_ALIAS_FAST=poe:gemini-flash
+VDM_ALIAS_HAIKU=poe:gpt-4o-mini
+VDM_ALIAS_CHAT=anthropic:claude-3-5-sonnet-20241022
+```
+
+**Intelligent Matching Rules:**
+- **Case-Insensitive:** `fast`, `Fast`, `FAST` all match
+- **Substring Matching:** `my-fast-model` matches `FAST` alias
+- **Hyphen/Underscore:** `my-alias` and `my_alias` both match `VDM_ALIAS_MY_ALIAS`
+- **Priority Order:** Exact match → Longest substring → Alphabetical
+
+**[Model Aliases Guide →](docs/model-aliases.md)**
+
+---
+
+### Dual API Format Support
+
+**OpenAI Format (default):**
+```bash
+PROVIDER_API_FORMAT=openai  # Requests converted to/from OpenAI format
+```
+
+**Anthropic Format (passthrough):**
+```bash
+PROVIDER_API_FORMAT=anthropic  # Zero conversion overhead, direct passthrough
+```
+
+**Mix formats in a single instance:**
+```bash
+OPENAI_API_FORMAT=openai         # Conversion mode
+ANTHROPIC_API_FORMAT=anthropic   # Passthrough mode
+BEDROCK_API_FORMAT=anthropic     # AWS Bedrock passthrough
+```
+
+This enables using Claude natively on AWS Bedrock, Google Vertex AI, or any Anthropic-compatible endpoint without conversion overhead.
+
+**[Anthropic API Support Guide →](ANTHROPIC_API_SUPPORT.md)**
+
+---
+
+### Secure API Key Passthrough
+
+Enable client-provided API keys with the `!PASSTHRU` sentinel:
+
+```bash
+# Proxy stores and uses a static API key
+OPENAI_API_KEY=sk-your-static-key
+
+# Client provides their own key per-request
+POE_API_KEY=!PASSTHRU
+```
+
+**Use Cases:**
+- **Multi-Tenant Deployments** - Each client uses their own API keys
+- **Cost Distribution** - Clients pay for their own API usage
+- **Client Autonomy** - Users maintain control of their credentials
+- **Gradual Migration** - Move providers to passthrough one at a time
+
+**[API Key Passthrough Guide →](docs/api-key-passthrough.md)**
+
+---
+
+## Vandamme Proxy vs Alternatives
+
+| Feature | Vandamme Proxy | LiteLLM | OpenRouter |
+|---------|---------------|---------|------------|
+| **Provider Routing** | ✅ Prefix-based (`provider:model`) | ✅ Config-based | ✅ Unified namespace |
+| **Smart Aliases** | ✅ Substring matching + priorities | ❌ Exact match only | ❌ Not supported |
+| **Dual API Formats** | ✅ OpenAI + Anthropic native | ✅ OpenAI only | ✅ OpenAI only |
+| **API Key Passthrough** | ✅ `!PASSTHRU` sentinel | ⚠️ Limited support | ✅ Native support |
+| **Mixed Auth Modes** | ✅ Static + Passthrough per-provider | ❌ Global only | ❌ Global only |
+| **Middleware System** | ✅ Chain-of-responsibility | ⚠️ Limited hooks | ❌ Not extensible |
+| **Claude Code Integration** | ✅ Zero-config | ⚠️ Manual setup | ⚠️ Manual setup |
+| **Self-Hosted** | ✅ Full control | ✅ Full control | ❌ Cloud service only |
+| **vdm CLI** | ✅ Integrated tooling | ❌ Not provided | ❌ Not provided |
+
+### When to Choose Vandamme Proxy
+
+**Choose Vandamme if you:**
+- Use Claude Code CLI and want seamless multi-provider support
+- Need flexible per-provider API key passthrough for multi-tenant scenarios
+- Want smart model aliases with substring matching
+- Require Anthropic-format native passthrough (AWS Bedrock, Google Vertex AI)
+- Prefer lightweight design with minimal dependencies
+- Want extensible middleware for custom request/response logic
+
+**Choose LiteLLM if you:**
+- Need enterprise-grade load balancing and automatic failover
+- Require extensive logging and observability integrations
+- Want managed caching layers and retry strategies
+
+**Choose OpenRouter if you:**
+- Prefer a managed cloud service over self-hosting
+- Want access to exclusive model partnerships and providers
+- Don't require self-hosted infrastructure
+
+---
+
+## 📚 Documentation
+
+### Getting Started
+- 📚 [Quick Start Guide](QUICKSTART.md) - Get running in 5 minutes
+- 🏗️ [Architecture Overview](CLAUDE.md) - Deep dive into design decisions
+- 🔧 [Development Workflows](docs/makefile-workflows.md) - Makefile targets and best practices
+
+### Feature Guides
+- 🌐 [Multi-Provider Routing](docs/provider-routing-guide.md) - Complete routing and configuration guide
+- 🏷️ [Smart Model Aliases](docs/model-aliases.md) - Alias configuration and matching rules
+- 🔑 [API Key Passthrough](docs/api-key-passthrough.md) - Security and multi-tenancy patterns
+- 🔄 [Anthropic API Support](ANTHROPIC_API_SUPPORT.md) - Dual-format operation details
+
+### Reference
+- **API Endpoints:**
+  - `POST /v1/messages` - Chat completions
+  - `POST /v1/messages/count_tokens` - Token counting
+  - `GET /v1/models` - List available models
+  - `GET /v1/aliases` - View active model aliases
+  - `GET /health` - Health check with provider status
+  - `GET /metrics/running-totals` - Usage metrics
+
+---
+
+## 🛠️ Development
+
+### Setup
 
 ```bash
 # Initialize development environment
 make init-dev
 
-# Run server using CLI
-vdm server start
-
-# Run development server with hot reload
+# Start development server with hot reload
 make dev
-
-# Format code
-make format
-
-# Type checking
-make type-check
-
-# Run all code quality checks
-make check
-
-# Run tests
-make test
 ```
 
-### Using UV
+### Testing
 
 ```bash
-# Install dependencies
-uv sync --extra cli  # Include CLI dependencies
+# Run all tests
+make test
 
-# Run server using CLI
-vdm server start
-
-# Or run directly
-uv run python start_proxy.py
+# Run code quality checks
+make check
 
 # Format code
 make format
-
-# Type checking
-make type-check
-
-# Run all code quality checks
-make check
 ```
 
-### Project Structure
+### Contributing
 
-```
-claude-code-proxy/
-├── src/
-│   ├── main.py                     # Main server
-│   ├── test_claude_to_openai.py    # Tests
-│   └── [other modules...]
-├── start_proxy.py                  # Startup script
-├── .env.example                    # Config template
-└── README.md                       # This file
-```
+We welcome contributions! Please see our development guide for details on:
+- Setting up your development environment
+- Running tests and quality checks
+- Submitting pull requests
 
-## Performance
+**[Complete Development Guide →](docs/makefile-workflows.md)**
 
-- **Async/await** for high concurrency
-- **Connection pooling** for efficiency
-- **Streaming support** for real-time responses
-- **Configurable timeouts** and retries
-- **Smart error handling** with detailed logging
+---
 
-## License
+## 📄 License
 
-MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Community
+
+- **Issues:** [GitHub Issues](https://github.com/CedarVerse/vandamme-proxy/issues)
+- **Repository:** [GitHub](https://github.com/CedarVerse/vandamme-proxy)
+
+---
+
+Built with ❤️ for the AI development community
