@@ -116,13 +116,14 @@ make help
 ### Core Components
 
 1. **Request/Response Flow**:
-   - `src/api/endpoints.py` - FastAPI endpoints (`/v1/messages`, `/v1/messages/count_tokens`, `/v1/models`, `/health`, `/test-connection`)
+   - `src/api/endpoints.py` - FastAPI endpoints (`/v1/messages`, `/v1/messages/count_tokens`, `/v1/models`, `/v1/aliases`, `/health`, `/test-connection`)
    - `src/conversion/request_converter.py` - Converts Claude API format to OpenAI format
    - `src/conversion/response_converter.py` - Converts OpenAI responses back to Claude format
    - `src/core/client.py` - OpenAI API client with retry logic and connection pooling
    - `src/core/anthropic_client.py` - Anthropic-compatible API client for direct passthrough
    - `src/core/provider_manager.py` - Multi-provider management with format selection
-   - `src/core/model_manager.py` - Model name resolution (passes through Claude model names unchanged)
+   - `src/core/model_manager.py` - Model name resolution with alias support
+   - `src/core/alias_manager.py` - Model alias management with case-insensitive substring matching
 
 2. **Dual-Mode Operation**:
    - **OpenAI Mode**: Converts Claude requests to OpenAI format, processes, converts back
@@ -196,6 +197,7 @@ Environment variables prefixed with `CUSTOM_HEADER_` are automatically converted
 - `src/cli/commands/` - CLI command implementations
 - `src/api/endpoints.py` - Main API endpoints
 - `src/core/config.py` - Configuration management (83 lines)
+- `src/core/alias_manager.py` - Model alias management and resolution
 - `src/conversion/request_converter.py` - Claude→OpenAI request conversion
 - `src/conversion/response_converter.py` - OpenAI→Claude response conversion
 
@@ -306,6 +308,50 @@ VERTEX_API_KEY=your-vertex-key
 VERTEX_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 VERTEX_API_FORMAT=anthropic
 VDM_DEFAULT_PROVIDER=vertex
+```
+
+### Using Model Aliases
+
+Model aliases provide flexible model selection with case-insensitive substring matching.
+
+```bash
+# Configure aliases in .env file
+VDM_ALIAS_HAIKU=poe:gpt-4o-mini
+VDM_ALIAS_FAST=openai:gpt-4o-mini
+VDM_ALIAS_CHAT=anthropic:claude-3-5-sonnet-20241022
+
+# List all configured aliases
+curl http://localhost:8082/v1/aliases
+
+# Use aliases in requests
+curl -X POST http://localhost:8082/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "haiku",
+    "max_tokens": 100,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+
+# Substring matching works too
+curl -X POST http://localhost:8082/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "my-custom-haiku-model",
+    "max_tokens": 100,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+#### Claude Code with Aliases
+
+```bash
+# Configure aliases
+export VDM_ALIAS_HAIKU=poe:gpt-4o-mini
+export VDM_ALIAS_FAST=openai:gpt-4o-mini
+
+# Use aliases with Claude Code
+ANTHROPIC_BASE_URL=http://localhost:8082 claude --model haiku "Quick response"
+ANTHROPIC_BASE_URL=http://localhost:8082 claude --model fast "Process this quickly"
 ```
 
 #### Provider Selection in Requests

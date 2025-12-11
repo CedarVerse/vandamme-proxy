@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from src.core.provider_manager import ProviderManager
+    from src.core.alias_manager import AliasManager
 
 
 # Configuration
@@ -69,6 +70,9 @@ class Config:
         # Provider manager will be initialized lazily
         self._provider_manager: Optional["ProviderManager"] = None
 
+        # Alias manager will be initialized lazily
+        self._alias_manager: Optional["AliasManager"] = None
+
     @property
     def provider_manager(self) -> "ProviderManager":
         """Lazy initialization of provider manager to avoid circular imports"""
@@ -77,6 +81,15 @@ class Config:
 
             self._provider_manager = ProviderManager(default_provider=self.default_provider)
         return self._provider_manager
+
+    @property
+    def alias_manager(self) -> "AliasManager":
+        """Lazy initialization of alias manager to avoid circular imports"""
+        if self._alias_manager is None:
+            from src.core.alias_manager import AliasManager
+
+            self._alias_manager = AliasManager()
+        return self._alias_manager
 
     def validate_api_key(self) -> bool:
         """Basic API key validation"""

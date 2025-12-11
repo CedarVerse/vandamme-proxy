@@ -4,8 +4,10 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
-from src.api.endpoints import count_tool_calls
+from src.api.endpoints import count_tool_calls, list_aliases
 from src.models.claude import (
     ClaudeContentBlockText,
     ClaudeContentBlockToolResult,
@@ -332,3 +334,72 @@ class TestFilteredRunningTotals:
         assert totals["total_output_tokens"] == 0
         assert len(totals["provider_model_distribution"]) == 0
         assert totals["average_duration_ms"] == 0
+
+
+class TestListAliases:
+    """Test the /v1/aliases endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_list_aliases_with_data(self):
+        """Test listing aliases when aliases are configured."""
+        mock_alias_manager = MagicMock()
+        mock_alias_manager.get_all_aliases.return_value = {
+            'haiku': 'poe:gpt-4o-mini',
+            'fast': 'openai:gpt-4o-mini',
+            'plain': 'gpt-4',
+        }
+
+        with patch('src.api.endpoints.config') as mock_config:
+            mock_config.alias_manager = mock_alias_manager
+
+            response = await list_aliases(_=None)
+
+            assert response.status_code == 200
+            content = json.loads(response.body)
+            assert content["object"] == "list"
+            assert len(content["data"]) == 3
+
+            # Check first alias
+            haiku_data = next(d for d in content["data"] if d["alias"] == "haiku")
+            assert haiku_data["target"] == "poe:gpt-4o-mini"
+            assert haiku_data["provider"] == "poe"
+            assert haiku_data["model"] == "gpt-4o-mini"
+
+            # Check plain alias (no provider prefix)
+            plain_data = next(d for d in content["data"] if d["alias"] == "plain")
+            assert plain_data["target"] == "gpt-4"
+            assert plain_data["provider"] == "default"
+            assert plain_data["model"] == "gpt-4"
+
+    @pytest.mark.asyncio
+    async def test_list_aliases_no_data(self):
+        """Test listing aliases when no aliases are configured."""
+        mock_alias_manager = MagicMock()
+        mock_alias_manager.get_all_aliases.return_value = {}
+
+        with patch('src.api.endpoints.config') as mock_config:
+            mock_config.alias_manager = mock_alias_manager
+
+            response = await list_aliases(_=None)
+
+            assert response.status_code == 200
+            content = json.loads(response.body)
+            assert content["object"] == "list"
+            assert len(content["data"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_list_aliases_error_handling(self):
+        """Test error handling in list_aliases endpoint."""
+        mock_alias_manager = MagicMock()
+        mock_alias_manager.get_all_aliases.side_effect = Exception("Test error")
+
+        with patch('src.api.endpoints.config') as mock_config:
+            mock_config.alias_manager = mock_alias_manager
+
+            response = await list_aliases(_=None)
+
+            assert response.status_code == 500
+            content = json.loads(response.body)
+            assert content["type"] == "error"
+            assert content["error"]["type"] == "api_error"
+            assert "Failed to list aliases" in content["error"]["message"]

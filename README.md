@@ -9,6 +9,7 @@ A proxy server that converts Claude API requests to OpenAI-compatible API calls.
 - **Full Claude API Compatibility**: Complete `/v1/messages` endpoint support
 - **Multiple Provider Support**: Poe, OpenAI, Azure OpenAI, local models (Ollama), etc
 - **Model Routing**: Claude model names are routed to the corresponding provider (according to the provider prefix)
+- **Model Aliases**: Create aliases for models using `VDM_ALIAS_*` environment variables
 - **Function Calling**: Complete tool use support with proper conversion
 - **Streaming Responses**: Real-time SSE streaming support
 - **Image Support**: Base64 encoded image input
@@ -113,6 +114,12 @@ The application automatically loads environment variables from a `.env` file in 
 - `MAX_TOKENS_LIMIT` - Token limit (default: `4096`)
 - `REQUEST_TIMEOUT` - Request timeout in seconds (default: `90`)
 
+**Model Aliases:**
+
+- `VDM_ALIAS_*` - Create model aliases for flexible model selection
+  - Supports case-insensitive substring matching
+  - Example: `VDM_ALIAS_HAIKU=poe:gpt-4o-mini`
+
 **Custom Headers:**
 
 - `CUSTOM_HEADER_*` - Custom headers for API requests (e.g., `CUSTOM_HEADER_ACCEPT`, `CUSTOM_HEADER_AUTHORIZATION`)
@@ -171,6 +178,56 @@ CUSTOM_HEADER_AUTHORIZATION="Bearer my-token"
 ```
 
 The proxy will automatically include these headers in all API requests to the target LLM provider.
+
+### Model Aliases Configuration
+
+Model aliases allow you to create memorable names for models and enable case-insensitive substring matching for flexible model selection.
+
+```bash
+# Basic tier-based aliases
+VDM_ALIAS_HAIKU=poe:gpt-4o-mini
+VDM_ALIAS_SONNET=openai:gpt-4o
+VDM_ALIAS_OPUS=anthropic:claude-3-opus-20240229
+
+# Custom aliases
+VDM_ALIAS_CHAT=anthropic:claude-3-5-sonnet-20241022
+VDM_ALIAS_FAST=poe:gpt-4o-mini
+VDM_ALIAS_SMART=openai:o1-preview
+
+# Provider-specific aliases
+VDM_ALIAS_OPENAI_FAST=openai:gpt-4o-mini
+VDM_ANTHROPIC_FAST=anthropic:claude-3-5-haiku-20241022
+```
+
+#### Alias Resolution Rules
+
+1. **Case-Insensitive Matching**: `VDM_ALIAS_FAST` matches "fast", "FAST", "FastModel", etc.
+2. **Substring Matching**: Any model name containing "haiku" will match `VDM_ALIAS_HAIKU`
+3. **Flexible Hyphen/Underscore Matching**: Aliases match model names regardless of hyphen/underscore usage
+   - `VDM_ALIAS_MY_ALIAS` matches both "my-alias" and "my_alias"
+   - `VDM_ALIAS_MY_MODEL` matches "oh-this-is-my-model-right" and "oh-this-is-my_model-right"
+4. **Provider Prefix Support**: Alias values can include provider prefixes (e.g., "poe:gpt-4o-mini")
+5. **Priority Order**:
+   - Exact matches first
+   - Longest substring match
+   - Alphabetical order for ties
+
+#### API Usage
+
+```bash
+# List all configured aliases
+curl http://localhost:8082/v1/aliases
+
+# Use alias in requests (substring matching)
+curl -X POST http://localhost:8082/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "my-haiku-model",
+    "max_tokens": 100,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+# This resolves to "poe:gpt-4o-mini" if VDM_ALIAS_HAIKU is set
+```
 
 ### Provider Examples
 

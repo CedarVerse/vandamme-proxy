@@ -911,6 +911,49 @@ async def list_models(
         )
 
 
+@router.get("/v1/aliases")
+async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
+    """List all configured model aliases"""
+    try:
+        aliases = config.alias_manager.get_all_aliases()
+
+        # Transform aliases to API response format
+        alias_data = []
+        for alias, target in aliases.items():
+            # Extract provider from target if present
+            provider = "default"
+            model = target
+            if ":" in target:
+                provider, model = target.split(":", 1)
+
+            alias_data.append({
+                "alias": alias,
+                "target": target,
+                "provider": provider,
+                "model": model,
+            })
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "object": "list",
+                "data": alias_data,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error listing aliases: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "type": "error",
+                "error": {
+                    "type": "api_error",
+                    "message": f"Failed to list aliases: {str(e)}",
+                },
+            },
+        )
+
+
 @router.get("/")
 async def root() -> Dict[str, Any]:
     """Root endpoint"""

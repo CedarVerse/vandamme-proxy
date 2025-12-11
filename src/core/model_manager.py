@@ -1,29 +1,43 @@
-from typing import TYPE_CHECKING, Tuple
+import logging
+from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
     from src.core.config import Config
+    from src.core.alias_manager import AliasManager
 
 from src.core.config import config
+
+logger = logging.getLogger(__name__)
 
 
 class ModelManager:
     def __init__(self, config: "Config") -> None:
         self.config = config
         self.provider_manager = config.provider_manager
+        self.alias_manager: Optional["AliasManager"] = getattr(config, "alias_manager", None)
 
     def resolve_model(self, model: str) -> Tuple[str, str]:
         """Resolve model name to (provider, actual_model)
 
-        Parses provider prefixes and passes through model names unchanged
-        when no provider is specified.
+        Resolution process:
+        1. Apply alias resolution first (if aliases are configured)
+        2. Parse provider prefix from resolved value
+        3. Return provider and actual model name
 
         Returns:
             Tuple[str, str]: (provider_name, actual_model_name)
         """
-        # Parse provider prefix
-        provider_name, actual_model = self.provider_manager.parse_model_name(model)
+        # Apply alias resolution if available
+        resolved_model = model
+        if self.alias_manager and self.alias_manager.has_aliases():
+            alias_target = self.alias_manager.resolve_alias(model)
+            if alias_target:
+                logger.debug(f"Resolved model alias '{model}' to '{alias_target}'")
+                resolved_model = alias_target
 
-        # No model mapping needed - pass through the model name as-is
+        # Parse provider prefix
+        provider_name, actual_model = self.provider_manager.parse_model_name(resolved_model)
+
         return provider_name, actual_model
 
 
