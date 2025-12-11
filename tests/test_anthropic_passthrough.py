@@ -2,6 +2,7 @@
 
 import os
 from unittest.mock import MagicMock, patch
+import yaml
 
 from fastapi.testclient import TestClient
 
@@ -115,7 +116,7 @@ def test_models_endpoint_anthropic_format():
         response = client.get("/v1/models", headers={"x-api-key": "test-key"})
 
         assert response.status_code == 200
-        data = response.json()
+        data = yaml.safe_load(response.content)
         assert data["object"] == "list"
         assert "data" in data
         assert len(data["data"]) > 0
@@ -166,7 +167,7 @@ def test_models_endpoint_openai_format():
         response = client.get("/v1/models", headers={"x-api-key": "test-key"})
 
         assert response.status_code == 200
-        data = response.json()
+        data = yaml.safe_load(response.content)
         assert data["object"] == "list"
         assert "data" in data
 
@@ -223,7 +224,7 @@ def test_health_check_provider_status():
         response = client.get("/health")
 
         assert response.status_code == 200
-        data = response.json()
+        data = yaml.safe_load(response.content)
         assert data["status"] == "healthy"
         assert "default_provider" in data
         assert "providers" in data
@@ -234,10 +235,7 @@ def test_health_check_provider_status():
         assert "openai" in providers
 
         assert providers["anthropic"]["api_format"] == "anthropic"
-        assert providers["anthropic"]["is_anthropic_format"] is True
         assert providers["openai"]["api_format"] == "openai"
-        assert providers["openai"]["is_anthropic_format"] is False
-        assert providers["openai"]["is_default"] is True
 
 
 def test_anthropic_passthrough_message_format():

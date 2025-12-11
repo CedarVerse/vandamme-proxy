@@ -3,6 +3,7 @@ Unit tests for the AliasManager component.
 """
 
 import os
+import pytest
 from unittest.mock import patch
 
 from src.core.alias_manager import AliasManager
@@ -10,6 +11,23 @@ from src.core.alias_manager import AliasManager
 
 class TestAliasManager:
     """Test cases for AliasManager functionality."""
+
+    @pytest.fixture(autouse=True)
+    def clean_env_before_each_test(self):
+        """Clean environment variables before each test."""
+        # Store original environment
+        original_env = os.environ.copy()
+
+        # Clear VDM_ALIAS variables for clean test
+        for key in list(os.environ.keys()):
+            if key.startswith("VDM_ALIAS_"):
+                os.environ.pop(key, None)
+
+        yield
+
+        # Restore original environment
+        os.environ.clear()
+        os.environ.update(original_env)
 
     def test_load_aliases_from_env(self):
         """Test loading aliases from environment variables."""
