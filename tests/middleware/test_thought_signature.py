@@ -10,10 +10,7 @@ Tests cover:
 """
 
 import asyncio
-import json
 import time
-import uuid
-from typing import Any, Dict, List
 
 import pytest
 
@@ -343,8 +340,6 @@ class TestThoughtSignatureMiddleware:
 
         # Process chunks
         for chunk in chunks:
-            from src.middleware.base import StreamChunkContext
-
             stream_context = StreamChunkContext(
                 delta=chunk.get("delta", {}),
                 request_context=request_context,

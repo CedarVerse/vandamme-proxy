@@ -1,12 +1,12 @@
 import asyncio
 import json
 import time
-from typing import Any, AsyncGenerator, Dict, Optional, Union, cast
+from collections.abc import AsyncGenerator
+from typing import Any, cast
 
 from fastapi import HTTPException
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import APIError, AuthenticationError, BadRequestError, RateLimitError
-from openai.types.chat import ChatCompletion, ChatCompletionChunk
 
 from src.core.logging import LOG_REQUEST_METRICS, conversation_logger, request_tracker
 
@@ -16,11 +16,11 @@ class OpenAIClient:
 
     def __init__(
         self,
-        api_key: Optional[str],  # Can be None for passthrough providers
+        api_key: str | None,  # Can be None for passthrough providers
         base_url: str,
         timeout: int = 90,
-        api_version: Optional[str] = None,
-        custom_headers: Optional[Dict[str, str]] = None,
+        api_version: str | None = None,
+        custom_headers: dict[str, str] | None = None,
     ):
         self.base_url = base_url
         self.custom_headers = custom_headers or {}
@@ -32,10 +32,10 @@ class OpenAIClient:
 
         # Don't initialize the client yet - we'll create it per request
         # This allows us to use different API keys per request
-        self._client_cache: Dict[str, Union[AsyncOpenAI, AsyncAzureOpenAI]] = {}
-        self.active_requests: Dict[str, asyncio.Event] = {}
+        self._client_cache: dict[str, AsyncOpenAI | AsyncAzureOpenAI] = {}
+        self.active_requests: dict[str, asyncio.Event] = {}
 
-    def _get_client(self, api_key: str) -> Union[AsyncOpenAI, AsyncAzureOpenAI]:
+    def _get_client(self, api_key: str) -> AsyncOpenAI | AsyncAzureOpenAI:
         """Get or create a client for the specific API key"""
         # Use cache to avoid recreating clients for the same API key
         if api_key not in self._client_cache:
@@ -69,10 +69,10 @@ class OpenAIClient:
 
     async def create_chat_completion(
         self,
-        request: Dict[str, Any],
-        request_id: Optional[str] = None,
-        api_key: Optional[str] = None,  # Override API key for this request
-    ) -> Dict[str, Any]:
+        request: dict[str, Any],
+        request_id: str | None = None,
+        api_key: str | None = None,  # Override API key for this request
+    ) -> dict[str, Any]:
         """Send chat completion to OpenAI API with cancellation support."""
 
         api_start = time.time()
@@ -150,7 +150,7 @@ class OpenAIClient:
             if LOG_REQUEST_METRICS:
                 conversation_logger.debug(f"📡 CONVERTED RESPONSE TYPE: {type(response_dict)}")
 
-            return cast(Dict[str, Any], response_dict)
+            return cast(dict[str, Any], response_dict)
 
         except AuthenticationError as e:
             if LOG_REQUEST_METRICS and metrics:
@@ -186,9 +186,9 @@ class OpenAIClient:
 
     async def create_chat_completion_stream(
         self,
-        request: Dict[str, Any],
-        request_id: Optional[str] = None,
-        api_key: Optional[str] = None,  # Override API key for this request
+        request: dict[str, Any],
+        request_id: str | None = None,
+        api_key: str | None = None,  # Override API key for this request
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to OpenAI API with cancellation support."""
 

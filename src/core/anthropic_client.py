@@ -4,17 +4,16 @@ This client provides an interface compatible with OpenAIClient but
 bypasses all format conversions when talking to Anthropic-compatible APIs.
 """
 
-import asyncio
 import hashlib
 import json
 import time
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import httpx
 from fastapi import HTTPException
 
 from src.core.logging import LOG_REQUEST_METRICS, conversation_logger
-from src.models.claude import ClaudeMessagesRequest
 
 
 class AnthropicClient:
@@ -22,10 +21,10 @@ class AnthropicClient:
 
     def __init__(
         self,
-        api_key: Optional[str],  # Can be None for passthrough providers
+        api_key: str | None,  # Can be None for passthrough providers
         base_url: str,
         timeout: int = 90,
-        custom_headers: Optional[Dict[str, str]] = None,
+        custom_headers: dict[str, str] | None = None,
     ) -> None:
         """Initialize Anthropic client."""
         self.base_url = base_url.rstrip("/")
@@ -35,7 +34,7 @@ class AnthropicClient:
 
         # Don't create HTTP client yet - we'll create it per request
         # This allows us to use different API keys per request
-        self._client_cache: Dict[str, httpx.AsyncClient] = {}
+        self._client_cache: dict[str, httpx.AsyncClient] = {}
 
     def _get_client(self, api_key: str) -> httpx.AsyncClient:
         """Get or create an HTTP client for the specific API key"""
@@ -58,10 +57,10 @@ class AnthropicClient:
 
     async def create_chat_completion(
         self,
-        request: Dict[str, Any],
-        request_id: Optional[str] = None,
-        api_key: Optional[str] = None,  # Override API key for this request
-    ) -> Dict[str, Any]:
+        request: dict[str, Any],
+        request_id: str | None = None,
+        api_key: str | None = None,  # Override API key for this request
+    ) -> dict[str, Any]:
         """Send chat completion to Anthropic API with passthrough."""
         start_time = time.time()
 
@@ -92,7 +91,7 @@ class AnthropicClient:
             response.raise_for_status()
 
             # Parse response
-            response_data: Dict[str, Any] = response.json()
+            response_data: dict[str, Any] = response.json()
 
             # Log timing
             if LOG_REQUEST_METRICS:
@@ -116,9 +115,9 @@ class AnthropicClient:
 
     async def create_chat_completion_stream(
         self,
-        request: Dict[str, Any],
-        request_id: Optional[str] = None,
-        api_key: Optional[str] = None,  # Override API key for this request
+        request: dict[str, Any],
+        request_id: str | None = None,
+        api_key: str | None = None,  # Override API key for this request
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to Anthropic API with SSE passthrough."""
         start_time = time.time()

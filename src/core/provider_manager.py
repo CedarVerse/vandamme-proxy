@@ -1,7 +1,7 @@
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Union
 
 from src.core.client import OpenAIClient
 from src.core.provider_config import PASSTHROUGH_SENTINEL, ProviderConfig
@@ -17,9 +17,9 @@ class ProviderLoadResult:
 
     name: str
     status: str  # "success", "partial"
-    message: Optional[str] = None
-    api_key_hash: Optional[str] = None
-    base_url: Optional[str] = None
+    message: str | None = None
+    api_key_hash: str | None = None
+    base_url: str | None = None
 
 
 class ProviderManager:
@@ -27,10 +27,10 @@ class ProviderManager:
 
     def __init__(self, default_provider: str = "openai") -> None:
         self.default_provider = default_provider
-        self._clients: Dict[str, Union[OpenAIClient, "AnthropicClient"]] = {}
-        self._configs: Dict[str, ProviderConfig] = {}
+        self._clients: dict[str, OpenAIClient | AnthropicClient] = {}
+        self._configs: dict[str, ProviderConfig] = {}
         self._loaded = False
-        self._load_results: List[ProviderLoadResult] = []
+        self._load_results: list[ProviderLoadResult] = []
 
         # Initialize middleware chain
         self.middleware_chain = MiddlewareChain()
@@ -45,7 +45,7 @@ class ProviderManager:
         return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
     @staticmethod
-    def get_default_base_url(provider_name: str) -> Optional[str]:
+    def get_default_base_url(provider_name: str) -> str | None:
         """Return default base URL for special providers"""
         defaults = {
             "openai": "https://api.openai.com/v1",
@@ -243,7 +243,7 @@ class ProviderManager:
 
         self._configs[provider_name] = config
 
-    def _get_provider_custom_headers(self, provider_prefix: str) -> Dict[str, str]:
+    def _get_provider_custom_headers(self, provider_prefix: str) -> dict[str, str]:
         """Get custom headers for a specific provider"""
         custom_headers = {}
         provider_prefix = provider_prefix.upper()
@@ -266,7 +266,7 @@ class ProviderManager:
 
         return custom_headers
 
-    def parse_model_name(self, model: str) -> Tuple[str, str]:
+    def parse_model_name(self, model: str) -> tuple[str, str]:
         """Parse 'provider:model' into (provider, model)
 
         Returns:
@@ -280,7 +280,7 @@ class ProviderManager:
     def get_client(
         self,
         provider_name: str,
-        client_api_key: Optional[str] = None,  # Client's API key for passthrough
+        client_api_key: str | None = None,  # Client's API key for passthrough
     ) -> Union[OpenAIClient, "AnthropicClient"]:
         """Get or create a client for the specified provider"""
         if not self._loaded:
@@ -332,13 +332,13 @@ class ProviderManager:
 
         return self._clients[cache_key]
 
-    def get_provider_config(self, provider_name: str) -> Optional[ProviderConfig]:
+    def get_provider_config(self, provider_name: str) -> ProviderConfig | None:
         """Get configuration for a specific provider"""
         if not self._loaded:
             self.load_provider_configs()
         return self._configs.get(provider_name)
 
-    def list_providers(self) -> Dict[str, ProviderConfig]:
+    def list_providers(self) -> dict[str, ProviderConfig]:
         """List all configured providers"""
         if not self._loaded:
             self.load_provider_configs()
@@ -371,7 +371,7 @@ class ProviderManager:
 
         print("\n📊 Active Providers:")
         print(f"   {'Status':<2} {'SHA256':<10} {'Name':<12} Base URL")
-        print(f"   {'-'*2} {'-'*10} {'-'*12} {'-'*50}")
+        print(f"   {'-' * 2} {'-' * 10} {'-' * 12} {'-' * 50}")
 
         success_count = 0
 
@@ -401,9 +401,9 @@ class ProviderManager:
                     )
 
         print(f"\n{success_count} provider{'s' if success_count != 1 else ''} ready for requests")
-        print(f"  * = default provider")
+        print("  * = default provider")
 
-    def get_load_results(self) -> List[ProviderLoadResult]:
+    def get_load_results(self) -> list[ProviderLoadResult]:
         """Get the load results for all providers"""
         if not self._loaded:
             self.load_provider_configs()

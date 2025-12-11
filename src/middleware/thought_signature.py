@@ -16,10 +16,8 @@ https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thought-signatures
 import asyncio
 import logging
 import time
-import weakref
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
-from uuid import uuid4
+from dataclasses import dataclass
+from typing import Any
 
 from .base import Middleware, RequestContext, ResponseContext, StreamChunkContext
 
@@ -36,7 +34,7 @@ class ThoughtSignatureEntry:
     """
 
     message_id: str
-    reasoning_details: List[Dict[str, Any]]
+    reasoning_details: list[dict[str, Any]]
     tool_call_ids: frozenset  # Immutable set for hashability
     timestamp: float
     conversation_id: str
@@ -44,7 +42,7 @@ class ThoughtSignatureEntry:
     model: str
 
     def with_reasoning_details(
-        self, reasoning_details: List[Dict[str, Any]]
+        self, reasoning_details: list[dict[str, Any]]
     ) -> "ThoughtSignatureEntry":
         """Create a new entry with updated reasoning details."""
         return ThoughtSignatureEntry(
@@ -89,18 +87,18 @@ class ThoughtSignatureStore:
         self.cleanup_interval = cleanup_interval
 
         # Primary storage by message ID
-        self._entries: Dict[str, ThoughtSignatureEntry] = {}
+        self._entries: dict[str, ThoughtSignatureEntry] = {}
 
         # Index for efficient lookup by tool call ID
         # Maps: tool_call_id -> set of message_ids
-        self._tool_call_index: Dict[str, Set[str]] = {}
+        self._tool_call_index: dict[str, set[str]] = {}
 
         # Conversation index for bulk operations
         # Maps: conversation_id -> set of message_ids
-        self._conversation_index: Dict[str, Set[str]] = {}
+        self._conversation_index: dict[str, set[str]] = {}
 
         # Background cleanup task
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
 
         self.logger = logging.getLogger(f"{__name__}.ThoughtSignatureStore")
@@ -109,7 +107,7 @@ class ThoughtSignatureStore:
         """Start the background cleanup task."""
         if self._cleanup_task is None:
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-            self.logger.debug(f"Started background cleanup task")
+            self.logger.debug("Started background cleanup task")
 
     async def stop(self) -> None:
         """Stop the background cleanup task."""
@@ -120,7 +118,7 @@ class ThoughtSignatureStore:
             except asyncio.CancelledError:
                 pass
             self._cleanup_task = None
-            self.logger.debug(f"Stopped background cleanup task")
+            self.logger.debug("Stopped background cleanup task")
 
     async def store(self, entry: ThoughtSignatureEntry) -> None:
         """
@@ -159,9 +157,7 @@ class ThoughtSignatureStore:
                 f"total_entries={len(self._entries)}"
             )
 
-    async def retrieve_by_tool_calls(
-        self, tool_call_ids: Set[str]
-    ) -> Optional[List[Dict[str, Any]]]:
+    async def retrieve_by_tool_calls(self, tool_call_ids: set[str]) -> list[dict[str, Any]] | None:
         """
         Retrieve reasoning details for a set of tool call IDs.
 
@@ -207,7 +203,7 @@ class ThoughtSignatureStore:
 
             return None
 
-    async def retrieve_by_conversation(self, conversation_id: str) -> List[ThoughtSignatureEntry]:
+    async def retrieve_by_conversation(self, conversation_id: str) -> list[ThoughtSignatureEntry]:
         """
         Retrieve all entries for a conversation.
 
@@ -250,7 +246,7 @@ class ThoughtSignatureStore:
                 f"Cleared conversation {conversation_id}, cleared_entries={len(message_ids)}"
             )
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Get store statistics."""
         async with self._lock:
             return {
@@ -302,7 +298,7 @@ class ThoughtSignatureStore:
 
     async def _cleanup_loop(self) -> None:
         """Background task to periodically clean up expired entries."""
-        self.logger.info(f"Starting cleanup loop")
+        self.logger.info("Starting cleanup loop")
 
         while True:
             try:
@@ -313,7 +309,7 @@ class ThoughtSignatureStore:
             except Exception as e:
                 self.logger.error(f"Error in cleanup loop: {e}")
 
-        self.logger.info(f"Cleanup loop stopped")
+        self.logger.info("Cleanup loop stopped")
 
     async def _cleanup_expired(self) -> None:
         """Remove expired entries."""
@@ -341,7 +337,7 @@ class ThoughtSignatureMiddleware(Middleware):
     to enable seamless function calling across conversations.
     """
 
-    def __init__(self, store: Optional[ThoughtSignatureStore] = None):
+    def __init__(self, store: ThoughtSignatureStore | None = None):
         """
         Initialize the middleware.
 
@@ -358,12 +354,12 @@ class ThoughtSignatureMiddleware(Middleware):
     async def initialize(self) -> None:
         """Initialize the middleware."""
         await self.store.start()
-        self.logger.info(f"Thought signature middleware initialized")
+        self.logger.info("Thought signature middleware initialized")
 
     async def cleanup(self) -> None:
         """Cleanup resources."""
         await self.store.stop()
-        self.logger.info(f"Thought signature middleware cleaned up")
+        self.logger.info("Thought signature middleware cleaned up")
 
     async def should_handle(self, provider: str, model: str) -> bool:
         """
@@ -508,7 +504,7 @@ class ThoughtSignatureMiddleware(Middleware):
 
         return context
 
-    async def on_stream_complete(self, context: RequestContext, metadata: Dict[str, Any]) -> None:
+    async def on_stream_complete(self, context: RequestContext, metadata: dict[str, Any]) -> None:
         """
         Store accumulated thought signatures from streaming.
 
@@ -536,7 +532,7 @@ class ThoughtSignatureMiddleware(Middleware):
             )
 
     async def _extract_and_store(
-        self, response: Dict[str, Any], request_context: RequestContext
+        self, response: dict[str, Any], request_context: RequestContext
     ) -> None:
         """
         Extract thought signatures from response and store them.
@@ -553,15 +549,15 @@ class ThoughtSignatureMiddleware(Middleware):
         message = None
         if "choices" in response and response["choices"]:
             message = response["choices"][0].get("message", {})
-            self.logger.debug(f"_extract_and_store: Found OpenAI format with choices")
+            self.logger.debug("_extract_and_store: Found OpenAI format with choices")
         elif "message" in response:
             # Direct message format
             message = response["message"]
-            self.logger.debug(f"_extract_and_store: Found direct message format")
+            self.logger.debug("_extract_and_store: Found direct message format")
         else:
             # Flat response format
             message = response
-            self.logger.debug(f"_extract_and_store: Using flat response format")
+            self.logger.debug("_extract_and_store: Using flat response format")
 
         # Extract reasoning details
         reasoning_details = message.get("reasoning_details", [])

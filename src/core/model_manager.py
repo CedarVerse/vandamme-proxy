@@ -1,9 +1,9 @@
 import logging
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.core.config import Config
     from src.core.alias_manager import AliasManager
+    from src.core.config import Config
 
 from src.core.config import config
 
@@ -14,9 +14,9 @@ class ModelManager:
     def __init__(self, config: "Config") -> None:
         self.config = config
         self.provider_manager = config.provider_manager
-        self.alias_manager: Optional["AliasManager"] = getattr(config, "alias_manager", None)
+        self.alias_manager: AliasManager | None = getattr(config, "alias_manager", None)
 
-    def resolve_model(self, model: str) -> Tuple[str, str]:
+    def resolve_model(self, model: str) -> tuple[str, str]:
         """Resolve model name to (provider, actual_model)
 
         Resolution process:

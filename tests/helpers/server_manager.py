@@ -5,8 +5,8 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
 
 import httpx
 
@@ -16,7 +16,7 @@ class TestServerManager:
 
     def __init__(self, port: int = 8082):
         self.port = port
-        self.process: Optional[subprocess.Popen] = None
+        self.process: subprocess.Popen | None = None
         self.base_url = f"http://localhost:{port}"
         self.startup_timeout = 30  # seconds
 
@@ -129,7 +129,7 @@ async def test_server(port: int = 8082) -> AsyncGenerator[str, None]:
 
 
 # Singleton instance for module-level use
-_server_manager: Optional[TestServerManager] = None
+_server_manager: TestServerManager | None = None
 
 
 async def start_global_server(port: int = 8082) -> str:

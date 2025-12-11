@@ -12,9 +12,9 @@ This module provides:
 """
 
 import logging
-from typing import Any, AsyncGenerator, Dict, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from src.core.config import config
 from src.middleware import MiddlewareChain, RequestContext, ResponseContext
 from src.middleware.base import StreamChunkContext
 from src.models.claude import ClaudeMessagesRequest
@@ -54,7 +54,7 @@ class MiddlewareAwareRequestProcessor:
         request: ClaudeMessagesRequest,
         provider_name: str,
         request_id: str,
-        conversation_id: Optional[str] = None,
+        conversation_id: str | None = None,
     ) -> ClaudeMessagesRequest:
         """
         Process request through middleware chain.
@@ -97,10 +97,10 @@ class MiddlewareAwareRequestProcessor:
 
     async def process_response(
         self,
-        response: Dict[str, Any],
+        response: dict[str, Any],
         request_context: RequestContext,
         is_streaming: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process response through middleware chain.
 
@@ -124,10 +124,10 @@ class MiddlewareAwareRequestProcessor:
 
     async def process_stream_chunk(
         self,
-        chunk: Dict[str, Any],
+        chunk: dict[str, Any],
         request_context: RequestContext,
-        accumulated_metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        accumulated_metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Process streaming chunk through middleware chain.
 
@@ -158,7 +158,7 @@ class MiddlewareAwareRequestProcessor:
     async def finalize_stream(
         self,
         request_context: RequestContext,
-        accumulated_metadata: Dict[str, Any],
+        accumulated_metadata: dict[str, Any],
     ) -> None:
         """
         Finalize streaming response processing.
@@ -183,7 +183,7 @@ class MiddlewareAwareRequestProcessor:
 
 
 # Global instance for use across endpoints
-_processor_instance: Optional[MiddlewareAwareRequestProcessor] = None
+_processor_instance: MiddlewareAwareRequestProcessor | None = None
 
 
 async def get_middleware_processor() -> MiddlewareAwareRequestProcessor:
@@ -228,7 +228,7 @@ class MiddlewareStreamingWrapper:
         self.original_stream = original_stream
         self.request_context = request_context
         self.processor = processor
-        self.accumulated_metadata: Dict[str, Any] = {}
+        self.accumulated_metadata: dict[str, Any] = {}
         self.logger = logging.getLogger(f"{__name__}.MiddlewareStreamingWrapper")
 
     async def __aiter__(self) -> AsyncGenerator[str, None]:

@@ -1,17 +1,12 @@
 """Unit tests for API endpoints."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
 
 from src.api.endpoints import count_tool_calls, list_aliases
 from src.models.claude import (
-    ClaudeContentBlockText,
-    ClaudeContentBlockToolResult,
-    ClaudeContentBlockToolUse,
     ClaudeMessage,
     ClaudeMessagesRequest,
 )

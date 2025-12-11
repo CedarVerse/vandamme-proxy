@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 # Sentinel value for API key passthrough
 PASSTHROUGH_SENTINEL = "!PASSTHRU"
@@ -12,10 +11,10 @@ class ProviderConfig:
     name: str
     api_key: str
     base_url: str
-    api_version: Optional[str] = None
+    api_version: str | None = None
     timeout: int = 90
     max_retries: int = 2
-    custom_headers: Dict[str, str] = field(default_factory=dict)
+    custom_headers: dict[str, str] = field(default_factory=dict)
     api_format: str = "openai"  # "openai" or "anthropic"
 
     @property
@@ -33,7 +32,7 @@ class ProviderConfig:
         """Check if this provider uses client API key passthrough"""
         return self.api_key == PASSTHROUGH_SENTINEL
 
-    def get_effective_api_key(self, client_api_key: Optional[str] = None) -> Optional[str]:
+    def get_effective_api_key(self, client_api_key: str | None = None) -> str | None:
         """Get the API key to use for requests
 
         Args:

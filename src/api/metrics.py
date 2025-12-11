@@ -1,9 +1,7 @@
 from datetime import datetime
-from typing import Optional
 
-import yaml  # type: ignore
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import PlainTextResponse, Response
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import PlainTextResponse
 
 from src.api.endpoints import validate_api_key
 from src.api.utils.yaml_formatter import create_hierarchical_structure, format_running_totals_yaml
@@ -14,10 +12,10 @@ metrics_router = APIRouter()
 
 @metrics_router.get("/running-totals")
 async def get_running_totals(
-    provider: Optional[str] = Query(
+    provider: str | None = Query(
         None, description="Filter by provider (case-insensitive, supports * and ? wildcards)"
     ),
-    model: Optional[str] = Query(
+    model: str | None = Query(
         None, description="Filter by model (case-insensitive, supports * and ? wildcards)"
     ),
     _: None = Depends(validate_api_key),

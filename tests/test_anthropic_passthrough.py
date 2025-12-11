@@ -1,10 +1,8 @@
 """Test Anthropic passthrough functionality."""
 
-import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.api.endpoints import router

@@ -1,8 +1,7 @@
 """Shared pytest configuration and fixtures for Vandamme Proxy tests."""
 
 import os
-from typing import AsyncGenerator, Generator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from dotenv import load_dotenv

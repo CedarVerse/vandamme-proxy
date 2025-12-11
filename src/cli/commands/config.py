@@ -1,6 +1,5 @@
 """Configuration management commands."""
 
-import os
 import sys
 from pathlib import Path
 
@@ -126,7 +125,7 @@ def setup() -> None:
 
     # Write .env file
     with open(env_path, "w") as f:
-        f.write(f"# Vandamme Proxy Configuration\n")
+        f.write("# Vandamme Proxy Configuration\n")
         f.write(f"OPENAI_API_KEY={openai_key}\n")
         if anthropic_key:
             f.write(f"ANTHROPIC_API_KEY={anthropic_key}\n")

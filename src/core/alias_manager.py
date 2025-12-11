@@ -8,7 +8,6 @@ substring matching, supporting provider prefixes in alias values.
 import logging
 import os
 import re
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ class AliasManager:
 
     def __init__(self) -> None:
         """Initialize AliasManager and load aliases from environment."""
-        self.aliases: Dict[str, str] = {}
+        self.aliases: dict[str, str] = {}
         self._load_aliases()
 
     def _load_aliases(self) -> None:
@@ -88,7 +87,7 @@ class AliasManager:
 
         return True
 
-    def resolve_alias(self, model: str) -> Optional[str]:
+    def resolve_alias(self, model: str) -> str | None:
         """
         Resolve model name to alias value with case-insensitive substring matching.
 
@@ -120,7 +119,7 @@ class AliasManager:
         }
 
         # Find all matching aliases
-        matches: List[Tuple[str, str, int]] = []  # (alias, target, match_length)
+        matches: list[tuple[str, str, int]] = []  # (alias, target, match_length)
 
         for alias, target in self.aliases.items():
             alias_lower = alias.lower()
@@ -150,13 +149,12 @@ class AliasManager:
 
         best_match = matches[0]
         logger.debug(
-            f"Resolved model alias '{model}' -> '{best_match[1]}' "
-            f"(matched alias '{best_match[0]}')"
+            f"Resolved model alias '{model}' -> '{best_match[1]}' (matched alias '{best_match[0]}')"
         )
 
         return best_match[1]
 
-    def get_all_aliases(self) -> Dict[str, str]:
+    def get_all_aliases(self) -> dict[str, str]:
         """
         Get all configured aliases.
 

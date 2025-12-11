@@ -1,16 +1,16 @@
 import fnmatch
 import hashlib
-import json
 import logging
 import os
 import re
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, cast
 
 from src.core.config import config
 
@@ -95,10 +95,10 @@ class RequestMetrics:
 
     request_id: str
     start_time: float
-    end_time: Optional[float] = None
-    claude_model: Optional[str] = None
-    openai_model: Optional[str] = None
-    provider: Optional[str] = None
+    end_time: float | None = None
+    claude_model: str | None = None
+    openai_model: str | None = None
+    provider: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -107,8 +107,8 @@ class RequestMetrics:
     request_size: int = 0  # bytes
     response_size: int = 0  # bytes
     is_streaming: bool = False
-    error: Optional[str] = None
-    error_type: Optional[str] = None
+    error: str | None = None
+    error_type: str | None = None
     tool_use_count: int = 0  # Number of tool_use blocks in the request
     tool_result_count: int = 0  # Number of tool_result blocks in the request
     tool_call_count: int = 0  # Number of tool calls made (OpenAI function calls)
@@ -156,9 +156,9 @@ class SummaryMetrics:
     total_tool_uses: int = 0
     total_tool_results: int = 0
     total_tool_calls: int = 0
-    model_counts: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
-    error_counts: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
-    provider_model_metrics: Dict[str, ProviderModelMetrics] = field(
+    model_counts: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    error_counts: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    provider_model_metrics: dict[str, ProviderModelMetrics] = field(
         default_factory=lambda: defaultdict(ProviderModelMetrics)
     )
 
@@ -221,12 +221,12 @@ class RequestTracker:
 
     def __init__(self) -> None:
         if not hasattr(self, "initialized"):
-            self.active_requests: Dict[str, RequestMetrics] = {}
+            self.active_requests: dict[str, RequestMetrics] = {}
             self.summary_metrics = SummaryMetrics()
             self.summary_interval = int(os.environ.get("LOG_SUMMARY_INTERVAL", "100"))
             self.request_count = 0
             self.total_completed_requests = 0
-            self.last_accessed_timestamps: Dict[str, Union[Dict[str, str], Optional[str]]] = {
+            self.last_accessed_timestamps: dict[str, dict[str, str] | str | None] = {
                 "models": {},  # provider:model -> timestamp
                 "providers": {},  # provider -> timestamp
                 "top": None,  # overall -> timestamp
@@ -271,7 +271,7 @@ class RequestTracker:
         # Remove from active
         del self.active_requests[request_id]
 
-    def get_request(self, request_id: str) -> Optional[RequestMetrics]:
+    def get_request(self, request_id: str) -> RequestMetrics | None:
         """Get active request metrics"""
         return self.active_requests.get(request_id)
 
@@ -279,24 +279,24 @@ class RequestTracker:
         """Update last_accessed timestamps for provider, model, and top level."""
         # Update model timestamp
         model_key = f"{provider}:{model}"
-        models_dict = cast(Dict[str, str], self.last_accessed_timestamps["models"])
+        models_dict = cast(dict[str, str], self.last_accessed_timestamps["models"])
         models_dict[model_key] = timestamp
 
         # Update provider timestamp (take max if exists)
-        providers_dict = cast(Dict[str, str], self.last_accessed_timestamps["providers"])
+        providers_dict = cast(dict[str, str], self.last_accessed_timestamps["providers"])
         if provider in providers_dict:
             providers_dict[provider] = max(providers_dict[provider], timestamp)
         else:
             providers_dict[provider] = timestamp
 
         # Update top timestamp (take max if exists)
-        top_timestamp = cast(Optional[str], self.last_accessed_timestamps["top"])
+        top_timestamp = cast(str | None, self.last_accessed_timestamps["top"])
         if top_timestamp:
             self.last_accessed_timestamps["top"] = max(top_timestamp, timestamp)
         else:
             self.last_accessed_timestamps["top"] = timestamp
 
-    def get_running_totals(self) -> Dict[str, Any]:
+    def get_running_totals(self) -> dict[str, Any]:
         """Get running totals across all requests"""
         # Include both completed and active requests
         all_completed_metrics = self.summary_metrics
@@ -334,8 +334,8 @@ class RequestTracker:
         }
 
     def get_filtered_running_totals(
-        self, provider_filter: Optional[str] = None, model_filter: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, provider_filter: str | None = None, model_filter: str | None = None
+    ) -> dict[str, Any]:
         """Get running totals filtered by provider and/or model"""
         # Include both completed and active requests
         all_completed_metrics = self.summary_metrics
@@ -453,8 +453,8 @@ class RequestTracker:
         }
 
     def get_running_totals_hierarchical(
-        self, provider_filter: Optional[str] = None, model_filter: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, provider_filter: str | None = None, model_filter: str | None = None
+    ) -> dict[str, Any]:
         """Get running totals with hierarchical provider->model structure.
 
         Args:
@@ -484,7 +484,7 @@ class RequestTracker:
         }
 
         # Group data by provider and model
-        provider_data: Dict[str, Dict[str, Any]] = {}
+        provider_data: dict[str, dict[str, Any]] = {}
 
         # Process completed requests
         for provider_model_key, pm_metrics in all_completed_metrics.provider_model_metrics.items():
@@ -504,7 +504,7 @@ class RequestTracker:
             if provider not in provider_data:
                 provider_data[provider] = {
                     "last_accessed": cast(
-                        Dict[str, str], self.last_accessed_timestamps["providers"]
+                        dict[str, str], self.last_accessed_timestamps["providers"]
                     ).get(provider),
                     "total_requests": 0,
                     "total_errors": 0,
@@ -520,13 +520,15 @@ class RequestTracker:
                 }
 
             # Update provider stats
-            provider_stats: Dict[str, Any] = provider_data[provider]
+            provider_stats: dict[str, Any] = provider_data[provider]
             provider_stats["total_requests"] += int(pm_metrics.total_requests)  # type: ignore[arg-type]
             provider_stats["total_errors"] += int(pm_metrics.total_errors)  # type: ignore[arg-type]
             provider_stats["total_input_tokens"] += int(pm_metrics.total_input_tokens)  # type: ignore[arg-type]
             provider_stats["total_output_tokens"] += int(pm_metrics.total_output_tokens)  # type: ignore[arg-type]
             provider_stats["total_cache_read_tokens"] += int(pm_metrics.total_cache_read_tokens)  # type: ignore[arg-type]
-            provider_stats["total_cache_creation_tokens"] += int(pm_metrics.total_cache_creation_tokens)  # type: ignore[arg-type]
+            provider_stats["total_cache_creation_tokens"] += int(
+                pm_metrics.total_cache_creation_tokens
+            )  # type: ignore[arg-type]
             provider_stats["total_tool_uses"] += int(pm_metrics.total_tool_uses)  # type: ignore[arg-type]
             provider_stats["total_tool_results"] += int(pm_metrics.total_tool_results)  # type: ignore[arg-type]
             provider_stats["total_tool_calls"] += int(pm_metrics.total_tool_calls)  # type: ignore[arg-type]
@@ -538,7 +540,7 @@ class RequestTracker:
                     model_key = f"{provider}:{model}"
                     provider_stats["models"][model] = {  # type: ignore[index]
                         "last_accessed": cast(
-                            Dict[str, str], self.last_accessed_timestamps["models"]
+                            dict[str, str], self.last_accessed_timestamps["models"]
                         ).get(model_key),
                         "total_requests": 0,
                         "total_errors": 0,
@@ -582,15 +584,21 @@ class RequestTracker:
 
             # Update summary for active requests
             summary_stats["total_requests"] = summary_stats.get("total_requests", 0) + 1  # type: ignore[operator]
-            summary_stats["total_input_tokens"] = summary_stats.get("total_input_tokens", 0) + int(metrics.input_tokens or 0)  # type: ignore[operator]
-            summary_stats["total_tool_uses"] = summary_stats.get("total_tool_uses", 0) + int(metrics.tool_use_count or 0)  # type: ignore[operator]
-            summary_stats["total_tool_results"] = summary_stats.get("total_tool_results", 0) + int(metrics.tool_result_count or 0)  # type: ignore[operator]
+            summary_stats["total_input_tokens"] = summary_stats.get("total_input_tokens", 0) + int(
+                metrics.input_tokens or 0
+            )  # type: ignore[operator]
+            summary_stats["total_tool_uses"] = summary_stats.get("total_tool_uses", 0) + int(
+                metrics.tool_use_count or 0
+            )  # type: ignore[operator]
+            summary_stats["total_tool_results"] = summary_stats.get("total_tool_results", 0) + int(
+                metrics.tool_result_count or 0
+            )  # type: ignore[operator]
 
             # Initialize provider if not exists
             if provider not in provider_data:
                 provider_data[provider] = {
                     "last_accessed": cast(
-                        Dict[str, str], self.last_accessed_timestamps["providers"]
+                        dict[str, str], self.last_accessed_timestamps["providers"]
                     ).get(provider),
                     "total_requests": 0,
                     "total_errors": 0,
@@ -606,7 +614,7 @@ class RequestTracker:
                 }
 
             # Update provider stats for active request
-            active_provider_stats: Dict[str, Any] = provider_data[provider]
+            active_provider_stats: dict[str, Any] = provider_data[provider]
             active_provider_stats["total_requests"] += 1
             active_provider_stats["total_input_tokens"] += metrics.input_tokens or 0  # type: ignore[operator]
             active_provider_stats["total_tool_uses"] += metrics.tool_use_count or 0  # type: ignore[operator]
@@ -618,7 +626,7 @@ class RequestTracker:
                     model_key = f"{provider}:{model}"
                     active_provider_stats["models"][model] = {  # type: ignore[index]
                         "last_accessed": cast(
-                            Dict[str, str], self.last_accessed_timestamps["models"]
+                            dict[str, str], self.last_accessed_timestamps["models"]
                         ).get(model_key),
                         "total_requests": 0,
                         "total_errors": 0,
@@ -631,7 +639,7 @@ class RequestTracker:
         total_requests = int(cast(int, summary_stats.get("total_requests", 0)))  # type: ignore[assignment]
         if total_requests > 0:
             summary_total_duration = sum(
-                float(cast(Dict[str, Any], p).get("total_duration_ms", 0))
+                float(cast(dict[str, Any], p).get("total_duration_ms", 0))
                 for p in provider_data.values()
             )
             summary_avg = summary_total_duration / max(1, total_requests)
@@ -640,7 +648,7 @@ class RequestTracker:
             summary_stats["average_duration_ms"] = 0
 
         for provider_name, provider_stats in provider_data.items():
-            provider_stats_dict = cast(Dict[str, Any], provider_stats)
+            provider_stats_dict = cast(dict[str, Any], provider_stats)
             provider_requests = provider_stats_dict["total_requests"]
             if provider_requests > 0:
                 provider_avg = provider_stats_dict["total_duration_ms"] / max(1, provider_requests)
@@ -652,9 +660,7 @@ class RequestTracker:
             for model_name, model_stats in provider_stats_dict.get("models", {}).items():
                 model_requests = model_stats["total_requests"]  # type: ignore[assignment]
                 if model_requests > 0:  # type: ignore[operator]
-                    model_avg = model_stats["total_duration_ms"] / max(
-                        1, model_requests
-                    )  # type: ignore[arg-type]
+                    model_avg = model_stats["total_duration_ms"] / max(1, model_requests)  # type: ignore[arg-type]
                     model_stats["average_duration_ms"] = int(round(model_avg))
                 else:
                     model_stats["average_duration_ms"] = 0

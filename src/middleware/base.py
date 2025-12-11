@@ -10,11 +10,10 @@ The middleware system follows these principles:
 - Type Safety: Full type annotations throughout
 """
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -29,18 +28,18 @@ class RequestContext:
     while maintaining immutability for thread safety.
     """
 
-    messages: List[Dict[str, Any]]
+    messages: list[dict[str, Any]]
     provider: str
     model: str
     request_id: str = field(default_factory=lambda: str(uuid4()))
-    conversation_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    client_api_key: Optional[str] = None  # Client's API key for passthrough
+    conversation_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    client_api_key: str | None = None  # Client's API key for passthrough
 
     def with_updates(self, **kwargs: Any) -> "RequestContext":
         """Create a new context with specified fields updated."""
         # Create a new dict with current values, then update with kwargs
-        current_values: Dict[str, Any] = {
+        current_values: dict[str, Any] = {
             "messages": self.messages,
             "provider": self.provider,
             "model": self.model,
@@ -61,14 +60,14 @@ class ResponseContext:
     Wraps provider responses with additional metadata for middleware processing.
     """
 
-    response: Dict[str, Any]
+    response: dict[str, Any]
     request_context: RequestContext
     is_streaming: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def with_updates(self, **kwargs: Any) -> "ResponseContext":
         """Create a new context with specified fields updated."""
-        current_values: Dict[str, Any] = {
+        current_values: dict[str, Any] = {
             "response": self.response,
             "request_context": self.request_context,
             "is_streaming": self.is_streaming,
@@ -86,9 +85,9 @@ class StreamChunkContext:
     Used by middleware that need to process streaming responses incrementally.
     """
 
-    delta: Dict[str, Any]
+    delta: dict[str, Any]
     request_context: RequestContext
-    accumulated_metadata: Dict[str, Any] = field(default_factory=dict)
+    accumulated_metadata: dict[str, Any] = field(default_factory=dict)
     is_complete: bool = False
 
 
@@ -159,7 +158,7 @@ class Middleware(ABC):
         """
         return context
 
-    async def on_stream_complete(self, context: RequestContext, metadata: Dict[str, Any]) -> None:
+    async def on_stream_complete(self, context: RequestContext, metadata: dict[str, Any]) -> None:
         """
         Called when streaming response is complete.
 
@@ -195,7 +194,7 @@ class MiddlewareChain:
     """
 
     def __init__(self) -> None:
-        self._middlewares: List[Middleware] = []
+        self._middlewares: list[Middleware] = []
         self._initialized = False
         self.logger = logging.getLogger(f"{__name__}.MiddlewareChain")
 

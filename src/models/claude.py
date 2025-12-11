@@ -1,6 +1,6 @@
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ClaudeContentBlockText(BaseModel):
@@ -10,20 +10,20 @@ class ClaudeContentBlockText(BaseModel):
 
 class ClaudeContentBlockImage(BaseModel):
     type: Literal["image"]
-    source: Dict[str, Any]
+    source: dict[str, Any]
 
 
 class ClaudeContentBlockToolUse(BaseModel):
     type: Literal["tool_use"]
     id: str
     name: str
-    input: Dict[str, Any]
+    input: dict[str, Any]
 
 
 class ClaudeContentBlockToolResult(BaseModel):
     type: Literal["tool_result"]
     tool_use_id: str
-    content: Union[str, List[Dict[str, Any]], Dict[str, Any]]
+    content: str | list[dict[str, Any]] | dict[str, Any]
 
 
 class ClaudeSystemContent(BaseModel):
@@ -33,23 +33,21 @@ class ClaudeSystemContent(BaseModel):
 
 class ClaudeMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: Union[
-        str,
-        List[
-            Union[
-                ClaudeContentBlockText,
-                ClaudeContentBlockImage,
-                ClaudeContentBlockToolUse,
-                ClaudeContentBlockToolResult,
-            ]
-        ],
-    ]
+    content: (
+        str
+        | list[
+            ClaudeContentBlockText
+            | ClaudeContentBlockImage
+            | ClaudeContentBlockToolUse
+            | ClaudeContentBlockToolResult
+        ]
+    )
 
 
 class ClaudeTool(BaseModel):
     name: str
-    description: Optional[str] = None
-    input_schema: Dict[str, Any]
+    description: str | None = None
+    input_schema: dict[str, Any]
 
 
 class ClaudeThinkingConfig(BaseModel):
@@ -59,23 +57,23 @@ class ClaudeThinkingConfig(BaseModel):
 class ClaudeMessagesRequest(BaseModel):
     model: str
     max_tokens: int
-    messages: List[ClaudeMessage]
-    system: Optional[Union[str, List[ClaudeSystemContent]]] = None
-    stop_sequences: Optional[List[str]] = None
-    stream: Optional[bool] = False
-    temperature: Optional[float] = 1.0
-    top_p: Optional[float] = None
-    top_k: Optional[int] = None
-    metadata: Optional[Dict[str, Any]] = None
-    tools: Optional[List[ClaudeTool]] = None
-    tool_choice: Optional[Dict[str, Any]] = None
-    thinking: Optional[ClaudeThinkingConfig] = None
+    messages: list[ClaudeMessage]
+    system: str | list[ClaudeSystemContent] | None = None
+    stop_sequences: list[str] | None = None
+    stream: bool | None = False
+    temperature: float | None = 1.0
+    top_p: float | None = None
+    top_k: int | None = None
+    metadata: dict[str, Any] | None = None
+    tools: list[ClaudeTool] | None = None
+    tool_choice: dict[str, Any] | None = None
+    thinking: ClaudeThinkingConfig | None = None
 
 
 class ClaudeTokenCountRequest(BaseModel):
     model: str
-    messages: List[ClaudeMessage]
-    system: Optional[Union[str, List[ClaudeSystemContent]]] = None
-    tools: Optional[List[ClaudeTool]] = None
-    thinking: Optional[ClaudeThinkingConfig] = None
-    tool_choice: Optional[Dict[str, Any]] = None
+    messages: list[ClaudeMessage]
+    system: str | list[ClaudeSystemContent] | None = None
+    tools: list[ClaudeTool] | None = None
+    thinking: ClaudeThinkingConfig | None = None
+    tool_choice: dict[str, Any] | None = None

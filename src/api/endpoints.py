@@ -1,8 +1,9 @@
 import json
 import time
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import Any, AsyncGenerator, Dict, Optional, Union
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -14,7 +15,6 @@ from src.conversion.response_converter import (
     convert_openai_streaming_to_claude_with_cancellation,
     convert_openai_to_claude_response,
 )
-from src.core.client import OpenAIClient
 from src.core.config import config
 from src.core.logging import (
     LOG_REQUEST_METRICS,
@@ -53,8 +53,8 @@ def count_tool_calls(request: ClaudeMessagesRequest) -> tuple[int, int]:
 
 
 async def validate_api_key(
-    x_api_key: Optional[str] = Header(None), authorization: Optional[str] = Header(None)
-) -> Optional[str]:
+    x_api_key: str | None = Header(None), authorization: str | None = Header(None)
+) -> str | None:
     """
     Validate and return the client's API key from either x-api-key header or
     Authorization header. Returns the key if present, None otherwise.
@@ -73,7 +73,7 @@ async def validate_api_key(
 
     # Validate the client API key
     if not client_api_key or not config.validate_client_api_key(client_api_key):
-        logger.warning(f"Invalid API key provided by client")
+        logger.warning("Invalid API key provided by client")
         raise HTTPException(
             status_code=401, detail="Invalid API key. Please provide a valid Anthropic API key."
         )
@@ -85,7 +85,7 @@ async def validate_api_key(
 async def create_message(  # type: ignore[no-untyped-def]
     request: ClaudeMessagesRequest,
     http_request: Request,
-    client_api_key: Optional[str] = Depends(validate_api_key),
+    client_api_key: str | None = Depends(validate_api_key),
 ):
     # Generate unique request ID for tracking
     request_id = str(uuid.uuid4())
@@ -531,7 +531,7 @@ async def create_message(  # type: ignore[no-untyped-def]
 
             if LOG_REQUEST_METRICS:
                 conversation_logger.error(
-                    f"❌ ERROR | Duration: {duration_ms:.0f}ms | " f"Error: {error_message}"
+                    f"❌ ERROR | Duration: {duration_ms:.0f}ms | Error: {error_message}"
                 )
                 conversation_logger.error(traceback.format_exc())
             else:
@@ -576,7 +576,7 @@ async def count_tokens(
 
             # Add messages (excluding content for counting)
             for msg in request.messages:
-                msg_dict: Dict[str, Any] = {"role": msg.role}
+                msg_dict: dict[str, Any] = {"role": msg.role}
                 if isinstance(msg.content, str):
                     msg_dict["content"] = msg.content
                 elif isinstance(msg.content, list):
@@ -593,7 +593,8 @@ async def count_tokens(
             try:
                 client = config.provider_manager.get_client(provider_name)
                 count_response = await client.create_chat_completion(
-                    {**count_request, "max_tokens": 1}, "count_tokens"  # We just want token count
+                    {**count_request, "max_tokens": 1},
+                    "count_tokens",  # We just want token count
                 )
 
                 # Extract usage if available
@@ -771,8 +772,8 @@ async def test_connection() -> JSONResponse:
 
 
 async def fetch_models_unauthenticated(
-    base_url: str, custom_headers: Dict[str, str]
-) -> Dict[str, Any]:
+    base_url: str, custom_headers: dict[str, str]
+) -> dict[str, Any]:
     """Fetch models from endpoint using raw HTTP client without authentication"""
     # Prepare headers without authentication
     headers = {
@@ -791,7 +792,7 @@ async def fetch_models_unauthenticated(
 @router.get("/v1/models")
 async def list_models(
     _: None = Depends(validate_api_key),
-    provider: Optional[str] = Query(
+    provider: str | None = Query(
         None,
         description="Provider name to fetch models from (defaults to configured default provider)",
     ),
@@ -862,8 +863,8 @@ async def list_models(
                 )
 
                 # Transform OpenAI models format to Claude format
-                openai_models_response: Dict[str, Any] = {"object": "list", "data": []}
-                models_list: list[Dict[str, Any]] = openai_models_response["data"]  # type: ignore[assignment]
+                openai_models_response: dict[str, Any] = {"object": "list", "data": []}
+                models_list: list[dict[str, Any]] = openai_models_response["data"]  # type: ignore[assignment]
 
                 for model in openai_models.get("data", []):
                     # Create a Claude-compatible model entry
@@ -973,7 +974,7 @@ async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
 
 
 @router.get("/")
-async def root() -> Dict[str, Any]:
+async def root() -> dict[str, Any]:
     """Root endpoint"""
     return {
         "message": "VanDamme Proxy v1.0.0",

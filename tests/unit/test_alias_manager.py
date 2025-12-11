@@ -5,8 +5,6 @@ Unit tests for the AliasManager component.
 import os
 from unittest.mock import patch
 
-import pytest
-
 from src.core.alias_manager import AliasManager
 
 
@@ -294,32 +292,33 @@ class TestAliasManager:
 
     def test_logging_behavior(self, caplog):
         """Test that appropriate log messages are generated."""
-        with patch.dict(
-            os.environ,
-            {
-                "VDM_ALIAS_VALID": "openai:gpt-4o-mini",
-                "VDM_ALIAS_INVALID": "invalid@format",
-                "VDM_ALIAS_EMPTY": "",
-            },
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "VDM_ALIAS_VALID": "openai:gpt-4o-mini",
+                    "VDM_ALIAS_INVALID": "invalid@format",
+                    "VDM_ALIAS_EMPTY": "",
+                },
+            ),
+            caplog.at_level("INFO"),
         ):
-            with caplog.at_level("INFO"):
-                alias_manager = AliasManager()
+            alias_manager = AliasManager()
 
-                # Check that valid alias was logged
-                assert any(
-                    "Loaded model alias: valid -> openai:gpt-4o-mini" in record.message
-                    for record in caplog.records
-                )
+            # Check that valid alias was logged
+            assert any(
+                "Loaded model alias: valid -> openai:gpt-4o-mini" in record.message
+                for record in caplog.records
+            )
 
-                # Check that invalid alias was logged with warning
-                assert any(
-                    "Invalid alias configuration for VDM_ALIAS_INVALID=invalid@format"
-                    in record.message
-                    for record in caplog.records
-                )
+            # Check that invalid alias was logged with warning
+            assert any(
+                "Invalid alias configuration for VDM_ALIAS_INVALID=invalid@format" in record.message
+                for record in caplog.records
+            )
 
-                # Check that empty alias was logged with warning
-                assert any(
-                    "Empty alias value for VDM_ALIAS_EMPTY" in record.message
-                    for record in caplog.records
-                )
+            # Check that empty alias was logged with warning
+            assert any(
+                "Empty alias value for VDM_ALIAS_EMPTY" in record.message
+                for record in caplog.records
+            )

@@ -1,7 +1,7 @@
 import hashlib
 import os
 import sys
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.core.alias_manager import AliasManager
@@ -68,10 +68,10 @@ class Config:
         )  # 5 minutes
 
         # Provider manager will be initialized lazily
-        self._provider_manager: Optional["ProviderManager"] = None
+        self._provider_manager: ProviderManager | None = None
 
         # Alias manager will be initialized lazily
-        self._alias_manager: Optional["AliasManager"] = None
+        self._alias_manager: AliasManager | None = None
 
     @property
     def provider_manager(self) -> "ProviderManager":

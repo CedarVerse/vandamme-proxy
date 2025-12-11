@@ -1,14 +1,12 @@
 """Elegant YAML formatting utilities for running totals responses."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml  # type: ignore
 
 
-def format_running_totals_yaml(
-    data: Dict[str, Any], filters: Optional[Dict[str, str]] = None
-) -> str:
+def format_running_totals_yaml(data: dict[str, Any], filters: dict[str, str] | None = None) -> str:
     """Format running totals data as pretty YAML with comments and metadata.
 
     Args:
@@ -82,8 +80,8 @@ def format_running_totals_yaml(
 
 
 def create_hierarchical_structure(
-    summary_data: Dict[str, Any], provider_data: Dict[str, Any]
-) -> Dict[str, Any]:
+    summary_data: dict[str, Any], provider_data: dict[str, Any]
+) -> dict[str, Any]:
     """Create hierarchical YAML structure from summary and provider data.
 
     Args:
@@ -115,7 +113,7 @@ def create_hierarchical_structure(
     # Add provider breakdown
     if provider_data:
         structure["# Provider Breakdown"] = None
-        providers_dict: Dict[str, Any] = {}
+        providers_dict: dict[str, Any] = {}
 
         for provider_name, provider_info in sorted(provider_data.items()):
             # Provider header comment
@@ -151,9 +149,9 @@ def create_hierarchical_structure(
 
             # Add models if present
             if "models" in provider_info and provider_info["models"]:
-                provider_stats_dict: Dict[str, Any] = provider_stats
+                provider_stats_dict: dict[str, Any] = provider_stats
                 provider_stats_dict["# Models"] = None
-                models_dict: Dict[str, Any] = {}
+                models_dict: dict[str, Any] = {}
 
                 for model_name, model_info in sorted(provider_info["models"].items()):
                     model_stats = {
@@ -175,7 +173,7 @@ def create_hierarchical_structure(
     return structure
 
 
-def format_health_yaml(data: Dict[str, Any]) -> str:
+def format_health_yaml(data: dict[str, Any]) -> str:
     """Format health check data as pretty YAML with comments.
 
     Args:

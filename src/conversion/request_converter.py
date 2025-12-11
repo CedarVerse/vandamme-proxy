@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, List, cast
+from typing import Any, cast
 from venv import logger
 
 from src.core.config import config
@@ -13,7 +13,6 @@ from src.models.claude import (
     ClaudeContentBlockToolUse,
     ClaudeMessage,
     ClaudeMessagesRequest,
-    ClaudeSystemContent,
 )
 
 logger = logging.getLogger(__name__)
@@ -21,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def convert_claude_to_openai(
     claude_request: ClaudeMessagesRequest, model_manager: Any
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Convert Claude API request format to OpenAI format."""
 
     # Resolve provider and model
@@ -178,9 +177,7 @@ def convert_claude_to_openai(
     # Convert tool choice
     if claude_request.tool_choice:
         choice_type = claude_request.tool_choice.get("type")
-        if choice_type == "auto":
-            openai_request["tool_choice"] = "auto"
-        elif choice_type == "any":
+        if choice_type == "auto" or choice_type == "any":
             openai_request["tool_choice"] = "auto"
         elif choice_type == "tool" and "name" in claude_request.tool_choice:
             openai_request["tool_choice"] = {
@@ -195,7 +192,7 @@ def convert_claude_to_openai(
     return openai_request
 
 
-def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
+def convert_claude_user_message(msg: ClaudeMessage) -> dict[str, Any]:
     """Convert Claude user message to OpenAI format."""
     if msg.content is None:
         return {"role": Constants.ROLE_USER, "content": ""}
@@ -204,7 +201,7 @@ def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
         return {"role": Constants.ROLE_USER, "content": msg.content}
 
     # Handle multimodal content
-    openai_content: List[Dict[str, Any]] = []
+    openai_content: list[dict[str, Any]] = []
     for block in msg.content:  # type: ignore[arg-type, assignment]
         if block.type == Constants.CONTENT_TEXT:
             text_block = cast(ClaudeContentBlockText, block)
@@ -233,7 +230,7 @@ def convert_claude_user_message(msg: ClaudeMessage) -> Dict[str, Any]:
         return {"role": Constants.ROLE_USER, "content": openai_content}
 
 
-def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
+def convert_claude_assistant_message(msg: ClaudeMessage) -> dict[str, Any]:
     """Convert Claude assistant message to OpenAI format."""
     text_parts = []
     tool_calls = []
@@ -261,7 +258,7 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
                 }
             )
 
-    openai_message: Dict[str, Any] = {"role": Constants.ROLE_ASSISTANT}
+    openai_message: dict[str, Any] = {"role": Constants.ROLE_ASSISTANT}
 
     # Set content
     if text_parts:
@@ -276,7 +273,7 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> Dict[str, Any]:
     return openai_message
 
 
-def convert_claude_tool_results(msg: ClaudeMessage) -> List[Dict[str, Any]]:
+def convert_claude_tool_results(msg: ClaudeMessage) -> list[dict[str, Any]]:
     """Convert Claude tool results to OpenAI format."""
     tool_messages = []
 

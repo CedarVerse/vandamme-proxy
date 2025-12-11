@@ -1,6 +1,5 @@
 """Integration tests for API endpoints."""
 
-import json
 import os
 
 import httpx
@@ -163,8 +162,9 @@ async def test_streaming_chat():
     if not os.getenv("OPENAI_API_KEY"):
         pytest.skip("OPENAI_API_KEY not set")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        async with client.stream(
+    async with (
+        httpx.AsyncClient(timeout=30.0) as client,
+        client.stream(
             "POST",
             f"{BASE_URL}/v1/messages",
             json={
@@ -173,23 +173,24 @@ async def test_streaming_chat():
                 "messages": [{"role": "user", "content": "Count to 3"}],
                 "stream": True,
             },
-        ) as response:
-            assert response.status_code == 200
+        ) as response,
+    ):
+        assert response.status_code == 200
 
-            # Collect streamed events
-            events = []
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    events.append(line[6:])  # Remove "data: " prefix
+        # Collect streamed events
+        events = []
+        async for line in response.aiter_lines():
+            if line.startswith("data: "):
+                events.append(line[6:])  # Remove "data: " prefix
 
-            # Should have at least some events
-            assert len(events) > 0
+        # Should have at least some events
+        assert len(events) > 0
 
-            # Check for event stream format
-            assert any("message_start" in event for event in events)
-            assert any("content_block_start" in event for event in events)
-            assert any("content_block_stop" in event for event in events)
-            assert any("message_stop" in event for event in events)
+        # Check for event stream format
+        assert any("message_start" in event for event in events)
+        assert any("content_block_start" in event for event in events)
+        assert any("content_block_stop" in event for event in events)
+        assert any("message_stop" in event for event in events)
 
 
 @pytest.mark.integration

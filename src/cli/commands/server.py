@@ -1,7 +1,5 @@
 """Server management commands for the vdm CLI."""
 
-import os
-import signal
 from pathlib import Path
 
 import typer
@@ -10,7 +8,6 @@ from rich.console import Console
 from rich.table import Table
 
 from src.core.config import config
-from src.main import app as fastapi_app
 
 app = typer.Typer(help="Server management")
 
