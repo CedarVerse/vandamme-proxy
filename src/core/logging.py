@@ -695,11 +695,14 @@ class RequestTracker:
 
     def _emit_summary(self) -> None:
         """Emit summary log"""
+        total_requests = max(1, self.summary_metrics.total_requests)
+        avg_duration = self.summary_metrics.total_duration_ms / total_requests
+
         logger.info(
             f"📊 SUMMARY (last {self.summary_interval} requests) | "
             f"Total: {self.summary_metrics.total_requests} | "
             f"Errors: {self.summary_metrics.total_errors} | "
-            f"Avg Duration: {self.summary_metrics.total_duration_ms / max(1, self.summary_metrics.total_requests):.0f}ms | "
+            f"Avg Duration: {avg_duration:.0f}ms | "
             f"Input Tokens: {self.summary_metrics.total_input_tokens:,} | "
             f"Output Tokens: {self.summary_metrics.total_output_tokens:,} | "
             f"Cache Hits: {self.summary_metrics.total_cache_read_tokens:,} | "

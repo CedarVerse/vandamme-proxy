@@ -67,7 +67,10 @@ async def get_running_totals(
             media_type="text/yaml; charset=utf-8",
             headers={
                 "Cache-Control": "no-cache",
-                "Content-Disposition": f"inline; filename=running-totals-{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml",
+                "Content-Disposition": (
+                    f"inline; filename=running-totals-"
+                    f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml"
+                ),
             },
         )
 

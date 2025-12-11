@@ -99,9 +99,9 @@ class OpenAIClient:
 
         # Log API call start
         if LOG_REQUEST_METRICS:
-            conversation_logger.debug(
-                f"📡 API CALL | Model: {request.get('model', 'unknown')} | Timeout: {client.timeout}"
-            )
+            model_name = request.get("model", "unknown")
+            timeout = client.timeout
+            conversation_logger.debug(f"📡 API CALL | Model: {model_name} | Timeout: {timeout}")
 
         try:
             # Create task that can be cancelled
@@ -219,9 +219,12 @@ class OpenAIClient:
 
             async for chunk in streaming_completion:
                 # Check for cancellation before yielding each chunk
-                if request_id and request_id in self.active_requests:
-                    if self.active_requests[request_id].is_set():
-                        raise HTTPException(status_code=499, detail="Request cancelled by client")
+                if (
+                    request_id
+                    and request_id in self.active_requests
+                    and self.active_requests[request_id].is_set()
+                ):
+                    raise HTTPException(status_code=499, detail="Request cancelled by client")
 
                 # Convert chunk to SSE format matching original HTTP client format
                 chunk_dict = chunk.model_dump()
@@ -259,7 +262,10 @@ class OpenAIClient:
             "unsupported_country_region_territory" in error_str
             or "country, region, or territory not supported" in error_str
         ):
-            return "OpenAI API is not available in your region. Consider using a VPN or Azure OpenAI service."
+            return (
+                "OpenAI API is not available in your region. "
+                "Consider using a VPN or Azure OpenAI service."
+            )
 
         # API key issues
         if "invalid_api_key" in error_str or "unauthorized" in error_str:

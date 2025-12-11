@@ -158,6 +158,7 @@ class Middleware(ABC):
         """
         return context
 
+    @abstractmethod
     async def on_stream_complete(self, context: RequestContext, metadata: dict[str, Any]) -> None:
         """
         Called when streaming response is complete.
@@ -168,6 +169,7 @@ class Middleware(ABC):
         """
         pass
 
+    @abstractmethod
     async def initialize(self) -> None:
         """
         Initialize the middleware.
@@ -176,6 +178,7 @@ class Middleware(ABC):
         """
         pass
 
+    @abstractmethod
     async def cleanup(self) -> None:
         """
         Cleanup resources.
@@ -366,10 +369,8 @@ class MiddlewareChain:
         for middleware in applicable_middlewares:
             try:
                 new_context = await middleware.on_stream_chunk(current_context)
-                if new_context is not current_context:
-                    # Check if chunk was modified
-                    if new_context.delta is not context.delta:
-                        self.logger.debug(f"Stream chunk modified by {middleware.name}")
+                if new_context is not current_context and new_context.delta is not context.delta:
+                    self.logger.debug(f"Stream chunk modified by {middleware.name}")
                 current_context = new_context
             except Exception as e:
                 self.logger.error(

@@ -261,7 +261,9 @@ async def test_with_system_message():
             json={
                 "model": "claude-3-5-sonnet-20241022",
                 "max_tokens": 50,
-                "system": "You are a helpful assistant that always ends responses with 'over and out'.",
+                "system": (
+                    "You are a helpful assistant that always ends responses with 'over and out'."
+                ),
                 "messages": [{"role": "user", "content": "Say hello"}],
             },
         )
@@ -285,7 +287,10 @@ async def test_multimodal():
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Small 1x1 pixel red PNG
-        sample_image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+        sample_image = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/"
+            "PchI7wAAAABJRU5ErkJggg=="
+        )
 
         response = await client.post(
             f"{BASE_URL}/v1/messages",

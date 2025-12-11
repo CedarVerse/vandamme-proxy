@@ -213,7 +213,8 @@ class ProviderManager:
         api_key = os.environ.get(f"{provider_upper}_API_KEY")
         if not api_key:
             raise ValueError(
-                f"API key not found for provider '{provider_name}'. Please set {provider_upper}_API_KEY environment variable."
+                f"API key not found for provider '{provider_name}'. "
+                f"Please set {provider_upper}_API_KEY environment variable."
             )
 
         base_url = os.environ.get(f"{provider_upper}_BASE_URL")
@@ -222,7 +223,8 @@ class ProviderManager:
             base_url = self.get_default_base_url(provider_name)
             if not base_url:
                 raise ValueError(
-                    f"Base URL not found for provider '{provider_name}'. Please set {provider_upper}_BASE_URL environment variable."
+                    f"Base URL not found for provider '{provider_name}'. "
+                    f"Please set {provider_upper}_BASE_URL environment variable."
                 )
 
         # Load API format (default to "openai")
@@ -382,23 +384,35 @@ class ProviderManager:
 
             if result.status == "success":
                 if is_default:
-                    print(
-                        f"   ✅ {result.api_key_hash:<10}{default_indicator}\033[92m{result.name:<12}\033[0m {result.base_url}"
+                    # Build format string for default provider (with color)
+                    format_str = (
+                        f"   ✅ {result.api_key_hash:<10}{default_indicator}"
+                        f"\033[92m{result.name:<12}\033[0m {result.base_url}"
                     )
+                    print(format_str)
                 else:
-                    print(
-                        f"   ✅ {result.api_key_hash:<10}{default_indicator}{result.name:<12} {result.base_url}"
+                    # Build format string for other providers
+                    format_str = (
+                        f"   ✅ {result.api_key_hash:<10}{default_indicator}"
+                        f"{result.name:<12} {result.base_url}"
                     )
+                    print(format_str)
                 success_count += 1
             else:  # partial
                 if is_default:
-                    print(
-                        f"   ⚠️ {result.api_key_hash:<10}{default_indicator}\033[92m{result.name:<12}\033[0m {result.message}"
+                    # Build format string for partial default provider
+                    format_str = (
+                        f"   ⚠️ {result.api_key_hash:<10}{default_indicator}"
+                        f"\033[92m{result.name:<12}\033[0m {result.message}"
                     )
+                    print(format_str)
                 else:
-                    print(
-                        f"   ⚠️ {result.api_key_hash:<10}{default_indicator}{result.name:<12} {result.message}"
+                    # Build format string for partial other providers
+                    format_str = (
+                        f"   ⚠️ {result.api_key_hash:<10}{default_indicator}"
+                        f"{result.name:<12} {result.message}"
                     )
+                    print(format_str)
 
         print(f"\n{success_count} provider{'s' if success_count != 1 else ''} ready for requests")
         print("  * = default provider")

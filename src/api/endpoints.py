@@ -680,7 +680,9 @@ async def health_check() -> PlainTextResponse:
             media_type="text/yaml; charset=utf-8",
             headers={
                 "Cache-Control": "no-cache",
-                "Content-Disposition": f"inline; filename=health-{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml",
+                "Content-Disposition": (
+                    f"inline; filename=health-{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml"
+                ),
             },
         )
     except Exception as e:
@@ -706,7 +708,9 @@ async def health_check() -> PlainTextResponse:
             media_type="text/yaml; charset=utf-8",
             headers={
                 "Cache-Control": "no-cache",
-                "Content-Disposition": f"inline; filename=health-{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml",
+                "Content-Disposition": (
+                    f"inline; filename=health-{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml"
+                ),
             },
         )
 
@@ -735,7 +739,10 @@ async def test_connection() -> JSONResponse:
                 status_code=503,
                 content={
                     "status": "failed",
-                    "message": f"Provider {config.provider_manager.default_provider} returned None response",
+                    "message": (
+                        f"Provider {config.provider_manager.default_provider} "
+                        f"returned None response"
+                    ),
                     "provider": config.provider_manager.default_provider,
                     "error": "None response from provider",
                 },
@@ -745,7 +752,9 @@ async def test_connection() -> JSONResponse:
             status_code=200,
             content={
                 "status": "success",
-                "message": f"Successfully connected to {config.provider_manager.default_provider} API",
+                "message": (
+                    f"Successfully connected to {config.provider_manager.default_provider} API"
+                ),
                 "provider": config.provider_manager.default_provider,
                 "model_used": "gpt-4o-mini",
                 "timestamp": datetime.now().isoformat(),
@@ -808,7 +817,10 @@ async def list_models(
             available_providers = ", ".join(sorted(all_providers.keys()))
             raise HTTPException(
                 status_code=404,
-                detail=f"Provider '{provider_name}' not found. Available providers: {available_providers}",
+                detail=(
+                    f"Provider '{provider_name}' not found. "
+                    f"Available providers: {available_providers}"
+                ),
             )
 
         # Get the provider client and config

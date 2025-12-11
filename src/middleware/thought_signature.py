@@ -196,7 +196,8 @@ class ThoughtSignatureStore:
 
             if entry and self._is_entry_valid(entry):
                 self.logger.debug(
-                    f"Retrieved thought signatures for message_id={message_id}, tool_calls={len(tool_call_ids)}"
+                    f"Retrieved thought signatures: message_id={message_id}, "
+                    f"tool_calls={len(tool_call_ids)}"
                 )
                 return entry.reasoning_details
 
@@ -324,7 +325,8 @@ class ThoughtSignatureStore:
 
             if expired_message_ids:
                 self.logger.debug(
-                    f"Cleaned up expired entries: count={len(expired_message_ids)}, remaining={len(self._entries)}"
+                    f"Cleaned up expired entries: count={len(expired_message_ids)}, "
+                    f"remaining={len(self._entries)}"
                 )
 
 
@@ -394,7 +396,8 @@ class ThoughtSignatureMiddleware(Middleware):
             Context with thought signatures injected
         """
         self.logger.debug(
-            f"before_request: conversation_id={context.conversation_id}, provider={context.provider}, model={context.model}, messages={len(context.messages)}"
+            f"before_request: conversation_id={context.conversation_id}, "
+            f"provider={context.provider}, model={context.model}, messages={len(context.messages)}"
         )
 
         messages = context.messages
@@ -428,12 +431,15 @@ class ThoughtSignatureMiddleware(Middleware):
                         injected_count += 1
 
                         self.logger.debug(
-                            f"Injected thought signatures: message_index={i}, tool_calls={len(tool_call_ids)}, reasoning_blocks={len(reasoning_details)}"
+                            f"Injected thought signatures: message_index={i}, "
+                            f"tool_calls={len(tool_call_ids)}, "
+                            f"reasoning_blocks={len(reasoning_details)}"
                         )
 
         if modified:
             self.logger.info(
-                f"Injected thought signatures into request: conversation_id={context.conversation_id}, injected_messages={injected_count}, total_messages={len(messages)}"
+                f"Injected thought signatures: conversation_id={context.conversation_id}, "
+                f"injected_messages={injected_count}, total_messages={len(messages)}"
             )
             return context.with_updates(messages=messages)
 
@@ -452,8 +458,10 @@ class ThoughtSignatureMiddleware(Middleware):
         Returns:
             Unmodified response context
         """
+        response_keys = list(context.response.keys()) if context.response else []
         self.logger.debug(
-            f"after_response: conversation_id={context.request_context.conversation_id}, is_streaming={context.is_streaming}, response_keys={list(context.response.keys()) if context.response else []}"
+            f"after_response: conversation_id={context.request_context.conversation_id}, "
+            f"is_streaming={context.is_streaming}, response_keys={response_keys}"
         )
 
         if context.is_streaming:
@@ -488,7 +496,9 @@ class ThoughtSignatureMiddleware(Middleware):
                 context.accumulated_metadata["reasoning_details"] = current_details
 
                 self.logger.debug(
-                    f"Accumulated reasoning details from stream: chunk_blocks={len(reasoning_details)}, total_blocks={len(current_details)}"
+                    f"Accumulated reasoning details from stream: "
+                    f"chunk_blocks={len(reasoning_details)}, "
+                    f"total_blocks={len(current_details)}"
                 )
 
         # Track tool call IDs
@@ -527,7 +537,10 @@ class ThoughtSignatureMiddleware(Middleware):
             await self._extract_and_store(response=mock_response, request_context=context)
 
             self.logger.info(
-                f"Stored thought signatures from streaming response: conversation_id={context.conversation_id}, reasoning_blocks={len(reasoning_details)}, tool_calls={len(tool_call_ids)}"
+                f"Stored thought signatures from streaming: "
+                f"conversation_id={context.conversation_id}, "
+                f"reasoning_blocks={len(reasoning_details)}, "
+                f"tool_calls={len(tool_call_ids)}"
             )
 
     async def _extract_and_store(
@@ -540,8 +553,10 @@ class ThoughtSignatureMiddleware(Middleware):
             response: The response to process
             request_context: The original request context
         """
+        response_keys = list(response.keys())
+        conversation_id = request_context.conversation_id
         self.logger.debug(
-            f"_extract_and_store: response_keys={list(response.keys())}, conversation_id={request_context.conversation_id}"
+            f"_extract_and_store: response_keys={response_keys}, conversation_id={conversation_id}"
         )
 
         # Handle OpenAI response format
@@ -594,6 +609,10 @@ class ThoughtSignatureMiddleware(Middleware):
         # Store the entry
         await self.store.store(entry)
 
+        conversation_id = request_context.conversation_id
         self.logger.info(
-            f"Stored thought signatures from response: message_id={message_id}, conversation_id={request_context.conversation_id}, reasoning_blocks={len(reasoning_details)}, tool_calls={len(tool_call_ids)}"
+            f"Stored thought signatures: message_id={message_id}, "
+            f"conversation_id={conversation_id}, "
+            f"reasoning_blocks={len(reasoning_details)}, "
+            f"tool_calls={len(tool_call_ids)}"
         )

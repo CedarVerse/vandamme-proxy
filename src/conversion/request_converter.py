@@ -146,9 +146,9 @@ def convert_claude_to_openai(
         "temperature": claude_request.temperature,
         "stream": claude_request.stream,
     }
-    logger.debug(
-        f"Converted Claude request to OpenAI format: {json.dumps(openai_request, indent=2, ensure_ascii=False)}"
-    )
+    # Convert to JSON string once to avoid line length issues
+    openai_request_json = json.dumps(openai_request, indent=2, ensure_ascii=False)
+    logger.debug(f"Converted Claude request to OpenAI format: {openai_request_json}")
     # Add optional parameters
     if claude_request.stop_sequences:
         openai_request["stop"] = claude_request.stop_sequences
@@ -218,7 +218,10 @@ def convert_claude_user_message(msg: ClaudeMessage) -> dict[str, Any]:
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:{image_block.source['media_type']};base64,{image_block.source['data']}"
+                            "url": (
+                                f"data:{image_block.source['media_type']};base64,"
+                                f"{image_block.source['data']}"
+                            )
                         },
                     }
                 )

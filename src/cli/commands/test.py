@@ -99,8 +99,9 @@ def providers() -> None:
         console.print()
 
         # Show summary
+        provider_text = "providers" if success_count != 1 else "provider"
         console.print(
-            f"[bold green]{success_count}[/bold green] provider{'s' if success_count != 1 else ''} ready for requests"
+            f"[bold green]{success_count}[/bold green] {provider_text} ready for requests"
         )
         console.print()
 
@@ -109,12 +110,13 @@ def providers() -> None:
         console.print()
 
         # Show examples
+        default_provider = config.provider_manager.default_provider
         console.print(
             Panel(
                 f"Use providers with model prefixes:\n"
                 f"• [cyan]openrouter:gpt-4o[/cyan] → Uses OpenRouter\n"
                 f"• [cyan]poe:gemini-3-pro[/cyan] → Uses Poe\n"
-                f"• [cyan]claude-3-5-sonnet[/cyan] → Uses default provider ({config.provider_manager.default_provider})",
+                f"• [cyan]claude-3-5-sonnet[/cyan] → Uses default provider ({default_provider})",
                 title="Usage Examples",
                 expand=False,
             )
