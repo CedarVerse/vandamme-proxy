@@ -114,7 +114,9 @@ class ProviderManager:
 
         # Apply provider-specific defaults
         if not base_url:
-            base_url = self.get_default_base_url(self.default_provider) or "https://api.openai.com/v1"
+            base_url = (
+                self.get_default_base_url(self.default_provider) or "https://api.openai.com/v1"
+            )
 
         if not api_key:
             raise ValueError(f"API key not found for default provider '{self.default_provider}'")

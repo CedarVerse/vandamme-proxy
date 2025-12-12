@@ -5,13 +5,11 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
-from dotenv import load_dotenv
 
 # Import HTTP mocking fixtures from fixtures module
 pytest_plugins = ["tests.fixtures.mock_http"]
 
 # Import test configuration constants
-from tests.config import TEST_API_KEYS, TEST_ENDPOINTS, DEFAULT_TEST_CONFIG
 
 
 @pytest.fixture
@@ -117,7 +115,6 @@ def setup_test_environment_for_unit_tests():
     4. Restore environment after test completes
     """
     import os
-    import sys
 
     # Store original environment
     original_env = os.environ.copy()
@@ -132,7 +129,7 @@ def setup_test_environment_for_unit_tests():
                 os.environ.pop(key, None)
 
         # Set minimal test environment from centralized config
-        from tests.config import TEST_API_KEYS, DEFAULT_TEST_CONFIG, TEST_ENDPOINTS
+        from tests.config import DEFAULT_TEST_CONFIG, TEST_API_KEYS, TEST_ENDPOINTS
 
         test_env = {
             "OPENAI_API_KEY": TEST_API_KEYS["OPENAI"],
@@ -166,6 +163,7 @@ def setup_test_environment_for_unit_tests():
 
         # Import and reset the config singleton
         import src.core.config
+
         src.core.config.Config.reset_singleton()
 
         # Force reload of modules that import config at module level
@@ -195,5 +193,3 @@ def setup_test_environment_for_unit_tests():
         for module_name in test_modules:
             if module_name.startswith("src.") or module_name.startswith("tests."):
                 sys.modules.pop(module_name, None)
-
-

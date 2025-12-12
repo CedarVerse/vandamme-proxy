@@ -90,6 +90,7 @@ def test_anthropic_client_selection():
 
         # Import fresh modules
         from src.core.provider_manager import ProviderManager
+
         manager = ProviderManager()
         manager.load_provider_configs()
 
@@ -115,6 +116,7 @@ def test_anthropic_client_selection():
 def test_models_endpoint_openai_format():
     """Test /v1/models endpoint with OpenAI format provider."""
     from fastapi import FastAPI
+
     from src.api.endpoints import router
 
     app = FastAPI()

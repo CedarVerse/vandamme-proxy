@@ -4,7 +4,6 @@ import os
 
 import pytest
 import yaml
-from fastapi.testclient import TestClient
 
 # Get test port from environment or use default (matching development server)
 TEST_PORT = int(os.environ.get("VDM_TEST_PORT", "8082"))
@@ -23,10 +22,7 @@ async def test_models_endpoint_anthropic_format():
         os.environ["ANTHROPIC_BASE_URL"] = "https://api.anthropic.com"
         # Note: In real test, would need actual API key or mock
 
-        response = await client.get(
-            f"{BASE_URL}/v1/models",
-            headers={"x-api-key": "test-key"}
-        )
+        response = await client.get(f"{BASE_URL}/v1/models", headers={"x-api-key": "test-key"})
 
         # For integration test with real server, expect success
         assert response.status_code == 200
