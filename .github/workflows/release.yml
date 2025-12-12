@@ -50,15 +50,7 @@ jobs:
         run: ls -la dist/
 
       - name: Publish to PyPI
-        env:
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          if [ -n "$PYPI_API_TOKEN" ]; then
-            uv publish --token $PYPI_API_TOKEN dist/*
-          else
-            echo "No PYPI_API_TOKEN found, skipping publish"
-            exit 1
-          fi
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
