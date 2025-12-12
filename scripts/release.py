@@ -44,10 +44,10 @@ def get_current_version():
 
 
 def check_git_clean():
-    """Check if working directory is clean."""
-    result = run_cmd("git status --porcelain", capture_output=True)
+    """Check if working directory has no staged or unstaged changes."""
+    result = run_cmd("git status --porcelain -uno", capture_output=True)
     if result.stdout.strip():
-        print(f"{Colors.RED}❌ Working directory not clean{Colors.RESET}")
+        print(f"{Colors.RED}❌ Working directory has uncommitted changes{Colors.RESET}")
         return False
     print(f"{Colors.GREEN}✓ Working directory clean{Colors.RESET}")
     return True
