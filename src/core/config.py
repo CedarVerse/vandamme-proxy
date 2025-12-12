@@ -75,13 +75,31 @@ class Config:
         # Alias manager will be initialized lazily
         self._alias_manager: AliasManager | None = None
 
+    @classmethod
+    def reset_singleton(cls) -> None:
+        """Reset the global config singleton for test isolation.
+
+        This method should ONLY be called from test fixtures to ensure
+        each test starts with a fresh configuration state.
+
+        WARNING: Never call this in production code!
+        """
+        global config
+        config = cls()
+
     @property
     def provider_manager(self) -> "ProviderManager":
-        """Lazy initialization of provider manager to avoid circular imports"""
+        """Lazy initialization of provider manager to avoid circular imports.
+
+        Auto-loads provider configurations on first access to ensure providers
+        are ready when the manager is used.
+        """
         if self._provider_manager is None:
             from src.core.provider_manager import ProviderManager
 
             self._provider_manager = ProviderManager(default_provider=self.default_provider)
+            # Auto-load configurations on first access
+            self._provider_manager.load_provider_configs()
         return self._provider_manager
 
     @property

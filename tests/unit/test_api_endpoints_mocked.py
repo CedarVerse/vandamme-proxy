@@ -14,27 +14,20 @@ from tests.fixtures.mock_http import (
     openai_streaming_chunks,
 )
 
-# Set test environment BEFORE importing any src modules
-# This ensures clean test state without external dependencies
-os.environ["OPENAI_API_KEY"] = "test-openai-key"
-os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"  # Must match TEST_HEADERS
-os.environ["POE_API_KEY"] = "test-poe-key"
-os.environ["GLM_API_KEY"] = "test-glm-key"
-os.environ["VDM_DEFAULT_PROVIDER"] = "openai"
+# Environment setup handled by conftest.py fixture
+# This ensures consistent environment across all unit tests
 
-# Clear any aliases to ensure clean test environment
-for key in list(os.environ.keys()):
-    if key.startswith("VDM_ALIAS_"):
-        os.environ.pop(key, None)
-
-# Now it's safe to import app modules
+# Import TestClient but NOT app - app will be imported in each test
+# after the fixture has set up the environment
 from fastapi.testclient import TestClient
-from src.main import app
 
 
 @pytest.mark.unit
 def test_basic_chat_mocked(mock_openai_api, openai_chat_completion):
     """Test basic chat completion with mocked OpenAI API."""
+    # Import app after fixture setup to get fresh config
+    from src.main import app
+
     # Mock OpenAI endpoint
     mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
         return_value=httpx.Response(200, json=openai_chat_completion)
@@ -61,7 +54,8 @@ def test_basic_chat_mocked(mock_openai_api, openai_chat_completion):
 @pytest.mark.unit
 def test_function_calling_mocked(mock_openai_api, openai_chat_completion_with_tool):
     """Test function calling with mocked OpenAI API."""
-    # API key is already set by setup_test_env fixture
+    # Import app after fixture setup to get fresh config
+    from src.main import app
 
     # Mock endpoint with tool response
     mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
@@ -121,7 +115,8 @@ def test_function_calling_mocked(mock_openai_api, openai_chat_completion_with_to
 @pytest.mark.unit
 def test_with_system_message_mocked(mock_openai_api, openai_chat_completion):
     """Test with system message using mocked API."""
-    # API key is already set by setup_test_env fixture
+    # Import app after fixture setup to get fresh config
+    from src.main import app
 
     # Mock endpoint
     mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
@@ -151,7 +146,8 @@ def test_with_system_message_mocked(mock_openai_api, openai_chat_completion):
 @pytest.mark.unit
 def test_multimodal_mocked(mock_openai_api, openai_chat_completion):
     """Test multimodal input (text + image) with mocked API."""
-    # API key is already set by setup_test_env fixture
+    # Import app after fixture setup to get fresh config
+    from src.main import app
 
     # Mock endpoint
     mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
@@ -199,7 +195,8 @@ def test_multimodal_mocked(mock_openai_api, openai_chat_completion):
 @pytest.mark.unit
 def test_conversation_with_tool_use_mocked(mock_openai_api, openai_chat_completion, openai_chat_completion_with_tool):
     """Test a complete conversation with tool use and results."""
-    # API key is already set by setup_test_env fixture
+    # Import app after fixture setup to get fresh config
+    from src.main import app
 
     # Mock first call (tool use) and second call (final response)
     route = mock_openai_api.post("/v1/chat/completions")
@@ -279,7 +276,8 @@ def test_conversation_with_tool_use_mocked(mock_openai_api, openai_chat_completi
 @pytest.mark.unit
 def test_token_counting_mocked():
     """Test token counting endpoint - no external API call needed."""
-    # API key is already set by setup_test_env fixture
+    # Import app after fixture setup to get fresh config
+    from src.main import app
 
     with TestClient(app) as client:
         response = client.post(

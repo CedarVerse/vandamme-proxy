@@ -3,10 +3,13 @@
 A proxy server that converts Claude API requests to OpenAI-compatible API calls.
 """
 
+import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# Only load if not in test environment (tests manage their own environment)
+if os.environ.get("PYTEST_CURRENT_TEST") is None:
+    load_dotenv()
 
 # Dynamic version from Git
 try:

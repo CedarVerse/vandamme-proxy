@@ -109,75 +109,91 @@ def setup_test_environment_for_unit_tests():
 
     This fixture runs before each test to ensure a clean environment.
     Unit tests should only need minimal provider setup since all HTTP calls are mocked.
+
+    Strategy:
+    1. Set minimal test environment variables
+    2. Reset the global config singleton
+    3. Clear module cache for affected modules
+    4. Restore environment after test completes
     """
     import os
     import sys
 
-    # Load basic test configuration (non-sensitive settings only)
-    # Use dotenv_path to avoid loading from home directory .env file
-    load_dotenv(dotenv_path=".env.test")
+    # Store original environment
+    original_env = os.environ.copy()
 
-    # Store original values
-    original_env = {}
-
-    # Minimal test API keys - these are NOT real keys and will never be used
-    # since RESPX mocks all HTTP requests
-    test_api_keys = {
-        "OPENAI_API_KEY": "test-openai-key-mocked",
-        "ANTHROPIC_API_KEY": "test-anthropic-key-mocked",
-        "POE_API_KEY": "test-poe-key-mocked",
-        "GLM_API_KEY": "test-glm-key-mocked",
-        "VDM_DEFAULT_PROVIDER": "openai",
-    }
+    # Store original sys.modules state for cleanup
+    original_modules = set(sys.modules.keys())
 
     try:
-        # Store original values
-        for key in test_api_keys:
-            original_env[key] = os.environ.get(key)
-
         # Clear any existing test aliases
         for key in list(os.environ.keys()):
             if key.startswith("VDM_ALIAS_"):
                 os.environ.pop(key, None)
 
-        # Set minimal test environment
-        os.environ.update(test_api_keys)
+        # Set minimal test environment from centralized config
+        from tests.config import TEST_API_KEYS, DEFAULT_TEST_CONFIG, TEST_ENDPOINTS
 
-        # Force reimport of modules to pick up new environment
-        modules_to_reload = [
+        test_env = {
+            "OPENAI_API_KEY": TEST_API_KEYS["OPENAI"],
+            "ANTHROPIC_API_KEY": TEST_API_KEYS["ANTHROPIC"],
+            "ANTHROPIC_BASE_URL": TEST_ENDPOINTS["ANTHROPIC"],
+            "ANTHROPIC_API_FORMAT": "anthropic",
+            "POE_API_KEY": TEST_API_KEYS["POE"],
+            "GLM_API_KEY": TEST_API_KEYS["GLM"],
+            "VDM_DEFAULT_PROVIDER": DEFAULT_TEST_CONFIG["DEFAULT_PROVIDER"],
+            "LOG_LEVEL": DEFAULT_TEST_CONFIG["LOG_LEVEL"],
+        }
+
+        os.environ.update(test_env)
+
+        # Clear module cache for modules that need fresh import
+        modules_to_clear = [
             "src.core.config",
             "src.core.provider_manager",
+            "src.core.provider_config",
             "src.core.client",
+            "src.core.anthropic_client",
             "src.core.alias_manager",
             "src.core.model_manager",
-            # Also reload the endpoints module since it imports config at module level
             "src.api.endpoints",
+            "src.main",
+        ]
+
+        for module_name in modules_to_clear:
+            if module_name in sys.modules:
+                del sys.modules[module_name]
+
+        # Import and reset the config singleton
+        import src.core.config
+        src.core.config.Config.reset_singleton()
+
+        # Force reload of modules that import config at module level
+        # This ensures they get the new config instance after reset
+        modules_to_reload = [
+            "src.api.endpoints",
+            "src.main",
         ]
 
         for module_name in modules_to_reload:
             if module_name in sys.modules:
                 del sys.modules[module_name]
 
-        # Fresh import with new environment
-        # This will create new instances with the updated environment
-        import src.core.config
-
-        # Reset the global config instance to pick up new environment
-        # The config module creates a global `config` instance that we need to replace
-        config_class = src.core.config.Config
-        src.core.config.config = config_class()
-
-        import src.api.endpoints
-        import src.main
+        # Import app modules after config reset to ensure they use the fresh config
+        import src.main  # noqa: F401
 
         yield
 
     finally:
-        # Restore original values
-        for key, value in original_env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        # Restore original environment completely
+        os.environ.clear()
+        os.environ.update(original_env)
+
+        # Clear any modules imported during test
+        current_modules = set(sys.modules.keys())
+        test_modules = current_modules - original_modules
+        for module_name in test_modules:
+            if module_name.startswith("src.") or module_name.startswith("tests."):
+                sys.modules.pop(module_name, None)
 
 

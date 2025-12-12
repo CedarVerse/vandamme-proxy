@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.api.endpoints import count_tool_calls, list_aliases
+from src.core.config import config
 from src.models.claude import (
     ClaudeMessage,
     ClaudeMessagesRequest,
@@ -344,9 +345,8 @@ class TestListAliases:
             "plain": "gpt-4",
         }
 
-        with patch("src.api.endpoints.config") as mock_config:
-            mock_config.alias_manager = mock_alias_manager
-
+        # Patch config.alias_manager using PropertyMock to handle property correctly
+        with patch.object(type(config), "alias_manager", new_callable=lambda: property(lambda self: mock_alias_manager)):
             response = await list_aliases(_=None)
 
             assert response.status_code == 200
@@ -372,9 +372,8 @@ class TestListAliases:
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.return_value = {}
 
-        with patch("src.api.endpoints.config") as mock_config:
-            mock_config.alias_manager = mock_alias_manager
-
+        # Patch config.alias_manager using PropertyMock to handle property correctly
+        with patch.object(type(config), "alias_manager", new_callable=lambda: property(lambda self: mock_alias_manager)):
             response = await list_aliases(_=None)
 
             assert response.status_code == 200
@@ -388,8 +387,8 @@ class TestListAliases:
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.side_effect = Exception("Test error")
 
-        with patch("src.api.endpoints.config") as mock_config:
-            mock_config.alias_manager = mock_alias_manager
+        # Patch config.alias_manager using PropertyMock to handle property correctly
+        with patch.object(type(config), "alias_manager", new_callable=lambda: property(lambda self: mock_alias_manager)):
 
             response = await list_aliases(_=None)
 

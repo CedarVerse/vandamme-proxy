@@ -106,21 +106,15 @@ class ProviderManager:
 
     def _load_default_provider(self) -> None:
         """Load the default provider configuration"""
-        # For backward compatibility, we support both OPENAI_* and VDM_DEFAULT_PROVIDER*
-        api_key = os.environ.get("OPENAI_API_KEY")
-        base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        api_version = os.environ.get("AZURE_API_VERSION")
+        # Load provider configuration based on default_provider name
+        provider_prefix = f"{self.default_provider.upper()}_"
+        api_key = os.environ.get(f"{provider_prefix}API_KEY")
+        base_url = os.environ.get(f"{provider_prefix}BASE_URL")
+        api_version = os.environ.get(f"{provider_prefix}API_VERSION")
 
-        if self.default_provider != "openai":
-            # Try to load from VDM_DEFAULT_PROVIDER
-            provider_prefix = f"{self.default_provider.upper()}_"
-            api_key = os.environ.get(f"{provider_prefix}API_KEY")
-            base_url = (
-                os.environ.get(f"{provider_prefix}BASE_URL")
-                or self.get_default_base_url(self.default_provider)
-                or "https://api.openai.com/v1"
-            )
-            api_version = os.environ.get(f"{provider_prefix}API_VERSION")
+        # Apply provider-specific defaults
+        if not base_url:
+            base_url = self.get_default_base_url(self.default_provider) or "https://api.openai.com/v1"
 
         if not api_key:
             raise ValueError(f"API key not found for default provider '{self.default_provider}'")
@@ -142,7 +136,7 @@ class ProviderManager:
         # Scan for all provider environment variables
         for env_key, _env_value in os.environ.items():
             # Look for PROVIDER_API_KEY pattern
-            if env_key.endswith("_API_KEY") and not env_key.startswith(("OPENAI_", "CUSTOM_")):
+            if env_key.endswith("_API_KEY") and not env_key.startswith("CUSTOM_"):
                 # Extract provider name (everything before _API_KEY)
                 provider_name = env_key[:-8].lower()  # Remove "_API_KEY" suffix
 
