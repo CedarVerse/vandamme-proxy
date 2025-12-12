@@ -5,21 +5,15 @@ Converted from integration tests to use RESPX fixtures.
 """
 
 import httpx
-import os
 import pytest
-from tests.config import TEST_HEADERS
-from tests.fixtures.mock_http import (
-    openai_chat_completion,
-    openai_chat_completion_with_tool,
-    openai_streaming_chunks,
-)
 
 # Environment setup handled by conftest.py fixture
 # This ensures consistent environment across all unit tests
-
 # Import TestClient but NOT app - app will be imported in each test
 # after the fixture has set up the environment
 from fastapi.testclient import TestClient
+
+from tests.config import TEST_HEADERS
 
 
 @pytest.mark.unit
@@ -40,9 +34,9 @@ def test_basic_chat_mocked(mock_openai_api, openai_chat_completion):
             json={
                 "model": "openai:gpt-4",  # Use explicit provider to avoid alias conflicts
                 "max_tokens": 100,
-                "messages": [{"role": "user", "content": "Hello"}]
+                "messages": [{"role": "user", "content": "Hello"}],
             },
-            headers=TEST_HEADERS
+            headers=TEST_HEADERS,
         )
 
     assert response.status_code == 200
@@ -92,7 +86,7 @@ def test_function_calling_mocked(mock_openai_api, openai_chat_completion_with_to
                 ],
                 "tool_choice": {"type": "auto"},
             },
-            headers=TEST_HEADERS
+            headers=TEST_HEADERS,
         )
 
     assert response.status_code == 200
@@ -134,7 +128,7 @@ def test_with_system_message_mocked(mock_openai_api, openai_chat_completion):
                 ),
                 "messages": [{"role": "user", "content": "Say hello"}],
             },
-            headers=TEST_HEADERS
+            headers=TEST_HEADERS,
         )
 
     assert response.status_code == 200
@@ -183,7 +177,7 @@ def test_multimodal_mocked(mock_openai_api, openai_chat_completion):
                     }
                 ],
             },
-            headers=TEST_HEADERS
+            headers=TEST_HEADERS,
         )
 
     assert response.status_code == 200
@@ -193,7 +187,9 @@ def test_multimodal_mocked(mock_openai_api, openai_chat_completion):
 
 
 @pytest.mark.unit
-def test_conversation_with_tool_use_mocked(mock_openai_api, openai_chat_completion, openai_chat_completion_with_tool):
+def test_conversation_with_tool_use_mocked(
+    mock_openai_api, openai_chat_completion, openai_chat_completion_with_tool
+):
     """Test a complete conversation with tool use and results."""
     # Import app after fixture setup to get fresh config
     from src.main import app
@@ -230,7 +226,7 @@ def test_conversation_with_tool_use_mocked(mock_openai_api, openai_chat_completi
                     }
                 ],
             },
-            headers=TEST_HEADERS
+            headers=TEST_HEADERS,
         )
 
         assert response1.status_code == 200
@@ -265,7 +261,7 @@ def test_conversation_with_tool_use_mocked(mock_openai_api, openai_chat_completi
                     },
                 ],
             },
-            headers=TEST_HEADERS
+            headers=TEST_HEADERS,
         )
 
         assert response2.status_code == 200
@@ -288,7 +284,7 @@ def test_token_counting_mocked():
                     {"role": "user", "content": "This is a test message for token counting."}
                 ],
             },
-            headers=TEST_HEADERS
+            headers=TEST_HEADERS,
         )
 
     assert response.status_code == 200
@@ -298,7 +294,9 @@ def test_token_counting_mocked():
     assert data["input_tokens"] > 0
 
 
-@pytest.mark.skip(reason="Anthropic passthrough test requires actual Anthropic provider configuration")
+@pytest.mark.skip(
+    reason="Anthropic passthrough test requires actual Anthropic provider configuration"
+)
 def test_anthropic_passthrough_mocked(mock_anthropic_api, anthropic_message_response):
     """Test Anthropic API passthrough format with mocked API."""
     # Skipping this test for now as it requires complex provider setup

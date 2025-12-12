@@ -9,8 +9,7 @@ import pytest
 import respx
 
 # Import test configuration
-from tests.config import TEST_API_KEYS, TEST_ENDPOINTS
-
+from tests.config import TEST_ENDPOINTS
 
 # === OpenAI Response Fixtures ===
 
@@ -81,10 +80,26 @@ def openai_chat_completion_with_tool():
 def openai_streaming_chunks():
     """OpenAI streaming response chunks."""
     return [
-        b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"gpt-4","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n',
-        b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
-        b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"gpt-4","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}\n\n',
-        b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1677652288,"model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+        (
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n'
+        ),
+        (
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{"content":"Hello"},"finish_reason":null}]}\n\n'
+        ),
+        (
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{"content":"!"},"finish_reason":null}]}\n\n'
+        ),
+        (
+            b'data: {"id":"chatcmpl-123","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{},"finish_reason":"stop"}]}\n\n'
+        ),
         b"data: [DONE]\n\n",
     ]
 
@@ -139,12 +154,29 @@ def anthropic_message_with_tool_use():
 def anthropic_streaming_events():
     """Anthropic streaming SSE events."""
     return [
-        b'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_test123","type":"message","role":"assistant","content":[],"model":"claude-3-5-sonnet-20241022","usage":{"input_tokens":10,"output_tokens":0}}}\n\n',
-        b'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
-        b'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n',
-        b'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"!"}}\n\n',
+        (
+            b'event: message_start\ndata: {"type":"message_start","message":{'
+            b'"id":"msg_test123","type":"message","role":"assistant",'
+            b'"content":[],"model":"claude-3-5-sonnet-20241022","usage":{'
+            b'"input_tokens":10,"output_tokens":0}}}\n\n'
+        ),
+        (
+            b'event: content_block_start\ndata: {"type":"content_block_start",'
+            b'"index":0,"content_block":{"type":"text","text":""}}\n\n'
+        ),
+        (
+            b'event: content_block_delta\ndata: {"type":"content_block_delta",'
+            b'"index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n'
+        ),
+        (
+            b'event: content_block_delta\ndata: {"type":"content_block_delta",'
+            b'"index":0,"delta":{"type":"text_delta","text":"!"}}\n\n'
+        ),
         b'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
-        b'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":15}}\n\n',
+        (
+            b'event: message_delta\ndata: {"type":"message_delta","delta":{'
+            b'"stop_reason":"end_turn"},"usage":{"output_tokens":15}}\n\n'
+        ),
         b'event: message_stop\ndata: {"type":"message_stop"}\n\n',
     ]
 
