@@ -131,6 +131,11 @@ def main():
         run_cmd(f'git push origin {version}')
         print(f"{Colors.GREEN}✓ Tag {version} pushed successfully{Colors.RESET}")
 
+    elif command == "push-tag":
+        version = get_current_version()
+        run_cmd(f'git push origin {version}')
+        print(f"{Colors.GREEN}✓ Tag {version} pushed successfully{Colors.RESET}")
+
     elif command == "check":
         print(f"{Colors.BOLD}{Colors.CYAN}Checking release readiness...{Colors.RESET}")
         if not check_git_clean():
@@ -163,8 +168,8 @@ def main():
         print(f"\n{Colors.CYAN}Bumping version ({bump_type})...{Colors.RESET}")
         run_cmd(f'uv run python scripts/version.py bump {bump_type}')
 
-        print(f"\n{Colors.CYAN}Creating and pushing tag...{Colors.RESET}")
-        run_cmd('uv run python scripts/release.py tag')
+        print(f"\n{Colors.CYAN}Pushing tag to remote...{Colors.RESET}")
+        run_cmd('uv run python scripts/release.py push-tag')
 
         print(f"\n{Colors.BOLD}{Colors.GREEN}✅ Version bumped and tagged!{Colors.RESET}")
         print(f"{Colors.CYAN}→ Run 'make release-check' to validate before release{Colors.RESET}")
@@ -178,7 +183,7 @@ def main():
 
         run_cmd('uv run python scripts/release.py check')
         run_cmd(f'uv run python scripts/version.py bump {bump_type}')
-        run_cmd('uv run python scripts/release.py tag')
+        run_cmd('uv run python scripts/release.py push-tag')
         run_cmd('uv run python scripts/release.py post-tag')
 
     else:
