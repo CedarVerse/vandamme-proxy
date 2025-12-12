@@ -149,7 +149,7 @@ def anthropic_streaming_events():
 # === RESPX Mock Fixtures ===
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def mock_openai_api():
     """Mock OpenAI API endpoints with RESPX.
 
@@ -162,16 +162,16 @@ def mock_openai_api():
                 return_value=httpx.Response(200, json=openai_chat_completion)
             )
     """
-    # Use module scope to avoid test order issues
-    # assert_all_mocked=False allows unmocked requests to pass through
+    # Use function scope for complete isolation between tests
+    # Use assert_all_mocked=False to prevent blocking requests that should be allowed
     with respx.mock(assert_all_called=False, assert_all_mocked=False) as respx_mock:
         # Pre-mock common endpoints with full URLs
         respx_mock.get("https://api.openai.com/v1/models").mock(
             return_value=httpx.Response(200, json={"object": "list", "data": []})
         )
-        # Add a default mock for chat completions that tests can override
+        # Add default chat completion mock that tests can override
         default_response = httpx.Response(200, json={
-            "id": "test-default",
+            "id": "chatcmpl-default",
             "object": "chat.completion",
             "created": 1677652288,
             "model": "gpt-4",
@@ -189,7 +189,7 @@ def mock_openai_api():
                 "total_tokens": 20
             }
         })
-        route = respx_mock.post("https://api.openai.com/v1/chat/completions").mock(return_value=default_response)
+        chat_route = respx_mock.post("https://api.openai.com/v1/chat/completions").mock(return_value=default_response)
         yield respx_mock
 
 

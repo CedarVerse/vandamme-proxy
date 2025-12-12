@@ -5,6 +5,7 @@ Converted from integration tests to use RESPX fixtures.
 """
 
 import os
+import sys
 from unittest.mock import patch
 
 import httpx
@@ -14,10 +15,9 @@ from fastapi.testclient import TestClient
 from src.main import app
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(autouse=True)
 def setup_test_env():
     """Setup test environment for mocked tests."""
-    # Set environment variables before config module loads
     original_env = {}
     try:
         # Store original values
@@ -32,14 +32,6 @@ def setup_test_env():
         for key in list(os.environ.keys()):
             if key.startswith("VDM_ALIAS_"):
                 os.environ.pop(key, None)
-
-        # Import config AFTER setting env vars to ensure it picks up test values
-        from src.core import config
-
-        # Update the existing config instance
-        config.config.openai_api_key = "test-openai-key"
-        config.config.anthropic_api_key = "test-anthropic-key"
-        config.config.default_provider = "openai"
 
         yield
 
