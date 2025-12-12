@@ -177,4 +177,6 @@ poetry.toml
 pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
-n
+
+# Auto-generated version file
+src/_version.py
