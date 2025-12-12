@@ -6,10 +6,6 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from src.api.endpoints import router
-from src.core.provider_config import ProviderConfig
-from src.core.provider_manager import ProviderManager
-
 # Get test port from environment or use default (matching development server)
 TEST_PORT = int(os.environ.get("VDM_TEST_PORT", "8082"))
 BASE_URL = f"http://localhost:{TEST_PORT}"

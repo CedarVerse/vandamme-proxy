@@ -7,14 +7,12 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from src.api.endpoints import router
-from src.core.provider_config import ProviderConfig
-from src.core.provider_manager import ProviderManager
-
 
 @pytest.mark.unit
 def test_provider_config_api_format():
     """Test that ProviderConfig correctly handles api_format field."""
+    from src.core.provider_config import ProviderConfig
+
     # Test with explicit anthropic format
     config = ProviderConfig(
         name="test",
@@ -36,6 +34,8 @@ def test_provider_config_api_format():
 @pytest.mark.unit
 def test_provider_manager_loads_api_format():
     """Test that ProviderManager loads API format from environment."""
+    from src.core.provider_manager import ProviderManager
+
     # Set up OpenAI API key for default provider
     os.environ["OPENAI_API_KEY"] = "test-openai-key"
 
@@ -115,6 +115,7 @@ def test_anthropic_client_selection():
 def test_models_endpoint_openai_format():
     """Test /v1/models endpoint with OpenAI format provider."""
     from fastapi import FastAPI
+    from src.api.endpoints import router
 
     app = FastAPI()
     app.include_router(router)
