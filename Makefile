@@ -303,7 +303,7 @@ test-all: ## Run ALL tests including e2e (requires server and API keys)
 
 test-quick: ## Run tests without coverage (fast)
 	@echo "$(BOLD)$(CYAN)Running quick tests...$(RESET)"
-	@$(UV) run $(PYTEST) $(TEST_DIR) -q --tb=short
+	@$(UV) run $(PYTEST) $(TEST_DIR) -q --tb=short -m unit
 
 coverage: ## Run tests with coverage report
 	@echo "$(BOLD)$(CYAN)Running tests with coverage...$(RESET)"

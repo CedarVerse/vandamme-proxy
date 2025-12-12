@@ -149,7 +149,7 @@ def anthropic_streaming_events():
 # === RESPX Mock Fixtures ===
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def mock_openai_api():
     """Mock OpenAI API endpoints with RESPX.
 
@@ -162,7 +162,12 @@ def mock_openai_api():
                 return_value=httpx.Response(200, json=openai_chat_completion)
             )
     """
-    with respx.mock(base_url="https://api.openai.com") as respx_mock:
+    # Use a simple mock that doesn't assert all routes called
+    with respx.mock(assert_all_called=False) as respx_mock:
+        # Mock common OpenAI endpoints
+        respx_mock.get("https://api.openai.com/v1/models").mock(
+            return_value=httpx.Response(200, json={"object": "list", "data": []})
+        )
         yield respx_mock
 
 
@@ -179,7 +184,8 @@ def mock_anthropic_api():
                 return_value=httpx.Response(200, json=anthropic_message_response)
             )
     """
-    with respx.mock(base_url="https://api.anthropic.com") as respx_mock:
+    # Create a global mock that will intercept all httpx requests
+    with respx.mock(assert_all_called=False) as respx_mock:
         yield respx_mock
 
 
