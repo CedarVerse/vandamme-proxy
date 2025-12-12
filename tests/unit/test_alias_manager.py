@@ -320,7 +320,7 @@ class TestAliasManager:
                     "VDM_ALIAS_EMPTY": "",
                 },
             ),
-            caplog.at_level("INFO"),
+            caplog.at_level("DEBUG"),
         ):
             AliasManager()
 
