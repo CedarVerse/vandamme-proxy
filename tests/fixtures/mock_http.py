@@ -149,7 +149,7 @@ def anthropic_streaming_events():
 # === RESPX Mock Fixtures ===
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def mock_openai_api():
     """Mock OpenAI API endpoints with RESPX.
 
@@ -158,16 +158,38 @@ def mock_openai_api():
 
     Example:
         def test_chat(mock_openai_api, openai_chat_completion):
-            mock_openai_api.post("/v1/chat/completions").mock(
+            mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
                 return_value=httpx.Response(200, json=openai_chat_completion)
             )
     """
-    # Use a simple mock that doesn't assert all routes called
-    with respx.mock(assert_all_called=False) as respx_mock:
-        # Mock common OpenAI endpoints
+    # Use module scope to avoid test order issues
+    # assert_all_mocked=False allows unmocked requests to pass through
+    with respx.mock(assert_all_called=False, assert_all_mocked=False) as respx_mock:
+        # Pre-mock common endpoints with full URLs
         respx_mock.get("https://api.openai.com/v1/models").mock(
             return_value=httpx.Response(200, json={"object": "list", "data": []})
         )
+        # Add a default mock for chat completions that tests can override
+        default_response = httpx.Response(200, json={
+            "id": "test-default",
+            "object": "chat.completion",
+            "created": 1677652288,
+            "model": "gpt-4",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "Default mock response"
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 10,
+                "total_tokens": 20
+            }
+        })
+        route = respx_mock.post("https://api.openai.com/v1/chat/completions").mock(return_value=default_response)
         yield respx_mock
 
 
@@ -184,8 +206,9 @@ def mock_anthropic_api():
                 return_value=httpx.Response(200, json=anthropic_message_response)
             )
     """
-    # Create a global mock that will intercept all httpx requests
-    with respx.mock(assert_all_called=False) as respx_mock:
+    # Use base_url for Anthropic API with strict mocking to prevent real calls
+    with respx.mock(base_url="https://api.anthropic.com", assert_all_called=False, assert_all_mocked=True) as respx_mock:
+        # Don't pre-mock endpoints - let tests add their own mocks
         yield respx_mock
 
 

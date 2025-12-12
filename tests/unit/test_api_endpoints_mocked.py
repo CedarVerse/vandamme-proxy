@@ -57,8 +57,8 @@ def test_basic_chat_mocked(mock_openai_api, openai_chat_completion):
     """Test basic chat completion with mocked OpenAI API."""
     # API key is already set by setup_test_env fixture
 
-    # Mock OpenAI endpoint
-    mock_openai_api.post("/v1/chat/completions").mock(
+    # Mock OpenAI endpoint - use full URL since we're not using base_url
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
         return_value=httpx.Response(200, json=openai_chat_completion)
     )
 
@@ -86,7 +86,7 @@ def test_function_calling_mocked(mock_openai_api, openai_chat_completion_with_to
     # API key is already set by setup_test_env fixture
 
     # Mock endpoint with tool response
-    mock_openai_api.post("/v1/chat/completions").mock(
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
         return_value=httpx.Response(200, json=openai_chat_completion_with_tool)
     )
 
@@ -146,7 +146,7 @@ def test_with_system_message_mocked(mock_openai_api, openai_chat_completion):
     # API key is already set by setup_test_env fixture
 
     # Mock endpoint
-    mock_openai_api.post("/v1/chat/completions").mock(
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
         return_value=httpx.Response(200, json=openai_chat_completion)
     )
 
@@ -176,7 +176,7 @@ def test_multimodal_mocked(mock_openai_api, openai_chat_completion):
     # API key is already set by setup_test_env fixture
 
     # Mock endpoint
-    mock_openai_api.post("/v1/chat/completions").mock(
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
         return_value=httpx.Response(200, json=openai_chat_completion)
     )
 
