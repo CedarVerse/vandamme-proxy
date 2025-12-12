@@ -145,10 +145,10 @@ def main():
         print(f"{Colors.CYAN}→ Track progress at: https://github.com/elifarley/vandamme-proxy/actions{Colors.RESET}")
 
     elif command == "full":
-        # Full interactive release
+        # Full interactive version bump (tests should be run separately)
         if not check_git_clean():
             sys.exit(1)
-        run_tests()
+        # Removed run_tests() - developers run tests before bumping versions
         bump_type = interactive_bump()
 
         print(f"\n{Colors.CYAN}Bumping version ({bump_type})...{Colors.RESET}")
@@ -157,8 +157,9 @@ def main():
         print(f"\n{Colors.CYAN}Creating and pushing tag...{Colors.RESET}")
         run_cmd('uv run python scripts/release.py tag')
 
-        print(f"\n{Colors.BOLD}{Colors.GREEN}✅ Release initiated!{Colors.RESET}")
-        print(f"{Colors.CYAN}Monitor: https://github.com/elifarley/vandamme-proxy/actions{Colors.RESET}")
+        print(f"\n{Colors.BOLD}{Colors.GREEN}✅ Version bumped and tagged!{Colors.RESET}")
+        print(f"{Colors.CYAN}→ Run 'make release-check' to validate before release{Colors.RESET}")
+        print(f"{Colors.CYAN}→ Monitor GitHub Actions: https://github.com/elifarley/vandamme-proxy/actions{Colors.RESET}")
 
     elif command == "quick":
         if len(sys.argv) < 3:
