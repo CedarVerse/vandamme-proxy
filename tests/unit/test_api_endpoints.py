@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.api.endpoints import count_tool_calls, list_aliases
 from src.core.config import config
 from src.models.claude import (
     ClaudeMessage,
@@ -18,6 +17,8 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_empty_request(self):
         """Test counting tool calls in a request with no tools."""
+        from src.api.endpoints import count_tool_calls
+
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
             max_tokens=100,
@@ -33,6 +34,8 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_with_string_content(self):
         """Test counting tool calls in a request with string content."""
+        from src.api.endpoints import count_tool_calls
+
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
             max_tokens=100,
@@ -48,6 +51,8 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_with_tool_uses(self):
         """Test counting tool calls in a request with tool_use blocks."""
+        from src.api.endpoints import count_tool_calls
+
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
             max_tokens=100,
@@ -79,6 +84,8 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_with_tool_results(self):
         """Test counting tool calls in a request with tool_result blocks."""
+        from src.api.endpoints import count_tool_calls
+
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
             max_tokens=100,
@@ -107,6 +114,8 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_mixed_content(self):
         """Test counting tool calls in a request with mixed content."""
+        from src.api.endpoints import count_tool_calls
+
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
             max_tokens=100,
@@ -143,6 +152,8 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_across_multiple_messages(self):
         """Test counting tool calls across multiple messages."""
+        from src.api.endpoints import count_tool_calls
+
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
             max_tokens=100,
@@ -338,6 +349,8 @@ class TestListAliases:
     @pytest.mark.asyncio
     async def test_list_aliases_with_data(self):
         """Test listing aliases when aliases are configured."""
+        from src.api.endpoints import list_aliases
+
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.return_value = {
             "haiku": "poe:gpt-4o-mini",
@@ -369,6 +382,8 @@ class TestListAliases:
     @pytest.mark.asyncio
     async def test_list_aliases_no_data(self):
         """Test listing aliases when no aliases are configured."""
+        from src.api.endpoints import list_aliases
+
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.return_value = {}
 
@@ -384,6 +399,8 @@ class TestListAliases:
     @pytest.mark.asyncio
     async def test_list_aliases_error_handling(self):
         """Test error handling in list_aliases endpoint."""
+        from src.api.endpoints import list_aliases
+
         mock_alias_manager = MagicMock()
         mock_alias_manager.get_all_aliases.side_effect = Exception("Test error")
 
