@@ -7,11 +7,11 @@ Get up and running with Vandamme Proxy in 3 minutes.
 ### Option 1: Install from PyPI (Recommended)
 
 ```bash
-# Using pip
-pip install vandamme-proxy
-
-# Or using uv (fastest)
+# Using uv (fastest)
 uv pip install vandamme-proxy
+
+# or using pip
+pip install vandamme-proxy
 
 # Verify installation
 vdm version
@@ -26,6 +26,7 @@ cd vandamme-proxy
 
 # Install with development dependencies
 make install-dev
+source .venv/bin/activate
 
 # Verify installation
 vdm version
@@ -64,19 +65,17 @@ Create a `.env` file with your provider configuration:
 #### OpenAI
 ```bash
 OPENAI_API_KEY="sk-your-openai-key"
+VDM_DEFAULT_PROVIDER="openai"  # Optional: overrides defaults.toml
 ```
 
 #### Poe.com
 ```bash
 POE_API_KEY="your-poe-api-key"
-VDM_DEFAULT_PROVIDER="poe"  # Optional: overrides defaults.toml
 ```
 
 #### Anthropic (Direct)
 ```bash
 ANTHROPIC_API_KEY="sk-ant-your-key"
-ANTHROPIC_BASE_URL="https://api.anthropic.com"
-ANTHROPIC_API_FORMAT="anthropic"
 VDM_DEFAULT_PROVIDER="anthropic"  # Optional: overrides defaults.toml
 ```
 
@@ -113,9 +112,6 @@ See `.env.example` for all configuration options.
 ### Start the Proxy Server
 
 ```bash
-# Development mode (hot reload)
-vdm server start --reload
-
 # Production mode
 vdm server start
 
@@ -231,8 +227,9 @@ POE_API_KEY="..."
 VDM_DEFAULT_PROVIDER="poe"
 
 # Use different providers per request
-claude --model openai:gpt-4o "Use OpenAI"
-claude --model poe:gemini-flash "Use Poe"
+claude --model gemini-3.5-flash "Use Poe" # Poe was set as the default provider
+claude --model poe:gemini-flash "Use Poe" # explicit provider prefix
+claude --model openai:gpt-4o "Use OpenAI" # explicit provider prefix
 claude "Use default (poe)"
 ```
 
@@ -244,8 +241,8 @@ POE_ALIAS_FAST=gpt-4o-mini
 ANTHROPIC_ALIAS_SMART=claude-3-5-sonnet-20241022
 
 # Use aliases in requests
-claude --model fast "Quick response"
-claude --model smart "Complex reasoning"
+claude --model poe:fast "Quick response"
+claude --model anthropic:smart "Complex reasoning"
 ```
 
 ### API Key Passthrough (Multi-Tenant)

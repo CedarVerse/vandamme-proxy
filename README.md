@@ -339,19 +339,63 @@ Most alternatives solve adjacent but different problems. The comparisons below a
 
 ### Claude Code Proxy
 
+**What it does well**
+- Native compatibility with Claude Code
+- Correct implementation of Anthropic’s SSE protocol
+- Simple, focused design
 
+**Limitations (by design)**
+- Primarily Anthropic-focused
+- Simultaneous multi-provider routing is not a first-class concern
+- Limited abstraction for adding heterogeneous providers with different API semantics
 
-| Feature | Vandamme Proxy | LiteLLM | OpenRouter |
-|---------|---------------|---------|------------|
-| **Provider Routing** | ✅ Prefix-based (`provider:model`) | ✅ Config-based | ✅ Unified namespace |
-| **Smart Aliases** | ✅ Substring matching + priorities | ❌ Exact match only | ❌ Not supported |
-| **Dual API Formats** | ✅ OpenAI + Anthropic native | ✅ OpenAI only | ✅ OpenAI only |
-| **API Key Passthrough** | ✅ `!PASSTHRU` sentinel | ⚠️ Limited support | ✅ Native support |
-| **Mixed Auth Modes** | ✅ Static + Passthrough per-provider | ❌ Global only | ❌ Global only |
-| **Middleware System** | ✅ Chain-of-responsibility | ⚠️ Limited hooks | ❌ Not extensible |
-| **Claude Code Integration** | ✅ Zero-config | ⚠️ Manual setup | ⚠️ Manual setup |
-| **Self-Hosted** | ✅ Full control | ✅ Full control | ❌ Cloud service only |
-| **vdm CLI** | ✅ Integrated tooling | ❌ Not provided | ❌ Not provided |
+**Summary**
+
+*Claude Code Proxy* is purpose-built for Anthropic and Claude Code.
+VanDamme builds on this idea but generalizes it into a provider-agnostic gateway, while preserving Claude’s protocol semantics.
+
+**References**
+- [Claude Code Proxy](https://github.com/fuergaosi233/claude-code-proxy?utm_source=chatgpt.com) 
+- [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code)
+
+### LiteLLM
+
+**What it does well**
+- Broad multi-provider support
+- OpenAI-compatible API normalization
+- Production-oriented features (logging, retries, caching)
+
+**Limitations in the context of Claude Code**
+- Normalizes providers around OpenAI semantics
+- Does not implement Anthropic’s native SSE event model
+- Claude Code expects Anthropic-specific streaming events and will not function correctly with OpenAI-style streaming
+
+**Summary**
+
+LiteLLM is an excellent OpenAI-compatible gateway, but it is not designed to support Claude Code, which relies on Anthropic’s native streaming protocol rather than OpenAI’s.
+
+**References**
+- [LiteLLM repository](https://github.com/BerriAI/litellm)
+- [LiteLLM OpenAI compatibility docs](https://docs.litellm.ai/docs/providers)
+- [Anthropic streaming & SSE docs](https://docs.anthropic.com/en/api/messages-streaming)
+
+### OpenRouter
+
+**What it does well**
+- Simple access to many hosted models
+- No local infrastructure required
+
+**Limitations**
+- Fully hosted (not self-hostable)
+- No control over routing, protocol handling, or extensions
+- Not designed to proxy Claude Code traffic locally
+
+**Summary**
+
+OpenRouter is a hosted aggregation service, not a local gateway or protocol bridge. VanDamme targets self-hosted, local, and extensible workflows.
+
+**References**
+- [OpenRouter documentation](https://openrouter.ai/docs)
 
 ### When to Choose Vandamme Proxy
 
@@ -359,8 +403,7 @@ Most alternatives solve adjacent but different problems. The comparisons below a
 - Use Claude Code CLI and want seamless multi-provider support
 - Need flexible per-provider API key passthrough for multi-tenant scenarios
 - Want smart model aliases with substring matching
-- Require Anthropic-format native passthrough (AWS Bedrock, Google Vertex AI)
-- Prefer lightweight design with minimal dependencies
+- Require Anthropic-format native passthrough (Z.Ai, AWS Bedrock, Google Vertex AI)
 - Want extensible middleware for custom request/response logic
 
 **Choose LiteLLM if you:**
