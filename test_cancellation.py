@@ -112,7 +112,7 @@ async def test_server_running():
                 return False
     except Exception as e:
         print(f"❌ Cannot connect to server: {e}")
-        print("💡 Make sure to start the server with: python start_proxy.py")
+        print("💡 Make sure to start the server with: vdm server start")
         return False
 
 
