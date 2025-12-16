@@ -20,10 +20,26 @@ logger = logging.getLogger(__name__)
 
 
 class AliasConfigLoader:
-    """Loads and merges fallback alias configurations, provider settings, and defaults from TOML."""
+    """Loads and merges fallback alias configurations, provider settings, and defaults from TOML.
+
+    Implemented as a singleton to ensure configuration is loaded only once.
+    """
+    _instance = None
+    _initialized = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     def __init__(self) -> None:
+        """Initialize AliasConfigLoader as singleton."""
+        # Only initialize once
+        if self._initialized:
+            return
+
         self._config_cache: dict[str, Any] | None = None
+        self._logged = False  # Track if configuration has been logged
         self._config_paths = [
             # Local override (highest priority)
             Path.cwd() / "vandamme-config.toml",
@@ -32,6 +48,7 @@ class AliasConfigLoader:
             # Package defaults (lowest priority)
             Path(__file__).parent.parent / "config" / "defaults.toml",
         ]
+        self._initialized = True
 
     def load_config(self, force_reload: bool = False) -> dict[str, Any]:
         """Load and merge configurations from all TOML files.
@@ -120,15 +137,17 @@ class AliasConfigLoader:
 
         self._config_cache = merged_config
 
-        # Log provider and alias info
-        providers_config = merged_config.get("providers", {})
-        total_providers = len(providers_config)
-        total_aliases = sum(
-            len(provider.get("aliases", {})) for provider in providers_config.values()
-        )
-        logger.info(
-            f"Loaded configuration: {total_providers} providers with {total_aliases} aliases"
-        )
+        # Log provider and alias info (only once)
+        if not self._logged:
+            providers_config = merged_config.get("providers", {})
+            total_providers = len(providers_config)
+            total_aliases = sum(
+                len(provider.get("aliases", {})) for provider in providers_config.values()
+            )
+            logger.info(
+                f"Loaded configuration: {total_providers} providers with {total_aliases} aliases"
+            )
+            self._logged = True
 
         return self._config_cache
 

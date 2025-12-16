@@ -50,7 +50,13 @@ class AliasManager:
         # Get available providers from ProviderManager for validation
         from src.core.provider_manager import ProviderManager
 
-        provider_manager = ProviderManager()
+        # Get default provider from config to ensure consistency
+        from src.core.alias_config import AliasConfigLoader
+        loader = AliasConfigLoader()
+        defaults = loader.get_defaults()
+        default_provider = defaults.get("default-provider", "openai")
+
+        provider_manager = ProviderManager(default_provider=default_provider, default_provider_source="toml")
         provider_manager.load_provider_configs()
         available_providers = set(provider_manager._configs.keys())
 
@@ -158,7 +164,13 @@ class AliasManager:
         # Get available providers for validation
         from src.core.provider_manager import ProviderManager
 
-        provider_manager = ProviderManager()
+        # Get default provider from config to ensure consistency
+        from src.core.alias_config import AliasConfigLoader
+        loader = AliasConfigLoader()
+        defaults = loader.get_defaults()
+        default_provider = defaults.get("default-provider", "openai")
+
+        provider_manager = ProviderManager(default_provider=default_provider, default_provider_source="toml")
         provider_manager.load_provider_configs()
         available_providers = set(provider_manager._configs.keys())
 

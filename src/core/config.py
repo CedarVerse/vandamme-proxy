@@ -19,6 +19,7 @@ class Config:
 
         if env_default_provider:
             self.default_provider = env_default_provider
+            self.default_provider_source = "env"
             logger.debug(f"Using default provider from environment: {self.default_provider}")
         else:
             # Try to load from TOML configuration
@@ -27,12 +28,20 @@ class Config:
 
                 loader = AliasConfigLoader()
                 defaults = loader.get_defaults()
-                self.default_provider = defaults.get("default-provider", "openai")
-                logger.debug(f"Using default provider from configuration: {self.default_provider}")
+                toml_default = defaults.get("default-provider")
+                if toml_default:
+                    self.default_provider = toml_default
+                    self.default_provider_source = "toml"
+                    logger.debug(f"Using default provider from configuration: {self.default_provider}")
+                else:
+                    self.default_provider = "openai"
+                    self.default_provider_source = "system"
+                    logger.debug(f"Using system default provider: {self.default_provider}")
             except Exception as e:
                 logger.debug(f"Failed to load default provider from config: {e}")
                 self.default_provider = "openai"
-                logger.debug(f"Using hardcoded default provider: {self.default_provider}")
+                self.default_provider_source = "system"
+                logger.debug(f"Using system default provider: {self.default_provider}")
 
         # Get API key for the default provider
         provider_upper = self.default_provider.upper()
@@ -40,11 +49,13 @@ class Config:
         self.openai_api_key = os.environ.get(api_key_env_var)
 
         if not self.openai_api_key:
-            warning_msg = (
-                f"Warning: {api_key_env_var} not found in environment variables. "
-                f"{self.default_provider} provider will not be available."
-            )
-            print(warning_msg)
+            # Only warn about missing API key if the provider was explicitly configured
+            if self.default_provider_source != "system":
+                warning_msg = (
+                    f"Warning: {api_key_env_var} not found in environment variables. "
+                    f"{self.default_provider} provider will not be available."
+                )
+                print(warning_msg)
             # Don't raise error - allow server to start for testing
 
         # Add Anthropic API key for client validation
@@ -117,7 +128,10 @@ class Config:
         if self._provider_manager is None:
             from src.core.provider_manager import ProviderManager
 
-            self._provider_manager = ProviderManager(default_provider=self.default_provider)
+            self._provider_manager = ProviderManager(
+                default_provider=self.default_provider,
+                default_provider_source=getattr(self, 'default_provider_source', 'system')
+            )
             # Auto-load configurations on first access
             self._provider_manager.load_provider_configs()
         return self._provider_manager

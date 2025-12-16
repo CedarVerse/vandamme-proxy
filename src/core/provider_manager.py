@@ -28,8 +28,11 @@ class ProviderLoadResult:
 class ProviderManager:
     """Manages multiple OpenAI clients for different providers"""
 
-    def __init__(self, default_provider: str = "openai") -> None:
-        self.default_provider = default_provider
+    def __init__(self, default_provider: str | None = None,
+                 default_provider_source: str | None = None) -> None:
+        # Use provided default_provider or fall back to "openai" for backward compatibility
+        self.default_provider = default_provider if default_provider is not None else "openai"
+        self.default_provider_source = default_provider_source or "system"
         self._clients: dict[str, OpenAIClient | AnthropicClient] = {}
         self._configs: dict[str, ProviderConfig] = {}
         self._loaded = False
@@ -56,6 +59,35 @@ class ProviderManager:
         }
         return defaults.get(provider_name.lower())
 
+    def _select_default_from_available(self) -> None:
+        """Select a default provider from available providers if original default is not available"""
+        if self.default_provider in self._configs:
+            return  # Original default is available
+
+        if self._configs:
+            # Select the first available provider
+            original_default = self.default_provider
+            self.default_provider = list(self._configs.keys())[0]
+
+            if self.default_provider_source != "system":
+                # User configured a default but it's not available
+                logger.info(
+                    f"Using '{self.default_provider}' as default provider "
+                    f"(configured '{original_default}' not available)"
+                )
+            else:
+                # No user configuration, just pick the first available
+                logger.debug(
+                    f"Using '{self.default_provider}' as default provider "
+                    f"(first available provider)"
+                )
+        else:
+            # No providers available at all
+            raise ValueError(
+                f"No providers configured. Please set at least one provider API key "
+                f"(e.g., {self.default_provider.upper()}_API_KEY)"
+            )
+
     def load_provider_configs(self) -> None:
         """Load all provider configurations from environment variables"""
         if self._loaded:
@@ -64,11 +96,14 @@ class ProviderManager:
         # Reset load results
         self._load_results = []
 
-        # Load default provider (OpenAI)
+        # Load default provider (if API key is available)
         self._load_default_provider()
 
         # Load additional providers from environment
         self._load_additional_providers()
+
+        # Select a default provider from available ones if needed
+        self._select_default_from_available()
 
         self._loaded = True
 
@@ -122,7 +157,21 @@ class ProviderManager:
             )
 
         if not api_key:
-            raise ValueError(f"API key not found for default provider '{self.default_provider}'")
+            # Only warn if this was explicitly configured by the user
+            if self.default_provider_source != "system":
+                logger.warning(
+                    f"Configured default provider '{self.default_provider}' API key not found. "
+                    f"Set {provider_prefix}API_KEY to use it as default. "
+                    "Will use another provider if available."
+                )
+            else:
+                # This is just a system default, no warning needed
+                logger.debug(
+                    f"System default provider '{self.default_provider}' not configured. "
+                    "Will use another provider if available."
+                )
+            # Don't create a config for the default provider if no API key
+            return
 
         config = ProviderConfig(
             name=self.default_provider,
