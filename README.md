@@ -332,10 +332,14 @@ POE_API_KEY=!PASSTHRU
 
 ## 🆚 Vandamme Proxy vs Alternatives
 
-VanDamme Proxy is designed around a specific problem space:
-acting as a multi-provider LLM gateway that is natively compatible with Claude Code and Anthropic’s SSE protocol, while still supporting OpenAI-style APIs and other providers.
+VanDamme Proxy is designed around a specific problem space: acting as a **multi-provider LLM gateway** that is natively compatible with *Claude Code* and Anthropic’s SSE protocol, while still supporting OpenAI-style APIs and other providers.
 
-Most alternatives solve adjacent but different problems. The comparisons below are scoped specifically to Claude Code compatibility and protocol behavior, not general LLM usage.
+Most alternatives solve adjacent but different problems. The comparisons below are scoped specifically to *Claude Code* compatibility and protocol behavior, not general LLM usage.
+
+
+### Claude Code Proxy
+
+
 
 | Feature | Vandamme Proxy | LiteLLM | OpenRouter |
 |---------|---------------|---------|------------|
