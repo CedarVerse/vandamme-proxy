@@ -21,7 +21,11 @@ Route requests to any LLM provider with simple model prefixes
 ```shell
 # Install and setup in seconds
 pip install vandamme-proxy
-# Export your API key
+
+# Configure multiple API keys for production resilience
+export OPENAI_API_KEY="sk-key1 sk-key2 sk-key3"
+
+# Start the server
 vdm server start
 
 ```
@@ -59,7 +63,9 @@ A lightweight, production-ready proxy with enterprise features:
 - **Dynamic Provider Selection**: Switch providers per-request without configuration changes
 
 ### 🔒 Security & Multi-Tenancy
+- **Multi-API Key Support**: Configure multiple keys per provider with automatic round-robin rotation
 - **API Key Passthrough**: Set `{PROVIDER}_API_KEY=!PASSTHRU` to enable client-provided keys
+- **Intelligent Failover**: Automatic key rotation on authentication failures (401/403/429)
 - **Mixed Authentication**: Static keys + passthrough simultaneously per-provider
 - **Isolated Configuration**: Per-provider settings, custom headers, API versions
 
@@ -416,6 +422,27 @@ OpenRouter is a hosted aggregation service, not a local gateway or protocol brid
 - Want access to exclusive model partnerships and providers
 - Don't require self-hosted infrastructure
 
+## 🔑 Multi-API Key Support
+
+For production deployments, configure multiple API keys per provider for automatic load balancing and failover:
+
+```bash
+# Multiple keys for automatic round-robin rotation
+export OPENAI_API_KEY="sk-proj-key1 sk-proj-key2 sk-proj-key3"
+export ANTHROPIC_API_KEY="sk-ant-prod1 sk-ant-prod2 sk-ant-backup"
+
+# Start with high availability
+vdm server start
+```
+
+**Key Features:**
+- ✅ **Round-Robin Load Balancing** - Distribute requests across keys
+- ✅ **Automatic Failover** - Skip failed keys (401/403/429 errors)
+- ✅ **Thread-Safe Operation** - Process-global rotation state
+- ✅ **Backward Compatible** - Single-key configurations still work
+
+📖 **[Learn more about multi-API key configuration](docs/multi-api-keys.md)**
+
 ---
 
 ## 📚 Documentation
@@ -426,6 +453,7 @@ OpenRouter is a hosted aggregation service, not a local gateway or protocol brid
 - [**Development Workflows**](docs/makefile-workflows.md) - Makefile targets and best practices
 
 ### 🌐 Feature Guides
+- [**Multi-API Key Support**](docs/multi-api-keys.md) - Load balancing and automatic failover
 - [**Multi-Provider Routing**](docs/provider-routing-guide.md) - Complete routing and configuration guide
 - [**Smart Model Aliases**](docs/model-aliases.md) - Alias configuration and matching rules
 - [**Fallback Model Aliases**](docs/fallback-aliases.md) - Automatic defaults for special model names

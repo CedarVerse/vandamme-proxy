@@ -210,6 +210,9 @@ make help
    - **Provider Authentication**: Each provider has its own API key (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` for provider)
      - These are separate from proxy authentication
      - Used to authenticate with the actual LLM providers
+     - **Multi-API Key Support**: Configure multiple keys per provider with automatic round-robin rotation
+     - **Automatic Failover**: Keys rotate on authentication failures (401/403/429)
+     - **Thread-Safe Operation**: Process-global rotation state with asyncio locks
 
 6. **Configuration**:
    - `src/core/config.py` - Central configuration management
@@ -262,7 +265,9 @@ Environment variables prefixed with `CUSTOM_HEADER_` are automatically converted
 ## Environment Variables
 
 Required (at least one provider):
-- `{PROVIDER}_API_KEY` - API key for any configured provider (e.g., `POE_API_KEY`, `AZURE_API_KEY`)
+- `{PROVIDER}_API_KEY` - API key(s) for any configured provider (e.g., `POE_API_KEY`, `AZURE_API_KEY`)
+  - Supports single key: `OPENAI_API_KEY=sk-...`
+  - Supports multiple keys: `OPENAI_API_KEY="sk-key1 sk-key2 sk-key3"` (round-robin rotation)
 
 Provider Configuration:
 - `{PROVIDER}_API_FORMAT` - API format: "openai" (default) or "anthropic"
@@ -275,12 +280,18 @@ Model Aliases:
 
 Examples:
 ```bash
-# OpenAI provider (default format)
+# OpenAI provider (default format) - single key
 OPENAI_API_KEY=sk-...
+
+# OpenAI provider with multiple keys for load balancing and failover
+OPENAI_API_KEY="sk-key1 sk-key2 sk-key3"
 
 # Anthropic provider (direct passthrough)
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_BASE_URL=https://api.anthropic.com
+
+# Multiple Anthropic keys with automatic rotation on failures
+ANTHROPIC_API_KEY="sk-ant-primary sk-ant-secondary sk-ant-backup"
 ANTHROPIC_API_FORMAT=anthropic
 
 # AWS Bedrock (Anthropic-compatible)
@@ -341,6 +352,36 @@ ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY= claude
 
 # Use Claude Code with proxy (if ANTHROPIC_API_KEY is set in proxy)
 ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY="exact-matching-key" claude
+```
+
+### Configuring Multiple API Keys
+
+For production deployments with high availability:
+
+```bash
+# Configure multiple keys per provider
+export OPENAI_API_KEY="sk-prod-key1 sk-prod-key2 sk-backup"
+export ANTHROPIC_API_KEY="sk-ant-primary sk-ant-secondary"
+export POE_API_KEY="poe-key-1 poe-key-2 poe-key-3"
+
+# Keys automatically rotate in round-robin order
+# Failed keys (401/403/429) are skipped with immediate failover
+
+# Start with high availability
+vdm server start
+```
+
+### Monitoring Key Rotation
+
+```bash
+# Enable debug logging to see key rotation
+LOG_LEVEL=DEBUG vdm server start
+
+# Logs show:
+# - API key hashes (first 8 characters)
+# - Which key was used for each request
+# - When rotation occurs
+# - Authentication failure details
 ```
 
 ### Using Anthropic-Compatible Providers

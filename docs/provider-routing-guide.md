@@ -249,12 +249,55 @@ Request went to wrong provider
 3. **Configure Monitoring**: Set up provider-specific metrics
 4. **Document Setup**: Create your provider mapping documentation
 
+### Multi-Key Providers
+
+For production deployments, configure multiple API keys per provider for automatic load balancing and failover:
+
+```bash
+# Multiple OpenAI keys for load balancing
+OPENAI_API_KEY="sk-openai-1 sk-openai-2 sk-openai-3"
+
+# Multiple Anthropic keys with failover
+ANTHROPIC_API_KEY="sk-ant-1 sk-ant-2"
+
+# Single key still works
+POE_API_KEY="your-poe-key"
+```
+
+**Key Rotation Behavior:**
+- Round-robin selection across configured keys
+- Automatic failover on authentication failures (401/403/429)
+- Per-provider rotation state tracking
+- Thread-safe operation with global locks
+- Attempts all keys before returning an error
+
+**Example Production Setup:**
+```bash
+# High-availability configuration
+OPENAI_API_KEY="sk-prod-key1 sk-prod-key2 sk-backup"
+ANTHROPIC_API_KEY="sk-ant-primary sk-ant-secondary"
+AZURE_API_KEY="az-key-1 az-key-2"
+
+# Each provider handles its own key rotation independently
+vdm server start
+```
+
+**Monitoring Key Rotation:**
+Enable debug logging to track key rotation:
+```bash
+LOG_LEVEL=DEBUG vdm server start
+# Logs show API key hashes and rotation events
+```
+
+📖 **[Learn more about multi-API key configuration](multi-api-keys.md)**
+
 ## Conclusion
 
 Vandamme Proxy transforms Claude Code from a single-provider tool into a flexible, multi-provider gateway. This enables:
 
 - **Cost Optimization**: Use the right provider for each task
 - **Redundancy**: Multiple providers for reliability
+- **High Availability**: Multiple keys per provider with automatic failover
 - **Flexibility**: Mix and match providers as needed
 - **Control**: Fine-grained routing and configuration
 

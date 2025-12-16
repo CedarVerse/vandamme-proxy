@@ -114,6 +114,77 @@ The sentinel-based approach was chosen for Vandamme Proxy because it:
 4. **Enables Gradual Migration**: Providers can transition independently
 5. **Provides Clear Intent**: Configuration immediately shows passthrough behavior
 
+## Configuration Compatibilities
+
+### Multi-Key Support
+
+The proxy supports multiple API keys per provider for load balancing and failover, but with some limitations:
+
+#### Static Multi-Key Configuration ✅
+Multiple static API keys are fully supported:
+```bash
+# Multiple keys with automatic round-robin rotation
+OPENAI_API_KEY="sk-key1 sk-key2 sk-key3"
+
+# Keys rotate automatically on failures (401/403/429)
+# Load balancing across all configured keys
+```
+
+#### Passthrough Mode Limitations ⚠️
+Passthrough mode has these constraints:
+- **Single Key Only**: Only one passthrough key per request
+- **No Load Balancing**: Client provides one key per request
+- **No Rotation**: Failed requests return errors to client
+
+```bash
+# Passthrough mode (client provides key)
+POE_API_KEY=!PASSTHRU
+
+# Each request uses the client's single key
+# No automatic rotation or load balancing
+```
+
+#### Mixed Mode Restrictions 🚫
+You cannot mix static keys with passthrough for the same provider:
+
+```bash
+# ✅ Valid: Multiple static keys
+OPENAI_API_KEY="sk-key1 sk-key2 sk-key3"
+
+# ✅ Valid: Passthrough mode
+POE_API_KEY=!PASSTHRU
+
+# ❌ Invalid: Mixed static and passthrough (will raise error)
+ANTHROPIC_API_KEY="!PASSTHRU sk-ant-key"  # Configuration Error!
+```
+
+**Error Message:**
+```
+Configuration Error: Cannot mix !PASSTHRU with static API keys for provider 'anthropic'
+```
+
+### Recommended Patterns
+
+#### Production High Availability
+```bash
+# Multiple static keys for resilience
+OPENAI_API_KEY="sk-prod1 sk-prod2 sk-backup"
+ANTHROPIC_API_KEY="sk-ant1 sk-ant2"
+
+# Passthrough for client autonomy
+POE_API_KEY=!PASSTHRU
+```
+
+#### Development
+```bash
+# Single keys for simplicity
+OPENAI_API_KEY="sk-dev-key"
+POE_API_KEY="your-poe-key"
+
+# Or passthrough for testing
+ANTHROPIC_API_KEY=!PASSTHRU
+```
+
 ## Error Handling
 
 If a passthrough provider is configured but the client doesn't provide an API key:
@@ -123,6 +194,17 @@ If a passthrough provider is configured but the client doesn't provide an API ke
   "error": {
     "type": "api_error",
     "message": "Provider 'openai' requires API key passthrough, but no client API key was provided"
+  }
+}
+```
+
+For configuration errors (mixed static/passthrough):
+```json
+{
+  "type": "error",
+  "error": {
+    "type": "configuration_error",
+    "message": "Cannot mix !PASSTHRU with static API keys for provider 'anthropic'"
   }
 }
 ```
