@@ -195,6 +195,13 @@ async def create_message(  # type: ignore[no-untyped-def]
             # Get the appropriate client for this provider
             openai_client = config.provider_manager.get_client(provider_name, client_api_key)
 
+            # For non-passthrough providers, select a provider API key (supports multi-key rotation)
+            provider_api_key: str | None = None
+            if provider_config and not provider_config.uses_passthrough:
+                provider_api_key = await config.provider_manager.get_next_provider_api_key(
+                    provider_name
+                )
+
             # Apply middleware to request (e.g., inject thought signatures)
             if hasattr(config.provider_manager, "middleware_chain"):
                 request_context = RequestContext(
@@ -251,13 +258,35 @@ async def create_message(  # type: ignore[no-untyped-def]
 
                     try:
                         # Direct streaming with passthrough
+                        async def _next_provider_key(exclude: set[str]) -> str:
+                            if provider_config is None:
+                                raise HTTPException(
+                                    status_code=500, detail="Provider config missing"
+                                )
+                            keys = provider_config.get_api_keys()
+                            if len(exclude) >= len(keys):
+                                raise HTTPException(
+                                    status_code=429, detail="All provider API keys exhausted"
+                                )
+                            while True:
+                                k = await config.provider_manager.get_next_provider_api_key(
+                                    provider_name
+                                )
+                                if k not in exclude:
+                                    return k
+
                         anthropic_stream = openai_client.create_chat_completion_stream(
                             claude_request_dict,
                             request_id,
                             api_key=(
                                 client_api_key
                                 if provider_config and provider_config.uses_passthrough
-                                else None
+                                else provider_api_key
+                            ),
+                            next_api_key=(
+                                None
+                                if provider_config and provider_config.uses_passthrough
+                                else _next_provider_key
                             ),
                         )
 
@@ -304,13 +333,36 @@ async def create_message(  # type: ignore[no-untyped-def]
                 else:
                     # OpenAI format streaming (existing logic)
                     try:
+
+                        async def _next_provider_key(exclude: set[str]) -> str:
+                            if provider_config is None:
+                                raise HTTPException(
+                                    status_code=500, detail="Provider config missing"
+                                )
+                            keys = provider_config.get_api_keys()
+                            if len(exclude) >= len(keys):
+                                raise HTTPException(
+                                    status_code=429, detail="All provider API keys exhausted"
+                                )
+                            while True:
+                                k = await config.provider_manager.get_next_provider_api_key(
+                                    provider_name
+                                )
+                                if k not in exclude:
+                                    return k
+
                         openai_stream = openai_client.create_chat_completion_stream(
                             openai_request,
                             request_id,
                             api_key=(
                                 client_api_key
                                 if provider_config and provider_config.uses_passthrough
-                                else None
+                                else provider_api_key
+                            ),
+                            next_api_key=(
+                                None
+                                if provider_config and provider_config.uses_passthrough
+                                else _next_provider_key
                             ),
                         )
 
@@ -381,13 +433,33 @@ async def create_message(  # type: ignore[no-untyped-def]
                     claude_request_dict["model"] = resolved_model  # Use stripped model name
 
                     # Make API call
+                    async def _next_provider_key(exclude: set[str]) -> str:
+                        if provider_config is None:
+                            raise HTTPException(status_code=500, detail="Provider config missing")
+                        keys = provider_config.get_api_keys()
+                        if len(exclude) >= len(keys):
+                            raise HTTPException(
+                                status_code=429, detail="All provider API keys exhausted"
+                            )
+                        while True:
+                            k = await config.provider_manager.get_next_provider_api_key(
+                                provider_name
+                            )
+                            if k not in exclude:
+                                return k
+
                     anthropic_response = await openai_client.create_chat_completion(
                         claude_request_dict,
                         request_id,
                         api_key=(
                             client_api_key
                             if provider_config and provider_config.uses_passthrough
-                            else None
+                            else provider_api_key
+                        ),
+                        next_api_key=(
+                            None
+                            if provider_config and provider_config.uses_passthrough
+                            else _next_provider_key
                         ),
                     )
 
@@ -426,13 +498,33 @@ async def create_message(  # type: ignore[no-untyped-def]
                     return JSONResponse(status_code=200, content=anthropic_response)
                 else:
                     # OpenAI format path (existing logic)
+                    async def _next_provider_key(exclude: set[str]) -> str:
+                        if provider_config is None:
+                            raise HTTPException(status_code=500, detail="Provider config missing")
+                        keys = provider_config.get_api_keys()
+                        if len(exclude) >= len(keys):
+                            raise HTTPException(
+                                status_code=429, detail="All provider API keys exhausted"
+                            )
+                        while True:
+                            k = await config.provider_manager.get_next_provider_api_key(
+                                provider_name
+                            )
+                            if k not in exclude:
+                                return k
+
                     openai_response = await openai_client.create_chat_completion(
                         openai_request,
                         request_id,
                         api_key=(
                             client_api_key
                             if provider_config and provider_config.uses_passthrough
-                            else None
+                            else provider_api_key
+                        ),
+                        next_api_key=(
+                            None
+                            if provider_config and provider_config.uses_passthrough
+                            else _next_provider_key
                         ),
                     )
 

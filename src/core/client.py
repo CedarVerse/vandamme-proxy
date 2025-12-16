@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import json
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, cast
 
 from fastapi import HTTPException
@@ -10,6 +10,17 @@ from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import APIError, AuthenticationError, BadRequestError, RateLimitError
 
 from src.core.logging import LOG_REQUEST_METRICS, conversation_logger, request_tracker
+
+NextApiKey = Callable[[set[str]], Awaitable[str]]
+
+
+def _is_key_rotation_error(exc: HTTPException) -> bool:
+    # HTTP status based triggers
+    if exc.status_code in (401, 403, 429):
+        return True
+    # Content based triggers (quota signals often surface as 400/402/403 depending on provider)
+    detail = str(exc.detail).lower()
+    return "insufficient_quota" in detail
 
 
 class OpenAIClient:
@@ -73,37 +84,32 @@ class OpenAIClient:
         request: dict[str, Any],
         request_id: str | None = None,
         api_key: str | None = None,  # Override API key for this request
+        next_api_key: NextApiKey | None = None,  # async callable to rotate provider keys
     ) -> dict[str, Any]:
         """Send chat completion to OpenAI API with cancellation support."""
 
         api_start = time.time()
-
-        # Use provided API key or fall back to default
-        effective_api_key = api_key or self.default_api_key
-
-        if not effective_api_key:
-            raise ValueError("No API key available for request")
-
-        # Get client for this specific API key
-        client = self._get_client(effective_api_key)
 
         # Get request metrics for updating
         metrics = (
             request_tracker.get_request(request_id) if LOG_REQUEST_METRICS and request_id else None
         )
 
-        # Create cancellation token if request_id provided
-        if request_id:
-            cancel_event = asyncio.Event()
-            self.active_requests[request_id] = cancel_event
+        async def attempt_with_key(effective_api_key: str) -> dict[str, Any]:
+            # Get client for this specific API key
+            client = self._get_client(effective_api_key)
 
-        # Log API call start
-        if LOG_REQUEST_METRICS:
-            model_name = request.get("model", "unknown")
-            timeout = client.timeout
-            conversation_logger.debug(f"📡 API CALL | Model: {model_name} | Timeout: {timeout}")
+            # Create cancellation token if request_id provided
+            if request_id:
+                cancel_event = asyncio.Event()
+                self.active_requests[request_id] = cancel_event
 
-        try:
+            # Log API call start
+            if LOG_REQUEST_METRICS:
+                model_name = request.get("model", "unknown")
+                timeout = client.timeout
+                conversation_logger.debug(f"📡 API CALL | Model: {model_name} | Timeout: {timeout}")
+
             # Create task that can be cancelled
             completion_task = asyncio.create_task(client.chat.completions.create(**request))
 
@@ -151,45 +157,68 @@ class OpenAIClient:
 
             return cast(dict[str, Any], response_dict)
 
-        except AuthenticationError as e:
-            if LOG_REQUEST_METRICS and metrics:
-                metrics.error = "Authentication failed"
-                metrics.error_type = "auth_error"
-            raise HTTPException(status_code=401, detail=self.classify_openai_error(str(e))) from e
-        except RateLimitError as e:
-            if LOG_REQUEST_METRICS and metrics:
-                metrics.error = "Rate limit exceeded"
-                metrics.error_type = "rate_limit"
-            raise HTTPException(status_code=429, detail=self.classify_openai_error(str(e))) from e
-        except BadRequestError as e:
-            if LOG_REQUEST_METRICS and metrics:
-                metrics.error = "Bad request"
-                metrics.error_type = "bad_request"
-            raise HTTPException(status_code=400, detail=self.classify_openai_error(str(e))) from e
-        except APIError as e:
-            if LOG_REQUEST_METRICS and metrics:
-                metrics.error = "OpenAI API error"
-                metrics.error_type = "api_error"
-            status_code = getattr(e, "status_code", 500)
-            raise HTTPException(
-                status_code=status_code, detail=self.classify_openai_error(str(e))
-            ) from e
-        except Exception as e:
-            if LOG_REQUEST_METRICS and metrics:
-                metrics.error = f"Unexpected error: {str(e)}"
-                metrics.error_type = "unexpected_error"
-            raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}") from e
+        # Use provided API key or fall back to default
+        effective_api_key = api_key or self.default_api_key
 
-        finally:
-            # Clean up active request tracking
-            if request_id and request_id in self.active_requests:
-                del self.active_requests[request_id]
+        if not effective_api_key:
+            raise ValueError("No API key available for request")
+
+        attempted_keys: set[str] = set()
+        while True:
+            attempted_keys.add(effective_api_key)
+            try:
+                return await attempt_with_key(effective_api_key)
+            except AuthenticationError as e:
+                if LOG_REQUEST_METRICS and metrics:
+                    metrics.error = "Authentication failed"
+                    metrics.error_type = "auth_error"
+                exc = HTTPException(status_code=401, detail=self.classify_openai_error(str(e)))
+            except RateLimitError as e:
+                if LOG_REQUEST_METRICS and metrics:
+                    metrics.error = "Rate limit exceeded"
+                    metrics.error_type = "rate_limit"
+                exc = HTTPException(status_code=429, detail=self.classify_openai_error(str(e)))
+            except BadRequestError as e:
+                if LOG_REQUEST_METRICS and metrics:
+                    metrics.error = "Bad request"
+                    metrics.error_type = "bad_request"
+                exc = HTTPException(status_code=400, detail=self.classify_openai_error(str(e)))
+            except APIError as e:
+                if LOG_REQUEST_METRICS and metrics:
+                    metrics.error = "OpenAI API error"
+                    metrics.error_type = "api_error"
+                status_code = getattr(e, "status_code", 500)
+                exc = HTTPException(
+                    status_code=status_code, detail=self.classify_openai_error(str(e))
+                )
+            except HTTPException as e:
+                exc = e
+            except Exception as e:
+                if LOG_REQUEST_METRICS and metrics:
+                    metrics.error = f"Unexpected error: {str(e)}"
+                    metrics.error_type = "unexpected_error"
+                raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}") from e
+            finally:
+                if request_id and request_id in self.active_requests:
+                    del self.active_requests[request_id]
+
+            if next_api_key is None or not _is_key_rotation_error(exc):
+                raise exc
+
+            effective_api_key = await next_api_key(attempted_keys)
+
+            if effective_api_key in attempted_keys:
+                # next_api_key should not return an already-attempted key, but guard anyway.
+                raise exc
+
+            continue
 
     async def create_chat_completion_stream(
         self,
         request: dict[str, Any],
         request_id: str | None = None,
         api_key: str | None = None,  # Override API key for this request
+        next_api_key: NextApiKey | None = None,  # async callable to rotate provider keys
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to OpenAI API with cancellation support."""
 
@@ -199,59 +228,78 @@ class OpenAIClient:
         if not effective_api_key:
             raise ValueError("No API key available for request")
 
-        # Get client for this specific API key
-        client = self._get_client(effective_api_key)
+        attempted_keys: set[str] = set()
 
-        # Create cancellation token if request_id provided
-        if request_id:
-            cancel_event = asyncio.Event()
-            self.active_requests[request_id] = cancel_event
+        while True:
+            attempted_keys.add(effective_api_key)
 
-        try:
-            # Ensure stream is enabled
-            request["stream"] = True
-            if "stream_options" not in request:
-                request["stream_options"] = {}
-            request["stream_options"]["include_usage"] = True
+            # Get client for this specific API key
+            client = self._get_client(effective_api_key)
 
-            # Create the streaming completion
-            streaming_completion = await client.chat.completions.create(**request)
+            # Create cancellation token if request_id provided
+            if request_id:
+                cancel_event = asyncio.Event()
+                self.active_requests[request_id] = cancel_event
 
-            async for chunk in streaming_completion:
-                # Check for cancellation before yielding each chunk
-                if (
-                    request_id
-                    and request_id in self.active_requests
-                    and self.active_requests[request_id].is_set()
-                ):
-                    raise HTTPException(status_code=499, detail="Request cancelled by client")
+            try:
+                # Ensure stream is enabled
+                request["stream"] = True
+                if "stream_options" not in request:
+                    request["stream_options"] = {}
+                request["stream_options"]["include_usage"] = True
 
-                # Convert chunk to SSE format matching original HTTP client format
-                chunk_dict = chunk.model_dump()
-                chunk_json = json.dumps(chunk_dict, ensure_ascii=False)
-                yield f"data: {chunk_json}"
+                # Create the streaming completion
+                streaming_completion = await client.chat.completions.create(**request)
 
-            # Signal end of stream
-            yield "data: [DONE]"
+                async for chunk in streaming_completion:
+                    # Check for cancellation before yielding each chunk
+                    if (
+                        request_id
+                        and request_id in self.active_requests
+                        and self.active_requests[request_id].is_set()
+                    ):
+                        raise HTTPException(status_code=499, detail="Request cancelled by client")
 
-        except AuthenticationError as e:
-            raise HTTPException(status_code=401, detail=self.classify_openai_error(str(e))) from e
-        except RateLimitError as e:
-            raise HTTPException(status_code=429, detail=self.classify_openai_error(str(e))) from e
-        except BadRequestError as e:
-            raise HTTPException(status_code=400, detail=self.classify_openai_error(str(e))) from e
-        except APIError as e:
-            status_code = getattr(e, "status_code", 500)
-            raise HTTPException(
-                status_code=status_code, detail=self.classify_openai_error(str(e))
-            ) from e
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}") from e
+                    # Convert chunk to SSE format matching original HTTP client format
+                    chunk_dict = chunk.model_dump()
+                    chunk_json = json.dumps(chunk_dict, ensure_ascii=False)
+                    yield f"data: {chunk_json}"
 
-        finally:
-            # Clean up active request tracking
-            if request_id and request_id in self.active_requests:
-                del self.active_requests[request_id]
+                # Success: exit rotation loop
+                yield "data: [DONE]"
+                return
+
+            except AuthenticationError as e:
+                exc = HTTPException(status_code=401, detail=self.classify_openai_error(str(e)))
+            except RateLimitError as e:
+                exc = HTTPException(status_code=429, detail=self.classify_openai_error(str(e)))
+            except BadRequestError as e:
+                exc = HTTPException(status_code=400, detail=self.classify_openai_error(str(e)))
+            except APIError as e:
+                status_code = getattr(e, "status_code", 500)
+                exc = HTTPException(
+                    status_code=status_code, detail=self.classify_openai_error(str(e))
+                )
+            except HTTPException as e:
+                exc = e
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}") from e
+            finally:
+                # Clean up active request tracking
+                if request_id and request_id in self.active_requests:
+                    del self.active_requests[request_id]
+
+            if next_api_key is None or not _is_key_rotation_error(exc):
+                raise exc
+
+            effective_api_key = await next_api_key(attempted_keys)
+            if effective_api_key in attempted_keys:
+                raise exc
+
+            continue
+
+        # unreachable
+        raise HTTPException(status_code=500, detail="Unexpected streaming control flow")
 
     def classify_openai_error(self, error_detail: Any) -> str:
         """Provide specific error guidance for common OpenAI API issues."""

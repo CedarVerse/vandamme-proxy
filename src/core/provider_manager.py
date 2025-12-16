@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 import os
@@ -38,6 +39,10 @@ class ProviderManager:
         self._configs: dict[str, ProviderConfig] = {}
         self._loaded = False
         self._load_results: list[ProviderLoadResult] = []
+
+        # Process-global API key rotation state (per provider)
+        self._api_key_locks: dict[str, asyncio.Lock] = {}
+        self._api_key_indices: dict[str, int] = {}
 
         # Initialize middleware chain
         self.middleware_chain = MiddlewareChain()
@@ -174,9 +179,20 @@ class ProviderManager:
             # Don't create a config for the default provider if no API key
             return
 
+        # Support multiple static keys, whitespace-separated.
+        api_keys = api_key.split()
+        if len(api_keys) == 0:
+            return
+        if len(api_keys) > 1 and PASSTHROUGH_SENTINEL in api_keys:
+            raise ValueError(
+                f"Provider '{self.default_provider}' has mixed configuration: "
+                f"'!PASSTHRU' cannot be combined with static keys"
+            )
+
         config = ProviderConfig(
             name=self.default_provider,
-            api_key=api_key,
+            api_key=api_keys[0],
+            api_keys=api_keys if len(api_keys) > 1 else None,
             base_url=base_url or "https://api.openai.com/v1",
             api_version=api_version,
             timeout=int(os.environ.get("REQUEST_TIMEOUT", "90")),
@@ -231,10 +247,22 @@ class ProviderManager:
         toml_config = self._load_provider_toml_config(provider_name)
 
         # Then override with environment variables
-        api_key = os.environ.get(f"{provider_upper}_API_KEY") or toml_config.get("api-key")
-        if not api_key:
+        raw_api_key = os.environ.get(f"{provider_upper}_API_KEY") or toml_config.get("api-key")
+        if not raw_api_key:
             # Skip entirely if no API key in either source
             return
+
+        # Support multiple static keys, whitespace-separated.
+        # Example: OPENAI_API_KEY="key1 key2 key3"
+        api_keys = raw_api_key.split()
+        if len(api_keys) == 0:
+            return
+        if len(api_keys) > 1 and PASSTHROUGH_SENTINEL in api_keys:
+            raise ValueError(
+                f"Provider '{provider_name}' has mixed configuration: "
+                f"'!PASSTHRU' cannot be combined with static keys"
+            )
+        api_key = api_keys[0]
 
         # Load base URL with precedence: env > TOML > default
         base_url = os.environ.get(f"{provider_upper}_BASE_URL") or toml_config.get("base-url")
@@ -275,6 +303,7 @@ class ProviderManager:
         config = ProviderConfig(
             name=provider_name,
             api_key=api_key,
+            api_keys=api_keys if len(api_keys) > 1 else None,
             base_url=base_url,
             api_version=os.environ.get(f"{provider_upper}_API_VERSION")
             or toml_config.get("api-version"),
@@ -294,12 +323,25 @@ class ProviderManager:
         toml_config = self._load_provider_toml_config(provider_name)
 
         # API key is required (from env or TOML)
-        api_key = os.environ.get(f"{provider_upper}_API_KEY") or toml_config.get("api-key")
-        if not api_key:
+        raw_api_key = os.environ.get(f"{provider_upper}_API_KEY") or toml_config.get("api-key")
+        if not raw_api_key:
             raise ValueError(
                 f"API key not found for provider '{provider_name}'. "
                 f"Please set {provider_upper}_API_KEY environment variable."
             )
+
+        api_keys = raw_api_key.split()
+        if len(api_keys) == 0:
+            raise ValueError(
+                f"API key not found for provider '{provider_name}'. "
+                f"Please set {provider_upper}_API_KEY environment variable."
+            )
+        if len(api_keys) > 1 and PASSTHROUGH_SENTINEL in api_keys:
+            raise ValueError(
+                f"Provider '{provider_name}' has mixed configuration: "
+                f"'!PASSTHRU' cannot be combined with static keys"
+            )
+        api_key = api_keys[0]
 
         # Base URL with precedence: env > TOML > default
         base_url = os.environ.get(f"{provider_upper}_BASE_URL") or toml_config.get("base-url")
@@ -324,6 +366,7 @@ class ProviderManager:
         config = ProviderConfig(
             name=provider_name,
             api_key=api_key,
+            api_keys=api_keys if len(api_keys) > 1 else None,
             base_url=base_url,
             api_version=os.environ.get(f"{provider_upper}_API_VERSION")
             or toml_config.get("api-version"),
@@ -423,6 +466,30 @@ class ProviderManager:
                 )
 
         return self._clients[cache_key]
+
+    async def get_next_provider_api_key(self, provider_name: str) -> str:
+        """Return the next provider API key using process-global round-robin.
+
+        Only valid for providers configured with static keys (not passthrough).
+        """
+        if not self._loaded:
+            self.load_provider_configs()
+
+        config = self._configs.get(provider_name)
+        if config is None:
+            raise ValueError(f"Provider '{provider_name}' not configured")
+        if config.uses_passthrough:
+            raise ValueError(
+                f"Provider '{provider_name}' is configured for passthrough and has no static keys"
+            )
+
+        keys = config.get_api_keys()
+        lock = self._api_key_locks.setdefault(provider_name, asyncio.Lock())
+        async with lock:
+            idx = self._api_key_indices.get(provider_name, 0)
+            key = keys[idx % len(keys)]
+            self._api_key_indices[provider_name] = (idx + 1) % len(keys)
+            return key
 
     def get_provider_config(self, provider_name: str) -> ProviderConfig | None:
         """Get configuration for a specific provider"""
