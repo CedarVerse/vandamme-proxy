@@ -81,6 +81,36 @@ async def validate_api_key(
     return client_api_key
 
 
+def _is_error_response(response: dict) -> bool:
+    """
+    Detect if a provider response is an error format.
+
+    Checks for common error response patterns across different providers:
+    - Explicit success: false flag
+    - Error code with missing choices
+    - Error field presence
+
+    Args:
+        response: The response dictionary from a provider
+
+    Returns:
+        True if this appears to be an error response
+    """
+    if not isinstance(response, dict):
+        return False
+
+    # Check explicit error indicators
+    if response.get("success") is False:
+        return True
+
+    # Check for error code with missing choices
+    if "code" in response and not response.get("choices"):
+        return True
+
+    # Check for error field
+    return "error" in response
+
+
 @router.post("/v1/messages")
 async def create_message(  # type: ignore[no-untyped-def]
     request: ClaudeMessagesRequest,
@@ -426,6 +456,22 @@ async def create_message(  # type: ignore[no-untyped-def]
                         )
                         openai_response = processed_response.response
 
+                    # Add error detection before processing
+                    if _is_error_response(openai_response):
+                        error_msg = openai_response.get("msg", "Provider returned error response")
+                        error_code = openai_response.get("code", 500)
+                        logger.error(
+                            f"[{request_id}] Provider {provider_name} returned error: {error_msg}"
+                        )
+                        response_keys = list(openai_response.keys())
+                        logger.error(f"[{request_id}] Error response structure: {response_keys}")
+                        if LOG_REQUEST_METRICS:
+                            logger.error(f"[{request_id}] Full error response: {openai_response}")
+                        raise HTTPException(
+                            status_code=error_code if isinstance(error_code, int) else 500,
+                            detail=f"Provider error: {error_msg}",
+                        )
+
                     # Add defensive check
                     if openai_response is None:
                         logger.error(f"Received None response from provider {provider_name}")
@@ -452,7 +498,8 @@ async def create_message(  # type: ignore[no-untyped-def]
                         output_tokens = usage.get("completion_tokens", 0)
 
                     # Count tool calls in response (OpenAI function calls)
-                    response_message = openai_response.get("choices", [{}])[0].get("message", {})
+                    choices = openai_response.get("choices") or []
+                    response_message = choices[0].get("message", {}) if choices else {}
                     tool_calls = response_message.get("tool_calls", []) or []
                     tool_call_count = len(tool_calls)
 
