@@ -130,7 +130,10 @@ class RequestMetrics:
 
 @dataclass
 class ProviderModelMetrics:
-    """Metrics for a specific provider/model combination"""
+    """Metrics for a specific provider/model combination.
+
+    Stores overall totals plus a streaming/non-streaming split.
+    """
 
     total_requests: int = 0
     total_errors: int = 0
@@ -142,6 +145,28 @@ class ProviderModelMetrics:
     total_tool_uses: int = 0
     total_tool_results: int = 0
     total_tool_calls: int = 0
+
+    streaming_requests: int = 0
+    streaming_errors: int = 0
+    streaming_input_tokens: int = 0
+    streaming_output_tokens: int = 0
+    streaming_cache_read_tokens: int = 0
+    streaming_cache_creation_tokens: int = 0
+    streaming_duration_ms: float = 0
+    streaming_tool_uses: int = 0
+    streaming_tool_results: int = 0
+    streaming_tool_calls: int = 0
+
+    non_streaming_requests: int = 0
+    non_streaming_errors: int = 0
+    non_streaming_input_tokens: int = 0
+    non_streaming_output_tokens: int = 0
+    non_streaming_cache_read_tokens: int = 0
+    non_streaming_cache_creation_tokens: int = 0
+    non_streaming_duration_ms: float = 0
+    non_streaming_tool_uses: int = 0
+    non_streaming_tool_results: int = 0
+    non_streaming_tool_calls: int = 0
 
 
 @dataclass
@@ -207,6 +232,32 @@ class SummaryMetrics:
         if metrics.error:
             pm_metrics.total_errors += 1
 
+        # Split metrics by streaming vs non-streaming
+        if metrics.is_streaming:
+            pm_metrics.streaming_requests += 1
+            pm_metrics.streaming_input_tokens += metrics.input_tokens
+            pm_metrics.streaming_output_tokens += metrics.output_tokens
+            pm_metrics.streaming_cache_read_tokens += metrics.cache_read_tokens
+            pm_metrics.streaming_cache_creation_tokens += metrics.cache_creation_tokens
+            pm_metrics.streaming_duration_ms += metrics.duration_ms
+            pm_metrics.streaming_tool_uses += metrics.tool_use_count
+            pm_metrics.streaming_tool_results += metrics.tool_result_count
+            pm_metrics.streaming_tool_calls += metrics.tool_call_count
+            if metrics.error:
+                pm_metrics.streaming_errors += 1
+        else:
+            pm_metrics.non_streaming_requests += 1
+            pm_metrics.non_streaming_input_tokens += metrics.input_tokens
+            pm_metrics.non_streaming_output_tokens += metrics.output_tokens
+            pm_metrics.non_streaming_cache_read_tokens += metrics.cache_read_tokens
+            pm_metrics.non_streaming_cache_creation_tokens += metrics.cache_creation_tokens
+            pm_metrics.non_streaming_duration_ms += metrics.duration_ms
+            pm_metrics.non_streaming_tool_uses += metrics.tool_use_count
+            pm_metrics.non_streaming_tool_results += metrics.tool_result_count
+            pm_metrics.non_streaming_tool_calls += metrics.tool_call_count
+            if metrics.error:
+                pm_metrics.non_streaming_errors += 1
+
 
 @dataclass
 class RunningTotals:
@@ -224,6 +275,8 @@ class RunningTotals:
     total_tool_calls: int = 0
     active_requests: int = 0
     average_duration_ms: float = 0.0
+
+    # providers[provider] = { last_accessed, rollup, models }
     providers: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def add_active_request_metrics(self, metrics: RequestMetrics) -> None:
@@ -231,8 +284,188 @@ class RunningTotals:
         self.total_requests += 1
         self.total_input_tokens += int(metrics.input_tokens or 0)
         self.total_output_tokens += int(metrics.output_tokens or 0)
+        self.total_cache_read_tokens += int(metrics.cache_read_tokens or 0)
+        self.total_cache_creation_tokens += int(metrics.cache_creation_tokens or 0)
         self.total_tool_uses += int(metrics.tool_use_count or 0)
         self.total_tool_results += int(metrics.tool_result_count or 0)
+        self.total_tool_calls += int(metrics.tool_call_count or 0)
+        if metrics.error:
+            self.total_errors += 1
+
+
+def _new_metric_totals() -> dict[str, float | int]:
+    return {
+        "requests": 0,
+        "errors": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
+        "tool_uses": 0,
+        "tool_results": 0,
+        "tool_calls": 0,
+        "total_duration_ms": 0.0,
+        "average_duration_ms": 0,
+    }
+
+
+def _new_streaming_split() -> dict[str, dict[str, float | int]]:
+    return {
+        "total": _new_metric_totals(),
+        "streaming": _new_metric_totals(),
+        "non_streaming": _new_metric_totals(),
+    }
+
+
+def _accumulate_from_pm(
+    target: dict[str, float | int], pm: ProviderModelMetrics, *, kind: str
+) -> None:
+    """Accumulate ProviderModelMetrics into a totals dict.
+
+    kind: 'total' | 'streaming' | 'non_streaming'
+    """
+    if kind == "total":
+        target["requests"] += pm.total_requests
+        target["errors"] += pm.total_errors
+        target["input_tokens"] += pm.total_input_tokens
+        target["output_tokens"] += pm.total_output_tokens
+        target["cache_read_tokens"] += pm.total_cache_read_tokens
+        target["cache_creation_tokens"] += pm.total_cache_creation_tokens
+        target["tool_uses"] += pm.total_tool_uses
+        target["tool_results"] += pm.total_tool_results
+        target["tool_calls"] += pm.total_tool_calls
+        target["total_duration_ms"] += pm.total_duration_ms
+        return
+
+    if kind == "streaming":
+        target["requests"] += pm.streaming_requests
+        target["errors"] += pm.streaming_errors
+        target["input_tokens"] += pm.streaming_input_tokens
+        target["output_tokens"] += pm.streaming_output_tokens
+        target["cache_read_tokens"] += pm.streaming_cache_read_tokens
+        target["cache_creation_tokens"] += pm.streaming_cache_creation_tokens
+        target["tool_uses"] += pm.streaming_tool_uses
+        target["tool_results"] += pm.streaming_tool_results
+        target["tool_calls"] += pm.streaming_tool_calls
+        target["total_duration_ms"] += pm.streaming_duration_ms
+        return
+
+    # non_streaming
+    target["requests"] += pm.non_streaming_requests
+    target["errors"] += pm.non_streaming_errors
+    target["input_tokens"] += pm.non_streaming_input_tokens
+    target["output_tokens"] += pm.non_streaming_output_tokens
+    target["cache_read_tokens"] += pm.non_streaming_cache_read_tokens
+    target["cache_creation_tokens"] += pm.non_streaming_cache_creation_tokens
+    target["tool_uses"] += pm.non_streaming_tool_uses
+    target["tool_results"] += pm.non_streaming_tool_results
+    target["tool_calls"] += pm.non_streaming_tool_calls
+    target["total_duration_ms"] += pm.non_streaming_duration_ms
+
+
+def _finalize_average_duration(totals: dict[str, float | int]) -> None:
+    requests = int(totals.get("requests", 0) or 0)
+    if requests > 0:
+        totals["average_duration_ms"] = int(round(float(totals["total_duration_ms"]) / requests))
+    else:
+        totals["average_duration_ms"] = 0
+    del totals["total_duration_ms"]
+
+
+def _finalize_split(split: dict[str, dict[str, float | int]]) -> None:
+    for section in ("total", "streaming", "non_streaming"):
+        _finalize_average_duration(split[section])
+
+
+def _add_active_request_to_split(
+    split: dict[str, dict[str, float | int]], metrics: RequestMetrics
+) -> None:
+    def add(target: dict[str, float | int]) -> None:
+        target["requests"] += 1
+        if metrics.error:
+            target["errors"] += 1
+        target["input_tokens"] += int(metrics.input_tokens or 0)
+        target["output_tokens"] += int(metrics.output_tokens or 0)
+        target["cache_read_tokens"] += int(metrics.cache_read_tokens or 0)
+        target["cache_creation_tokens"] += int(metrics.cache_creation_tokens or 0)
+        target["tool_uses"] += int(metrics.tool_use_count or 0)
+        target["tool_results"] += int(metrics.tool_result_count or 0)
+        target["tool_calls"] += int(metrics.tool_call_count or 0)
+        target["total_duration_ms"] += float(metrics.duration_ms or 0)
+
+    add(split["total"])
+    add(split["streaming"] if metrics.is_streaming else split["non_streaming"])
+
+
+def _new_provider_entry(last_accessed: str | None) -> dict[str, Any]:
+    return {
+        "last_accessed": last_accessed,
+        "rollup": _new_streaming_split(),
+        "models": {},
+    }
+
+
+def _new_model_entry(last_accessed: str | None) -> dict[str, Any]:
+    return {
+        "last_accessed": last_accessed,
+        **_new_streaming_split(),
+    }
+
+
+def _sum_split_into_running_totals(
+    running_totals: RunningTotals, split: dict[str, dict[str, float | int]]
+) -> None:
+    total = split["total"]
+    running_totals.total_requests += int(total["requests"])
+    running_totals.total_errors += int(total["errors"])
+    running_totals.total_input_tokens += int(total["input_tokens"])
+    running_totals.total_output_tokens += int(total["output_tokens"])
+    running_totals.total_cache_read_tokens += int(total["cache_read_tokens"])
+    running_totals.total_cache_creation_tokens += int(total["cache_creation_tokens"])
+    running_totals.total_tool_uses += int(total["tool_uses"])
+    running_totals.total_tool_results += int(total["tool_results"])
+    running_totals.total_tool_calls += int(total["tool_calls"])
+
+
+def _provider_last_accessed(tracker: "RequestTracker", provider: str) -> str | None:
+    return cast(dict[str, str], tracker.last_accessed_timestamps["providers"]).get(provider)
+
+
+def _model_last_accessed(tracker: "RequestTracker", provider: str, model: str) -> str | None:
+    return cast(dict[str, str], tracker.last_accessed_timestamps["models"]).get(
+        f"{provider}:{model}"
+    )
+
+
+def _ensure_model_entry(
+    provider_entry: dict[str, Any], tracker: "RequestTracker", provider: str, model: str
+) -> dict[str, Any]:
+    models = cast(dict[str, Any], provider_entry["models"])
+    if model not in models:
+        models[model] = _new_model_entry(_model_last_accessed(tracker, provider, model))
+    return cast(dict[str, Any], models[model])
+
+
+def _ensure_provider_entry(
+    running_totals: RunningTotals, tracker: "RequestTracker", provider: str
+) -> dict[str, Any]:
+    if provider not in running_totals.providers:
+        running_totals.providers[provider] = _new_provider_entry(
+            _provider_last_accessed(tracker, provider)
+        )
+    return cast(dict[str, Any], running_totals.providers[provider])
+
+
+def _accumulate_pm_into_provider_and_model(
+    provider_entry: dict[str, Any], model_entry: dict[str, Any], pm: ProviderModelMetrics
+) -> None:
+    provider_rollup = cast(dict[str, dict[str, float | int]], provider_entry["rollup"])
+    _accumulate_from_pm(provider_rollup["total"], pm, kind="total")
+    _accumulate_from_pm(provider_rollup["streaming"], pm, kind="streaming")
+    _accumulate_from_pm(provider_rollup["non_streaming"], pm, kind="non_streaming")
+
+    for kind in ("total", "streaming", "non_streaming"):
+        _accumulate_from_pm(cast(dict[str, float | int], model_entry[kind]), pm, kind=kind)
 
 
 class HierarchicalData(TypedDict):
@@ -250,6 +483,8 @@ class HierarchicalData(TypedDict):
     total_tool_calls: int
     active_requests: int
     average_duration_ms: float
+
+    # providers[provider] = { last_accessed, rollup, models }
     providers: dict[str, dict[str, Any]]
 
 
@@ -502,32 +737,23 @@ class RequestTracker:
     def get_running_totals_hierarchical(
         self, provider_filter: str | None = None, model_filter: str | None = None
     ) -> HierarchicalData:
-        """Get running totals with hierarchical provider->model structure.
+        """Get running totals with hierarchical provider -> {rollup, models} structure.
 
-        Args:
-            provider_filter: Case-insensitive provider filter with wildcard support
-            model_filter: Case-insensitive model filter with wildcard support
-
-        Returns:
-            Hierarchical data structure suitable for YAML formatting
+        Provider contains an explicit `rollup` plus per-model metrics.
+        Models mirror the rollup schema.
         """
-        # Get all data
         all_completed_metrics = self.summary_metrics
 
-        # Initialize RunningTotals with summary statistics
         last_accessed_value = self.last_accessed_timestamps.get("top")
         if last_accessed_value is not None:
-            # Ensure we have the correct type: dict[str, str] | None
             running_totals = RunningTotals(
                 last_accessed={"top": str(last_accessed_value)},
                 active_requests=len(self.active_requests),
             )
         else:
-            running_totals = RunningTotals(
-                active_requests=len(self.active_requests),
-            )
+            running_totals = RunningTotals(active_requests=len(self.active_requests))
 
-        # Process completed requests
+        # Completed requests (aggregated)
         for provider_model_key, pm_metrics in all_completed_metrics.provider_model_metrics.items():
             provider, model = (
                 provider_model_key.split(":", 1)
@@ -535,87 +761,41 @@ class RequestTracker:
                 else (provider_model_key, None)
             )
 
-            # Apply filters
             if provider_filter and not self._matches_pattern(provider, provider_filter):
                 continue
             if model_filter and model and not self._matches_pattern(model, model_filter):
                 continue
 
-            # Initialize provider if not exists
-            if provider not in running_totals.providers:
-                running_totals.providers[provider] = {
-                    "last_accessed": cast(
-                        dict[str, str], self.last_accessed_timestamps["providers"]
-                    ).get(provider),
-                    "total_requests": 0,
-                    "total_errors": 0,
-                    "total_input_tokens": 0,
-                    "total_output_tokens": 0,
-                    "total_cache_read_tokens": 0,
-                    "total_cache_creation_tokens": 0,
-                    "total_tool_uses": 0,
-                    "total_tool_results": 0,
-                    "total_tool_calls": 0,
-                    "total_duration_ms": 0,
-                    "models": {},
-                }
+            provider_entry = _ensure_provider_entry(running_totals, self, provider)
+            if model is None:
+                # Keep provider-level traffic without a model attributed to rollup only.
+                _accumulate_from_pm(
+                    cast(dict[str, float | int], provider_entry["rollup"]["total"]),
+                    pm_metrics,
+                    kind="total",
+                )
+                _accumulate_from_pm(
+                    cast(dict[str, float | int], provider_entry["rollup"]["streaming"]),
+                    pm_metrics,
+                    kind="streaming",
+                )
+                _accumulate_from_pm(
+                    cast(dict[str, float | int], provider_entry["rollup"]["non_streaming"]),
+                    pm_metrics,
+                    kind="non_streaming",
+                )
+            else:
+                model_entry = _ensure_model_entry(provider_entry, self, provider, model)
+                _accumulate_pm_into_provider_and_model(provider_entry, model_entry, pm_metrics)
 
-            # Update provider stats
-            provider_stats: dict[str, Any] = running_totals.providers[provider]
-            provider_stats["total_requests"] += int(pm_metrics.total_requests)
-            provider_stats["total_errors"] += int(pm_metrics.total_errors)
-            provider_stats["total_input_tokens"] += int(pm_metrics.total_input_tokens)
-            provider_stats["total_output_tokens"] += int(pm_metrics.total_output_tokens)
-            provider_stats["total_cache_read_tokens"] += int(pm_metrics.total_cache_read_tokens)
-            provider_stats["total_cache_creation_tokens"] += int(
-                pm_metrics.total_cache_creation_tokens
-            )
-            provider_stats["total_tool_uses"] += int(pm_metrics.total_tool_uses)
-            provider_stats["total_tool_results"] += int(pm_metrics.total_tool_results)
-            provider_stats["total_tool_calls"] += int(pm_metrics.total_tool_calls)
-            provider_stats["total_duration_ms"] += float(pm_metrics.total_duration_ms)
-
-            # Update model stats if model exists
-            if model:
-                if model not in provider_stats["models"]:
-                    model_key = f"{provider}:{model}"
-                    provider_stats["models"][model] = {
-                        "last_accessed": cast(
-                            dict[str, str], self.last_accessed_timestamps["models"]
-                        ).get(model_key),
-                        "total_requests": 0,
-                        "total_errors": 0,
-                        "total_duration_ms": 0,
-                    }
-
-                model_stats = provider_stats["models"][model]
-                model_stats["total_requests"] += int(pm_metrics.total_requests)
-                model_stats["total_errors"] += int(pm_metrics.total_errors)
-                model_stats["total_duration_ms"] += float(pm_metrics.total_duration_ms)
-
-            # Update summary stats
-            running_totals.total_requests += int(pm_metrics.total_requests)
-            running_totals.total_errors += int(pm_metrics.total_errors)
-            running_totals.total_input_tokens += int(pm_metrics.total_input_tokens)
-            running_totals.total_output_tokens += int(pm_metrics.total_output_tokens)
-            running_totals.total_cache_read_tokens += int(pm_metrics.total_cache_read_tokens)
-            running_totals.total_cache_creation_tokens += int(
-                pm_metrics.total_cache_creation_tokens
-            )
-            running_totals.total_tool_uses += int(pm_metrics.total_tool_uses)
-            running_totals.total_tool_results += int(pm_metrics.total_tool_results)
-            running_totals.total_tool_calls += int(pm_metrics.total_tool_calls)
-
-        # Process active requests
+        # Active requests (in-flight)
         for _request_id, metrics in self.active_requests.items():
             provider = metrics.provider or "unknown"
-            # Extract model without provider prefix for consistency with completed requests
             if metrics.claude_model and ":" in metrics.claude_model:
                 _, model = metrics.claude_model.split(":", 1)
             else:
                 model = metrics.claude_model or "unknown"
 
-            # Apply filters to active requests
             if provider_filter and not self._matches_pattern(provider, provider_filter):
                 continue
             if (
@@ -625,85 +805,46 @@ class RequestTracker:
             ):
                 continue
 
-            # Update summary for active requests using type-safe method
             running_totals.add_active_request_metrics(metrics)
 
-            # Initialize provider if not exists
-            if provider not in running_totals.providers:
-                running_totals.providers[provider] = {
-                    "last_accessed": cast(
-                        dict[str, str], self.last_accessed_timestamps["providers"]
-                    ).get(provider),
-                    "total_requests": 0,
-                    "total_errors": 0,
-                    "total_input_tokens": 0,
-                    "total_output_tokens": 0,
-                    "total_cache_read_tokens": 0,
-                    "total_cache_creation_tokens": 0,
-                    "total_tool_uses": 0,
-                    "total_tool_results": 0,
-                    "total_tool_calls": 0,
-                    "total_duration_ms": 0,
-                    "models": {},
-                }
+            provider_entry = _ensure_provider_entry(running_totals, self, provider)
+            provider_rollup = cast(dict[str, dict[str, float | int]], provider_entry["rollup"])
+            _add_active_request_to_split(provider_rollup, metrics)
 
-            # Update provider stats for active request
-            active_provider_stats: dict[str, Any] = running_totals.providers[provider]
-            active_provider_stats["total_requests"] += 1
-            active_provider_stats["total_input_tokens"] += int(metrics.input_tokens or 0)
-            active_provider_stats["total_tool_uses"] += int(metrics.tool_use_count or 0)
-            active_provider_stats["total_tool_results"] += int(metrics.tool_result_count or 0)
-
-            # Update model stats if model exists
             if model != "unknown":
-                if model not in active_provider_stats["models"]:
-                    model_key = f"{provider}:{model}"
-                    active_provider_stats["models"][model] = {
-                        "last_accessed": cast(
-                            dict[str, str], self.last_accessed_timestamps["models"]
-                        ).get(model_key),
-                        "total_requests": 0,
-                        "total_errors": 0,
-                        "total_duration_ms": 0,
-                    }
+                model_entry = _ensure_model_entry(provider_entry, self, provider, model)
+                _add_active_request_to_split(
+                    cast(dict[str, dict[str, float | int]], model_entry),
+                    metrics,
+                )
 
-                active_provider_stats["models"][model]["total_requests"] += 1
+        # Finalize avg durations for provider rollups and models
+        total_duration_ms = 0.0
+        for _provider_name, provider_entry in running_totals.providers.items():
+            provider_entry_dict = cast(dict[str, Any], provider_entry)
+            provider_rollup = cast(dict[str, dict[str, float | int]], provider_entry_dict["rollup"])
 
-        # Calculate average durations
+            # Capture duration before finalize deletes total_duration_ms
+            total_duration_ms += float(provider_rollup["total"]["total_duration_ms"])
+
+            _finalize_split(provider_rollup)
+
+            for _model_name, model_entry in cast(
+                dict[str, Any], provider_entry_dict.get("models", {})
+            ).items():
+                _finalize_split(cast(dict[str, dict[str, float | int]], model_entry))
+
+            # Update top-level summary totals from provider rollup totals
+            _sum_split_into_running_totals(running_totals, provider_rollup)
+
+        # Summary avg duration
         if running_totals.total_requests > 0:
-            summary_total_duration = sum(
-                float(cast(dict[str, Any], p).get("total_duration_ms", 0))
-                for p in running_totals.providers.values()
+            running_totals.average_duration_ms = int(
+                round(total_duration_ms / max(1, running_totals.total_requests))
             )
-            summary_avg = summary_total_duration / max(1, running_totals.total_requests)
-            running_totals.average_duration_ms = int(round(summary_avg))
         else:
             running_totals.average_duration_ms = 0
 
-        for _provider_name, provider_stats in running_totals.providers.items():
-            provider_stats_dict = cast(dict[str, Any], provider_stats)
-            provider_requests = provider_stats_dict["total_requests"]
-            if provider_requests > 0:
-                provider_avg = provider_stats_dict["total_duration_ms"] / max(1, provider_requests)
-                provider_stats_dict["average_duration_ms"] = int(round(provider_avg))
-            else:
-                provider_stats_dict["average_duration_ms"] = 0
-
-            # Calculate model averages
-            for _model_name, model_stats in provider_stats_dict.get("models", {}).items():
-                model_requests = model_stats["total_requests"]
-                if model_requests > 0:
-                    model_avg = model_stats["total_duration_ms"] / max(1, model_requests)
-                    model_stats["average_duration_ms"] = int(round(model_avg))
-                else:
-                    model_stats["average_duration_ms"] = 0
-                # Remove duration from model stats (not needed in output)
-                del model_stats["total_duration_ms"]
-
-            # Remove duration from provider stats (not needed in output)
-            del provider_stats["total_duration_ms"]
-
-        # Convert to HierarchicalData TypedDict format
         return {
             "last_accessed": running_totals.last_accessed,
             "total_requests": running_totals.total_requests,

@@ -115,58 +115,50 @@ def create_hierarchical_structure(
         structure["# Provider Breakdown"] = None
         providers_dict: dict[str, Any] = {}
 
-        for provider_name, provider_info in sorted(provider_data.items()):
-            # Provider header comment
-            providers_dict[f"# {provider_name.title()} Provider"] = None
-
-            # Provider stats
-            provider_stats = {
-                "last_accessed": provider_info.get("last_accessed"),
-                "total_requests": provider_info.get("total_requests", 0),
-                "total_errors": provider_info.get("total_errors", 0),
-                "total_input_tokens": provider_info.get("total_input_tokens", 0),
-                "total_output_tokens": provider_info.get("total_output_tokens", 0),
-                "average_duration_ms": provider_info.get("average_duration_ms", 0),
+        def format_totals(totals: dict[str, Any]) -> dict[str, Any]:
+            # Keep stable key order; drop empty sections later.
+            return {
+                "requests": totals.get("requests", 0),
+                "errors": totals.get("errors", 0),
+                "input_tokens": totals.get("input_tokens", 0),
+                "output_tokens": totals.get("output_tokens", 0),
+                "cache_read_tokens": totals.get("cache_read_tokens", 0),
+                "cache_creation_tokens": totals.get("cache_creation_tokens", 0),
+                "tool_uses": totals.get("tool_uses", 0),
+                "tool_results": totals.get("tool_results", 0),
+                "tool_calls": totals.get("tool_calls", 0),
+                "average_duration_ms": totals.get("average_duration_ms", 0),
             }
 
-            # Add cache info if present
-            if provider_info.get("total_cache_read_tokens", 0) > 0:
-                provider_stats["total_cache_read_tokens"] = provider_info["total_cache_read_tokens"]
-            if provider_info.get("total_cache_creation_tokens", 0) > 0:
-                provider_stats["total_cache_creation_tokens"] = provider_info[
-                    "total_cache_creation_tokens"
-                ]
+        def format_split(split: dict[str, Any]) -> dict[str, Any]:
+            out: dict[str, Any] = {"total": format_totals(split.get("total", {}))}
+            streaming = split.get("streaming", {})
+            non_streaming = split.get("non_streaming", {})
+            if streaming.get("requests", 0) > 0:
+                out["streaming"] = format_totals(streaming)
+            if non_streaming.get("requests", 0) > 0:
+                out["non_streaming"] = format_totals(non_streaming)
+            return out
 
-            # Add tool info if present
-            if provider_info.get("total_tool_uses", 0) > 0:
-                provider_stats["total_tool_uses"] = provider_info["total_tool_uses"]
-            if provider_info.get("total_tool_results", 0) > 0:
-                provider_stats["total_tool_results"] = provider_info["total_tool_results"]
-            if provider_info.get("total_tool_calls", 0) > 0:
-                provider_stats["total_tool_calls"] = provider_info["total_tool_calls"]
+        for provider_name, provider_info in sorted(provider_data.items()):
+            providers_dict[f"# {provider_name.title()} Provider"] = None
+
+            provider_stats: dict[str, Any] = {
+                "last_accessed": provider_info.get("last_accessed"),
+                "rollup": format_split(provider_info.get("rollup", {})),
+            }
+
+            models = provider_info.get("models") or {}
+            if models:
+                models_dict: dict[str, Any] = {}
+                for model_name, model_info in sorted(models.items()):
+                    models_dict[model_name] = {
+                        "last_accessed": model_info.get("last_accessed"),
+                        **format_split(model_info),
+                    }
+                provider_stats["models"] = models_dict
 
             providers_dict[provider_name] = provider_stats
-
-            # Add models if present
-            if "models" in provider_info and provider_info["models"]:
-                provider_stats_dict: dict[str, Any] = provider_stats
-                provider_stats_dict["# Models"] = None
-                models_dict: dict[str, Any] = {}
-
-                for model_name, model_info in sorted(provider_info["models"].items()):
-                    model_stats = {
-                        "last_accessed": model_info.get("last_accessed"),
-                        "total_requests": model_info.get("total_requests", 0),
-                        "average_duration_ms": model_info.get("average_duration_ms", 0),
-                    }
-
-                    # Add errors if present
-                    if model_info.get("total_errors", 0) > 0:
-                        model_stats["total_errors"] = model_info["total_errors"]
-
-                    models_dict[model_name] = model_stats
-
-                provider_stats_dict["models"] = models_dict
 
         structure["providers"] = providers_dict
 

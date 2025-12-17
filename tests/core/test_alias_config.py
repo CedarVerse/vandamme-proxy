@@ -50,9 +50,9 @@ class TestAliasConfigLoader:
             assert config["providers"]["kimi"]["base-url"] == "https://api.kimi.com/coding/v1"
             assert config["providers"]["kimi"]["api-format"] == "openai"
             assert config["providers"]["kimi"]["tool-name-sanitization"] is True
-            assert config["providers"]["kimi"]["aliases"]["haiku"] == "TODO-kimi-haiku"
-            assert config["providers"]["kimi"]["aliases"]["sonnet"] == "TODO-kimi-sonnet"
-            assert config["providers"]["kimi"]["aliases"]["opus"] == "TODO-kimi-opus"
+            assert config["providers"]["kimi"]["aliases"]["haiku"] == "kimi-k2-thinking-turbo"
+            assert config["providers"]["kimi"]["aliases"]["sonnet"] == "kimi-k2-thinking-turbo"
+            assert config["providers"]["kimi"]["aliases"]["opus"] == "kimi-k2-thinking-turbo"
         finally:
             # Restore original files
             for original_path, temp_path in existing_files:

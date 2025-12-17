@@ -270,7 +270,10 @@ class ProviderManager:
             result = ProviderLoadResult(
                 name=provider_name,
                 status="partial",
-                message=f"Missing {provider_upper}_BASE_URL (configure in environment or vandamme-config.toml)",
+                message=(
+                    f"Missing {provider_upper}_BASE_URL (configure in environment or "
+                    "vandamme-config.toml)"
+                ),
                 api_key_hash=self.get_api_key_hash(api_key),
                 base_url=None,
             )

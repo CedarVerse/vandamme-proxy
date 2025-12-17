@@ -77,6 +77,42 @@ async def test_running_totals_endpoint():
             assert "active_requests:" in yaml_content
             assert "average_duration_ms:" in yaml_content
 
+            # New provider schema (explicit rollup + per-model split).
+            # NOTE: Integration tests assume the running server is the code under test.
+            # If you're running an older server binary, these assertions will fail.
+            assert "providers:" in yaml_content
+            assert "rollup:" in yaml_content
+            assert "models:" in yaml_content
+
+            # Streaming split keys
+            assert "total:" in yaml_content
+
+            # Nested mirrored metric keys
+            assert "requests:" in yaml_content
+            assert "errors:" in yaml_content
+            assert "input_tokens:" in yaml_content
+            assert "output_tokens:" in yaml_content
+            assert "cache_read_tokens:" in yaml_content
+            assert "cache_creation_tokens:" in yaml_content
+            assert "tool_uses:" in yaml_content
+            assert "tool_results:" in yaml_content
+            assert "tool_calls:" in yaml_content
+            assert "average_duration_ms:" in yaml_content
+
+            # Old ambiguous nested provider totals should not appear
+            assert "total_tool_uses:" not in yaml_content
+            assert "total_tool_results:" not in yaml_content
+            assert "total_tool_calls:" not in yaml_content
+            assert "total_cache_read_tokens:" not in yaml_content
+            assert "total_cache_creation_tokens:" not in yaml_content
+            assert "total_duration_ms:" not in yaml_content
+
+            # Summary stays in old schema
+            assert "total_requests:" in yaml_content
+            assert "total_errors:" in yaml_content
+            assert "total_input_tokens:" in yaml_content
+            assert "total_output_tokens:" in yaml_content
+
         # Test with provider filter
         response = await client.get(f"{BASE_URL}/metrics/running-totals?provider=poe")
 
