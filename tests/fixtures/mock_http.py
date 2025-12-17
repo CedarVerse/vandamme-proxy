@@ -104,6 +104,34 @@ def openai_streaming_chunks():
     ]
 
 
+@pytest.fixture
+def openai_streaming_tool_call_chunks():
+    """OpenAI streaming response chunks that contain a tool call."""
+    return [
+        (
+            b'data: {"id":"chatcmpl-789","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n'
+        ),
+        (
+            b'data: {"id":"chatcmpl-789","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"get_weather"}}]},"finish_reason":null}]}\n\n'
+        ),
+        (
+            b'data: {"id":"chatcmpl-789","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"city\\":\\"NYC\\"}"}}]},"finish_reason":null}]}\n\n'
+        ),
+        (
+            b'data: {"id":"chatcmpl-789","object":"chat.completion.chunk",'
+            b'"created":1677652288,"model":"gpt-4","choices":[{"index":0,'
+            b'"delta":{},"finish_reason":"tool_calls"}]}\n\n'
+        ),
+        b"data: [DONE]\n\n",
+    ]
+
+
 # === Anthropic Response Fixtures ===
 
 

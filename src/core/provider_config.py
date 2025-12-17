@@ -18,6 +18,7 @@ class ProviderConfig:
     max_retries: int = 2
     custom_headers: dict[str, str] = field(default_factory=dict)
     api_format: str = "openai"  # "openai" or "anthropic"
+    tool_name_sanitization: bool = False
 
     @property
     def is_azure(self) -> bool:

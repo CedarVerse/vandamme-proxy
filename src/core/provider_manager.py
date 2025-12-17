@@ -198,6 +198,11 @@ class ProviderManager:
             timeout=int(os.environ.get("REQUEST_TIMEOUT", "90")),
             max_retries=int(os.environ.get("MAX_RETRIES", "2")),
             custom_headers=self._get_provider_custom_headers(self.default_provider.upper()),
+            tool_name_sanitization=bool(
+                self._load_provider_toml_config(self.default_provider).get(
+                    "tool-name-sanitization", False
+                )
+            ),
         )
 
         self._configs[self.default_provider] = config
@@ -311,6 +316,7 @@ class ProviderManager:
             max_retries=max_retries,
             custom_headers=self._get_provider_custom_headers(provider_upper),
             api_format=api_format,
+            tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
         )
 
         self._configs[provider_name] = config
@@ -374,6 +380,7 @@ class ProviderManager:
             max_retries=max_retries,
             custom_headers=self._get_provider_custom_headers(provider_upper),
             api_format=api_format,
+            tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
         )
 
         self._configs[provider_name] = config

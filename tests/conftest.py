@@ -138,6 +138,7 @@ def setup_test_environment_for_unit_tests():
             "ANTHROPIC_API_FORMAT": "anthropic",
             "POE_API_KEY": TEST_API_KEYS["POE"],
             "GLM_API_KEY": TEST_API_KEYS["GLM"],
+            "KIMI_API_KEY": "test-kimi-key",
             "VDM_DEFAULT_PROVIDER": DEFAULT_TEST_CONFIG["DEFAULT_PROVIDER"],
             "LOG_LEVEL": DEFAULT_TEST_CONFIG["LOG_LEVEL"],
         }

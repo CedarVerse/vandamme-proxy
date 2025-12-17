@@ -11,7 +11,9 @@ from src.models.claude import ClaudeMessagesRequest
 
 
 def convert_openai_to_claude_response(
-    openai_response: dict, original_request: ClaudeMessagesRequest
+    openai_response: dict,
+    original_request: ClaudeMessagesRequest,
+    tool_name_map_inverse: dict[str, str] | None = None,
 ) -> dict:
     """Convert OpenAI response to Claude format."""
 
@@ -34,6 +36,8 @@ def convert_openai_to_claude_response(
     if text_content is not None:
         content_blocks.append({"type": Constants.CONTENT_TEXT, "text": text_content})
 
+    tool_name_map_inverse = tool_name_map_inverse or {}
+
     # Add tool calls
     tool_calls = message.get("tool_calls", []) or []
     for tool_call in tool_calls:
@@ -44,11 +48,14 @@ def convert_openai_to_claude_response(
             except json.JSONDecodeError:
                 arguments = {"raw_arguments": function_data.get("arguments", "")}
 
+            sanitized_name = function_data.get("name", "")
+            original_name = tool_name_map_inverse.get(sanitized_name, sanitized_name)
+
             content_blocks.append(
                 {
                     "type": Constants.CONTENT_TOOL_USE,
                     "id": tool_call.get("id", f"tool_{uuid.uuid4()}"),
-                    "name": function_data.get("name", ""),
+                    "name": original_name,
                     "input": arguments,
                 }
             )
@@ -89,7 +96,10 @@ def convert_openai_to_claude_response(
 
 
 async def convert_openai_streaming_to_claude(
-    openai_stream: Any, original_request: ClaudeMessagesRequest, logger: Any
+    openai_stream: Any,
+    original_request: ClaudeMessagesRequest,
+    logger: Any,
+    tool_name_map_inverse: dict[str, str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Convert OpenAI streaming response to Claude streaming format."""
 
@@ -101,6 +111,8 @@ async def convert_openai_streaming_to_claude(
     yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': 0, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"  # noqa: E501
 
     yield f"event: {Constants.EVENT_PING}\ndata: {json.dumps({'type': Constants.EVENT_PING}, ensure_ascii=False)}\n\n"  # noqa: E501
+
+    tool_name_map_inverse = tool_name_map_inverse or {}
 
     # Process streaming chunks
     text_block_index = 0
@@ -166,7 +178,11 @@ async def convert_openai_streaming_to_claude(
                             tool_call["claude_index"] = str(claude_index)
                             tool_call["started"] = True
 
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': tool_call['name'], 'input': {}}}, ensure_ascii=False)}\n\n"  # noqa: E501
+                            tool_name = str(tool_call["name"])
+                            original_name = tool_name_map_inverse.get(tool_name, tool_name)
+                            tool_call["name"] = original_name
+
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': original_name, 'input': {}}}, ensure_ascii=False)}\n\n"  # noqa: E501
 
                         # Handle function arguments
                         if (
@@ -231,6 +247,7 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     http_request: Request,
     openai_client: Any,
     request_id: str,
+    tool_name_map_inverse: dict[str, str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Convert OpenAI streaming response to Claude streaming format with cancellation support."""
 
@@ -251,6 +268,8 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': 0, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"  # noqa: E501
 
     yield f"event: {Constants.EVENT_PING}\ndata: {json.dumps({'type': Constants.EVENT_PING}, ensure_ascii=False)}\n\n"  # noqa: E501
+
+    tool_name_map_inverse = tool_name_map_inverse or {}
 
     # Process streaming chunks
     text_block_index = 0
@@ -355,7 +374,11 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                             tool_call["claude_index"] = str(claude_index)
                             tool_call["started"] = True
 
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': tool_call['name'], 'input': {}}}, ensure_ascii=False)}\n\n"  # noqa: E501
+                            tool_name = str(tool_call["name"])
+                            original_name = tool_name_map_inverse.get(tool_name, tool_name)
+                            tool_call["name"] = original_name
+
+                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call['id'], 'name': original_name, 'input': {}}}, ensure_ascii=False)}\n\n"  # noqa: E501
 
                         # Handle function arguments
                         if (

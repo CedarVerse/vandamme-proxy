@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, cast
 
+from src.conversion.tool_name_sanitizer import build_tool_name_maps
 from src.core.config import config
 from src.core.constants import Constants
 from src.core.logging import LOG_REQUEST_METRICS, conversation_logger
@@ -84,6 +85,31 @@ def convert_claude_to_openai(
             f"🔄 MODEL MAP | {claude_request.model} → {provider_name}:{openai_model}"
         )
 
+    provider_config = config.provider_manager.get_provider_config(provider_name)
+    tool_name_map: dict[str, str] = {}
+    tool_name_map_inverse: dict[str, str] = {}
+    if provider_config and provider_config.tool_name_sanitization:
+        all_tool_names: list[str] = []
+
+        if claude_request.tools:
+            all_tool_names.extend([t.name for t in claude_request.tools if t.name])
+
+        if claude_request.tool_choice and claude_request.tool_choice.get("type") == "tool":
+            choice_name = claude_request.tool_choice.get("name")
+            if isinstance(choice_name, str) and choice_name:
+                all_tool_names.append(choice_name)
+
+        for msg in claude_request.messages:
+            if msg.role != Constants.ROLE_ASSISTANT or not isinstance(msg.content, list):
+                continue
+            for content_block in msg.content:
+                if content_block.type == Constants.CONTENT_TOOL_USE:
+                    tool_block = cast(ClaudeContentBlockToolUse, content_block)
+                    if tool_block.name:
+                        all_tool_names.append(tool_block.name)
+
+        tool_name_map, tool_name_map_inverse = build_tool_name_maps(all_tool_names)
+
     # Convert messages
     openai_messages = []
 
@@ -113,7 +139,7 @@ def convert_claude_to_openai(
             openai_message = convert_claude_user_message(msg)
             openai_messages.append(openai_message)
         elif msg.role == Constants.ROLE_ASSISTANT:
-            openai_message = convert_claude_assistant_message(msg)
+            openai_message = convert_claude_assistant_message(msg, tool_name_map)
             openai_messages.append(openai_message)
 
             # Check if next message contains tool results
@@ -164,7 +190,7 @@ def convert_claude_to_openai(
                     {
                         "type": Constants.TOOL_FUNCTION,
                         Constants.TOOL_FUNCTION: {
-                            "name": tool.name,
+                            "name": tool_name_map.get(tool.name, tool.name),
                             "description": tool.description or "",
                             "parameters": tool.input_schema,
                         },
@@ -181,13 +207,19 @@ def convert_claude_to_openai(
         elif choice_type == "tool" and "name" in claude_request.tool_choice:
             openai_request["tool_choice"] = {
                 "type": Constants.TOOL_FUNCTION,
-                Constants.TOOL_FUNCTION: {"name": claude_request.tool_choice["name"]},
+                Constants.TOOL_FUNCTION: {
+                    "name": tool_name_map.get(
+                        claude_request.tool_choice["name"], claude_request.tool_choice["name"]
+                    )
+                },
             }
         else:
             openai_request["tool_choice"] = "auto"
 
     # Include provider information for endpoints.py
     openai_request["_provider"] = provider_name
+    if tool_name_map_inverse:
+        openai_request["_tool_name_map_inverse"] = tool_name_map_inverse
     return openai_request
 
 
@@ -232,8 +264,11 @@ def convert_claude_user_message(msg: ClaudeMessage) -> dict[str, Any]:
         return {"role": Constants.ROLE_USER, "content": openai_content}
 
 
-def convert_claude_assistant_message(msg: ClaudeMessage) -> dict[str, Any]:
+def convert_claude_assistant_message(
+    msg: ClaudeMessage, tool_name_map: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Convert Claude assistant message to OpenAI format."""
+    tool_name_map = tool_name_map or {}
     text_parts = []
     tool_calls = []
 
@@ -254,7 +289,7 @@ def convert_claude_assistant_message(msg: ClaudeMessage) -> dict[str, Any]:
                     "id": tool_block.id,
                     "type": Constants.TOOL_FUNCTION,
                     Constants.TOOL_FUNCTION: {
-                        "name": tool_block.name,
+                        "name": tool_name_map.get(tool_block.name, tool_block.name),
                         "arguments": json.dumps(tool_block.input, ensure_ascii=False),
                     },
                 }

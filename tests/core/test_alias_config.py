@@ -44,6 +44,15 @@ class TestAliasConfigLoader:
             assert config["providers"]["poe"]["aliases"]["haiku"] == "gpt-5.1-mini"
             assert config["providers"]["poe"]["aliases"]["sonnet"] == "glm-4.6"
             assert config["providers"]["poe"]["aliases"]["opus"] == "gpt-5.2"
+
+            # Kimi defaults should also be present in package defaults
+            assert "kimi" in config["providers"]
+            assert config["providers"]["kimi"]["base-url"] == "https://api.kimi.com/coding/v1"
+            assert config["providers"]["kimi"]["api-format"] == "openai"
+            assert config["providers"]["kimi"]["tool-name-sanitization"] is True
+            assert config["providers"]["kimi"]["aliases"]["haiku"] == "TODO-kimi-haiku"
+            assert config["providers"]["kimi"]["aliases"]["sonnet"] == "TODO-kimi-sonnet"
+            assert config["providers"]["kimi"]["aliases"]["opus"] == "TODO-kimi-opus"
         finally:
             # Restore original files
             for original_path, temp_path in existing_files:

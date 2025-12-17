@@ -226,12 +226,19 @@ class AliasManager:
         model_lower = model.lower()
         logger.debug(f"Model name (lowercase): '{model_lower}'")
 
+        # If the caller already provided an explicit provider prefix (e.g. "kimi:sonnet"),
+        # treat the portion after ":" as the alias search space. This prevents cross-provider
+        # alias matches from hijacking an explicitly prefixed request.
+        model_for_alias_match = model_lower.split(":", 1)[1] if ":" in model_lower else model_lower
+
+        logger.debug(f"Model name for alias matching: '{model_for_alias_match}'")
+
         # Create variations of the model name for matching
         # This allows "my_model" to match both "my-model" and "my_model" in the model name
         model_variations = {
-            model_lower,  # Original
-            model_lower.replace("_", "-"),  # Underscores to hyphens
-            model_lower.replace("-", "_"),  # Hyphens to underscores
+            model_for_alias_match,  # Original (provider prefix stripped)
+            model_for_alias_match.replace("_", "-"),  # Underscores to hyphens
+            model_for_alias_match.replace("-", "_"),  # Hyphens to underscores
         }
         logger.debug(f"Model variations for matching: {model_variations}")
 
@@ -244,7 +251,13 @@ class AliasManager:
             f"for matches"
         )
 
+        requested_provider: str | None = (
+            model_lower.split(":", 1)[0] if ":" in model_lower else None
+        )
+
         for provider, provider_aliases in self.aliases.items():
+            if requested_provider and provider != requested_provider:
+                continue
             logger.debug(f"  Checking provider '{provider}' with {len(provider_aliases)} aliases")
 
             for alias, target in provider_aliases.items():

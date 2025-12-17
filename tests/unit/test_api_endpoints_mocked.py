@@ -16,6 +16,13 @@ from fastapi.testclient import TestClient
 from tests.config import TEST_HEADERS
 
 
+def _last_openai_chat_completion_request_json(mock_openai_api) -> dict:
+    route = mock_openai_api.routes["POST", "https://api.openai.com/v1/chat/completions"]
+    assert route.calls, "Expected at least one upstream OpenAI call"
+    request = route.calls[-1].request
+    return request.json()
+
+
 @pytest.mark.unit
 def test_basic_chat_mocked(mock_openai_api, openai_chat_completion):
     """Test basic chat completion with mocked OpenAI API."""
@@ -267,6 +274,126 @@ def test_conversation_with_tool_use_mocked(
         assert response2.status_code == 200
         result2 = response2.json()
         assert "content" in result2
+
+
+@pytest.mark.unit
+def test_kimi_tool_name_sanitization_outbound_and_inbound_non_streaming(mock_openai_api):
+    """Kimi requires strict tool names; we sanitize outbound and restore inbound."""
+    from src.main import app
+
+    original_tool_name = "get weather"  # contains space, should be sanitized
+
+    # Kimi uses its own base URL; the provider config is config-driven.
+    # Mock exactly what the OpenAI client will call for kimi.
+    mock_openai_api.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-kimi-1",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "kimi",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_123",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_weather",
+                                        "arguments": '{"city": "NYC"}',
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "kimi:sonnet",
+                "max_tokens": 200,
+                "messages": [{"role": "user", "content": "What is the weather in NYC?"}],
+                "tools": [
+                    {
+                        "name": original_tool_name,
+                        "description": "Get weather",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                    }
+                ],
+                "tool_choice": {"type": "tool", "name": original_tool_name},
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+
+    import json as _json
+
+    assert len(mock_openai_api.calls) > 0
+    upstream_json = _json.loads(mock_openai_api.calls[-1].request.content)
+
+    assert upstream_json["tools"][0]["function"]["name"] == "get_weather"
+    assert upstream_json["tool_choice"]["function"]["name"] == "get_weather"
+
+    data = response.json()
+    tool_use_blocks = [b for b in data.get("content", []) if b.get("type") == "tool_use"]
+    assert len(tool_use_blocks) == 1
+    assert tool_use_blocks[0]["name"] == original_tool_name
+
+
+@pytest.mark.unit
+def test_kimi_tool_name_restoration_streaming(mock_openai_api, openai_streaming_tool_call_chunks):
+    """Streaming tool_use name is restored back to the original tool name."""
+    from src.main import app
+
+    mock_openai_api.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=httpx.Response(200, content=b"".join(openai_streaming_tool_call_chunks))
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "kimi:sonnet",
+                "max_tokens": 200,
+                "stream": True,
+                "messages": [{"role": "user", "content": "Weather?"}],
+                "tools": [
+                    {
+                        "name": "get weather",
+                        "description": "Get weather",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                    }
+                ],
+                "tool_choice": {"type": "auto"},
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    body = response.text
+    assert '"type": "tool_use"' in body
+    assert '"name": "get weather"' in body
 
 
 @pytest.mark.unit

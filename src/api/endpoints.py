@@ -179,6 +179,7 @@ async def create_message(  # type: ignore[no-untyped-def]
 
             # Extract provider from request
             provider_name = openai_request.pop("_provider", "openai")
+            tool_name_map_inverse = openai_request.pop("_tool_name_map_inverse", None)
 
             # Get provider config to check if passthrough is needed
             provider_config = config.provider_manager.get_provider_config(provider_name)
@@ -378,6 +379,7 @@ async def create_message(  # type: ignore[no-untyped-def]
                                     http_request,
                                     openai_client,
                                     request_id,
+                                    tool_name_map_inverse=tool_name_map_inverse,
                                 ):
                                     yield chunk
                             finally:
@@ -612,7 +614,11 @@ async def create_message(  # type: ignore[no-untyped-def]
                         )
                         conversation_logger.debug(f"📡 FULL RESPONSE: {openai_response}")
 
-                    claude_response = convert_openai_to_claude_response(openai_response, request)
+                    claude_response = convert_openai_to_claude_response(
+                        openai_response,
+                        request,
+                        tool_name_map_inverse=tool_name_map_inverse,
+                    )
 
                 # Log successful completion
                 duration_ms = (time.time() - start_time) * 1000

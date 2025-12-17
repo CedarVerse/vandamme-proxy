@@ -40,6 +40,18 @@ haiku = "GLM-4.5-Air"
 sonnet = "GLM-4.6"
 opus = "GLM-4.6"
 
+# Kimi provider defaults
+[kimi]
+base-url = "https://api.kimi.com/coding/v1"
+api-format = "openai"
+timeout = 90
+max-retries = 2
+tool-name-sanitization = true
+[kimi.aliases]
+haiku = "TODO-kimi-haiku"
+sonnet = "TODO-kimi-sonnet"
+opus = "TODO-kimi-opus"
+
 # Anthropic provider defaults
 [anthropic]
 base-url = "https://api.anthropic.com"
