@@ -56,15 +56,6 @@ class ProviderManager:
             return "PASSTHRU"
         return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
-    @staticmethod
-    def get_default_base_url(provider_name: str) -> str | None:
-        """Return default base URL for special providers"""
-        defaults = {
-            "openai": "https://api.openai.com/v1",
-            "poe": "https://api.poe.com/v1",
-        }
-        return defaults.get(provider_name.lower())
-
     def _select_default_from_available(self) -> None:
         """Select a default provider from available providers if original default is unavailable"""
         if self.default_provider in self._configs:
@@ -158,9 +149,12 @@ class ProviderManager:
 
         # Apply provider-specific defaults
         if not base_url:
-            base_url = (
-                self.get_default_base_url(self.default_provider) or "https://api.openai.com/v1"
-            )
+            # Check TOML configuration first
+            toml_config = self._load_provider_toml_config(self.default_provider)
+            base_url = toml_config.get("base-url")
+            # Final fallback to hardcoded default
+            if not base_url:
+                base_url = "https://api.openai.com/v1"
 
         if not api_key:
             # Only warn if this was explicitly configured by the user
@@ -193,7 +187,7 @@ class ProviderManager:
             name=self.default_provider,
             api_key=api_keys[0],
             api_keys=api_keys if len(api_keys) > 1 else None,
-            base_url=base_url or "https://api.openai.com/v1",
+            base_url=base_url,
             api_version=api_version,
             timeout=int(os.environ.get("REQUEST_TIMEOUT", "90")),
             max_retries=int(os.environ.get("MAX_RETRIES", "2")),
@@ -272,18 +266,16 @@ class ProviderManager:
         # Load base URL with precedence: env > TOML > default
         base_url = os.environ.get(f"{provider_upper}_BASE_URL") or toml_config.get("base-url")
         if not base_url:
-            base_url = self.get_default_base_url(provider_name)
-            if not base_url:
-                # Create result for partial configuration (missing base URL)
-                result = ProviderLoadResult(
-                    name=provider_name,
-                    status="partial",
-                    message=f"Missing {provider_upper}_BASE_URL",
-                    api_key_hash=self.get_api_key_hash(api_key),
-                    base_url=None,
-                )
-                self._load_results.append(result)
-                return
+            # Create result for partial configuration (missing base URL)
+            result = ProviderLoadResult(
+                name=provider_name,
+                status="partial",
+                message=f"Missing {provider_upper}_BASE_URL (configure in environment or vandamme-config.toml)",
+                api_key_hash=self.get_api_key_hash(api_key),
+                base_url=None,
+            )
+            self._load_results.append(result)
+            return
 
         # Load other settings with precedence: env > TOML > defaults
         api_format = os.environ.get(
@@ -352,12 +344,11 @@ class ProviderManager:
         # Base URL with precedence: env > TOML > default
         base_url = os.environ.get(f"{provider_upper}_BASE_URL") or toml_config.get("base-url")
         if not base_url:
-            base_url = self.get_default_base_url(provider_name)
-            if not base_url:
-                raise ValueError(
-                    f"Base URL not found for provider '{provider_name}'. "
-                    f"Please set {provider_upper}_BASE_URL environment variable."
-                )
+            raise ValueError(
+                f"Base URL not found for provider '{provider_name}'. "
+                f"Please set {provider_upper}_BASE_URL environment variable "
+                f"or configure in vandamme-config.toml"
+            )
 
         # Load other settings with precedence: env > TOML > defaults
         api_format = os.environ.get(

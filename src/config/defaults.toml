@@ -48,9 +48,9 @@ timeout = 90
 max-retries = 2
 tool-name-sanitization = true
 [kimi.aliases]
-haiku = "TODO-kimi-haiku"
-sonnet = "TODO-kimi-sonnet"
-opus = "TODO-kimi-opus"
+haiku = "kimi-k2-thinking-turbo"
+sonnet = "kimi-k2-thinking-turbo"
+opus = "kimi-k2-thinking-turbo"
 
 # Anthropic provider defaults
 [anthropic]
