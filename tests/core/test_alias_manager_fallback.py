@@ -46,8 +46,8 @@ class TestAliasManagerFallback:
             assert "sonnet" in aliases["poe"]
             assert "opus" in aliases["poe"]
             assert aliases["poe"]["haiku"] == "gpt-5.1-mini"
-            assert aliases["poe"]["sonnet"] == "glm-4.6"
-            assert aliases["poe"]["opus"] == "gpt-5.2"
+            assert aliases["poe"]["sonnet"] == "gpt-5.1-codex-mini"
+            assert aliases["poe"]["opus"] == "gpt-5.1-codex-max"
 
     def test_environment_aliases_override_fallbacks(self):
         """Test that environment variable aliases override fallback aliases."""
@@ -71,8 +71,8 @@ class TestAliasManagerFallback:
             assert aliases["poe"]["haiku"] == "custom-haiku-model"
 
             # Other fallbacks should still be applied
-            assert aliases["poe"]["sonnet"] == "glm-4.6"
-            assert aliases["poe"]["opus"] == "gpt-5.2"
+            assert aliases["poe"]["sonnet"] == "gpt-5.1-codex-mini"
+            assert aliases["poe"]["opus"] == "gpt-5.1-codex-max"
 
     def test_fallback_resolution(self):
         """Test that fallback aliases are resolved correctly."""
@@ -84,12 +84,12 @@ class TestAliasManagerFallback:
 
             # Test resolving fallback aliases
             assert alias_manager.resolve_alias("haiku") == "poe:gpt-5.1-mini"
-            assert alias_manager.resolve_alias("sonnet") == "poe:glm-4.6"
-            assert alias_manager.resolve_alias("opus") == "poe:gpt-5.2"
+            assert alias_manager.resolve_alias("sonnet") == "poe:gpt-5.1-codex-mini"
+            assert alias_manager.resolve_alias("opus") == "poe:gpt-5.1-codex-max"
 
             # Test case insensitive matching
             assert alias_manager.resolve_alias("HAIKU") == "poe:gpt-5.1-mini"
-            assert alias_manager.resolve_alias("Sonnet") == "poe:glm-4.6"
+            assert alias_manager.resolve_alias("Sonnet") == "poe:gpt-5.1-codex-mini"
 
             # Test substring matching
             assert alias_manager.resolve_alias("my-haiku-model") == "poe:gpt-5.1-mini"

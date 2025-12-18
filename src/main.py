@@ -13,6 +13,22 @@ app = FastAPI(title="Vandamme Proxy", version=__version__)
 app.include_router(api_router)
 app.include_router(metrics_router, prefix="/metrics", tags=["metrics"])
 
+# Dashboard (Dash) mounted under /dashboard
+try:
+    from src.dashboard.mount import mount_dashboard
+
+    mount_dashboard(fastapi_app=app)
+    print("✅ Dashboard mounted at /dashboard")
+except ImportError as e:
+    # Dashboard dependencies not installed
+    print(f"⚠️ Dashboard not mounted: missing dependencies ({e})")
+except Exception as e:
+    # Other error mounting dashboard
+    print(f"⚠️ Dashboard not mounted: {e}")
+    import traceback
+
+    traceback.print_exc()
+
 
 def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] == "--help":

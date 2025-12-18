@@ -42,8 +42,8 @@ class TestAliasConfigLoader:
             assert "sonnet" in config["providers"]["poe"]["aliases"]
             assert "opus" in config["providers"]["poe"]["aliases"]
             assert config["providers"]["poe"]["aliases"]["haiku"] == "gpt-5.1-mini"
-            assert config["providers"]["poe"]["aliases"]["sonnet"] == "glm-4.6"
-            assert config["providers"]["poe"]["aliases"]["opus"] == "gpt-5.2"
+            assert config["providers"]["poe"]["aliases"]["sonnet"] == "gpt-5.1-codex-mini"
+            assert config["providers"]["poe"]["aliases"]["opus"] == "gpt-5.1-codex-max"
 
             # Kimi defaults should also be present in package defaults
             assert "kimi" in config["providers"]

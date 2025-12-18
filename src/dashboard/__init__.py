@@ -1,0 +1,1 @@
+"""Vandamme Proxy dashboard package."""

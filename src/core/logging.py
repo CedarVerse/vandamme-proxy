@@ -125,7 +125,16 @@ class RequestMetrics:
     @property
     def start_time_iso(self) -> str:
         """Get start time as ISO format with second precision"""
-        return datetime.fromtimestamp(self.start_time).strftime("%Y-%m-%dT%H:%M:%S")
+        try:
+            # Validate timestamp range (1 AD to 9999 AD)
+            # Unix timestamp range: -62135596800 to 253402300799
+            if not (-62135596800 <= self.start_time <= 253402300799):
+                logger.warning(f"Invalid timestamp detected: {self.start_time}")
+                return "N/A"
+            return datetime.fromtimestamp(self.start_time).strftime("%Y-%m-%dT%H:%M:%S")
+        except (ValueError, OSError, OverflowError) as e:
+            logger.warning(f"Timestamp conversion error: {self.start_time}, error: {e}")
+            return "N/A"
 
 
 @dataclass
@@ -559,6 +568,10 @@ class RequestTracker:
 
     def update_last_accessed(self, provider: str, model: str, timestamp: str) -> None:
         """Update last_accessed timestamps for provider, model, and top level."""
+        # Skip invalid timestamps
+        if not timestamp or timestamp in ("N/A", "Invalid timestamp", None):
+            return
+
         # Update model timestamp
         model_key = f"{provider}:{model}"
         models_dict = cast(dict[str, str], self.last_accessed_timestamps["models"])

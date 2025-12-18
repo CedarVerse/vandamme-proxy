@@ -308,8 +308,12 @@ class AliasManager:
         resolved_model = f"{best_provider}:{best_target}"
 
         logger.info(
-            f"Resolved model alias '{model}' -> '{resolved_model}' "
-            f"(matched alias '{best_alias}' from provider '{best_provider}' via {match_type} match)"
+            "[AliasManager] %s: '%s' matches '%s:%s' -> '%s'",
+            match_type,
+            model,
+            best_provider,
+            best_alias,
+            resolved_model,
         )
         match_details = [
             (

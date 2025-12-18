@@ -810,10 +810,9 @@ async def health_check() -> PlainTextResponse:
         health_data = {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "openai_api_configured": bool(config.openai_api_key),
             "api_key_valid": config.validate_api_key(),
             "client_api_key_validation": bool(config.proxy_api_key),
-            "default-provider": getattr(config.provider_manager, "default-provider", "unknown"),
+            "default_provider": getattr(config.provider_manager, "default_provider", "unknown"),
             "providers": providers,
         }
 
@@ -950,11 +949,21 @@ async def list_models(
         None,
         description="Provider name to fetch models from (defaults to configured default provider)",
     ),
+    provider_header: str | None = Header(
+        None,
+        alias="provider",
+        description="Provider override (header takes precedence over query/default)",
+    ),
 ) -> JSONResponse:
     """List available models from the specified provider or default provider"""
     try:
-        # Get the provider name from query param or use default
-        provider_name = provider if provider else config.provider_manager.default_provider
+        # Determine provider using header > query param > default
+        provider_candidate = provider_header or provider
+        provider_name = (
+            provider_candidate.lower()
+            if provider_candidate
+            else config.provider_manager.default_provider
+        )
 
         # Check if provider exists
         all_providers = config.provider_manager.list_providers()

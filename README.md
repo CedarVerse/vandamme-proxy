@@ -28,6 +28,9 @@ export OPENAI_API_KEY="sk-key1 sk-key2 sk-key3"
 # Start the server
 vdm server start
 
+# Open dashboard for monitoring
+open http://localhost:8082/dashboard/
+
 ```
 
 ```shell
@@ -449,6 +452,7 @@ vdm server start
 
 ### 🚀 Getting Started
 - [**Quick Start Guide**](QUICKSTART.md) - Get running in 5 minutes
+- [**Dashboard Guide**](docs/dashboard.md) - Monitor and manage your proxy
 - [**Architecture Overview**](CLAUDE.md) - Deep dive into design decisions
 - [**Development Workflows**](docs/makefile-workflows.md) - Makefile targets and best practices
 
