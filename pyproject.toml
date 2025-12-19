@@ -55,6 +55,7 @@ Issues = "https://github.com/elifarley/vandamme-proxy/issues"
 
 [project.scripts]
 vdm = "src.cli.main:app"
+"claude.vdm" = "src.cli.main:claude_alias"
 
 [dependency-groups]
 dev = [

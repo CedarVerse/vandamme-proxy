@@ -1,11 +1,13 @@
 """Main CLI entry point for vandamme-proxy."""
 
 import logging
+import sys
 
 import typer
 
 # Import command modules
-from src.cli.commands import config, health, server, test, wrap
+from src.cli.commands import config, health, server, test
+from src.cli.commands.wrap import wrap
 
 app = typer.Typer(
     name="vdm",
@@ -19,12 +21,35 @@ app.add_typer(server.app, name="server", help="Server management")
 app.add_typer(config.app, name="config", help="Configuration management")
 app.add_typer(health.app, name="health", help="Health checks")
 app.add_typer(test.app, name="test", help="Test commands")
-app.add_typer(wrap.app, name="wrap", help="Wrap command (systemd logging)")
 
-# Note: wrap command always uses systemd logging; no global --systemd flag
+# Add wrap as a command directly with support for extra arguments
+app.command(context_settings={"allow_extra_args": True})(wrap)
+
+# Note: wrap command handles its own logging configuration
 
 # Get the application logger
 logger = logging.getLogger(__name__)
+
+
+def claude_alias() -> None:
+    """Alias that runs 'vdm wrap claude' with all arguments."""
+    # Get all arguments after 'claude.vdm'
+    args = sys.argv[1:]  # Skip 'claude.vdm'
+
+    # Build the vdm wrap claude command
+    cmd = ["vdm", "wrap", "claude"] + args
+
+    # Execute the command
+    import subprocess
+
+    try:
+        process = subprocess.run(cmd)
+        sys.exit(process.returncode)
+    except KeyboardInterrupt:
+        sys.exit(130)  # Standard SIGINT exit code
+    except FileNotFoundError:
+        logger.error("vdm command not found. Make sure vandamme-proxy is installed.")
+        sys.exit(1)
 
 
 @app.command()
