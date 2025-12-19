@@ -19,27 +19,40 @@ def start(
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
     daemon: bool = typer.Option(False, "--daemon", help="Run in background"),
     pid_file: str = typer.Option(str(Path.home() / ".vdm.pid"), "--pid-file", help="PID file path"),
+    systemd: bool = typer.Option(
+        False, "--systemd", help="Send logs to systemd journal instead of console"
+    ),
 ) -> None:
     """Start the proxy server."""
-    console = Console()
+    # Configure logging FIRST before any console output
+    from src.core.logging import configure_logging
 
     # Override config if provided
     server_host = host or config.host
     server_port = port or config.port
 
-    # Show configuration
-    table = Table(title="Vandamme Proxy Configuration")
-    table.add_column("Setting", style="cyan")
-    table.add_column("Value", style="green")
+    # When using systemd, configure logging immediately and suppress all console output
+    console = None  # Initialize console to None
+    if systemd:
+        configure_logging(use_systemd=True)
+        # No console output when using systemd - everything goes to syslog
+    else:
+        configure_logging(use_systemd=False)
+        console = Console()
 
-    table.add_row("Server URL", f"http://{server_host}:{server_port}")
-    table.add_row(f"{config.default_provider.title()} Base URL", config.base_url)
-    table.add_row(f"{config.default_provider.title()} API Key", config.api_key_hash)
+        # Show configuration only when not using systemd
+        table = Table(title="Vandamme Proxy Configuration")
+        table.add_column("Setting", style="cyan")
+        table.add_column("Value", style="green")
 
-    console.print(table)
+        table.add_row("Server URL", f"http://{server_host}:{server_port}")
+        table.add_row(f"{config.default_provider.title()} Base URL", config.base_url)
+        table.add_row(f"{config.default_provider.title()} API Key", config.api_key_hash)
 
-    # Show provider summary
-    config.provider_manager.print_provider_summary()
+        console.print(table)
+
+        # Show provider summary
+        config.provider_manager.print_provider_summary()
 
     if daemon:
         _start_daemon(server_host, server_port, pid_file)
@@ -80,14 +93,12 @@ def _start_daemon(host: str, port: int, pid_file: str) -> None:
 
 def _start_server(host: str, port: int, reload: bool) -> None:
     """Start the uvicorn server."""
-    log_level = config.log_level.split()[0].lower()
-    access_log = log_level == "debug"
-
+    # Disable uvicorn's default logging since we configure it ourselves
     uvicorn.run(
         "src.main:app",
         host=host,
         port=port,
         reload=reload,
-        log_level=log_level,
-        access_log=access_log,
+        log_level="warning",  # Only show warnings/errors from uvicorn itself
+        access_log=False,  # Disable access logs - we handle them ourselves
     )

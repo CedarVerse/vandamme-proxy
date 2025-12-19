@@ -18,7 +18,6 @@ try:
     from src.dashboard.mount import mount_dashboard
 
     mount_dashboard(fastapi_app=app)
-    print("✅ Dashboard mounted at /dashboard")
 except ImportError as e:
     # Dashboard dependencies not installed
     print(f"⚠️ Dashboard not mounted: missing dependencies ({e})")

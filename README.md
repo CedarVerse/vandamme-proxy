@@ -631,7 +631,8 @@ User=vandamme
 WorkingDirectory=/opt/vandamme-proxy
 Environment=HOST=0.0.0.0
 Environment=PORT=8082
-ExecStart=/opt/vandamme-proxy/.venv/bin/vdm server start
+# Wrap uses systemd logging by default; server can opt-in with --systemd
+ExecStart=/opt/vandamme-proxy/.venv/bin/vdm server start --systemd
 Restart=always
 
 [Install]
@@ -641,7 +642,27 @@ EOF
 # Enable and start service
 sudo systemctl enable vandamme-proxy
 sudo systemctl start vandamme-proxy
+
+# View logs (systemd journal)
+journalctl -t vandamme-proxy -f
 ```
+
+### Systemd Logging
+- Vandamme Proxy depends on `systemd` (systemd-python) and supports journal logging.
+- `vdm server start --systemd` sends logs to the journal instead of console.
+- The `vdm wrap` command always uses systemd logging (no flag needed).
+- View logs with `journalctl -t vandamme-proxy` (use `-f` to follow).
+- If systemd is unavailable, logging falls back to console.
+- Install with systemd dependency (required): already in base dependencies.
+- For development without systemd, run without `--systemd` to keep console output.
+- If running outside a systemd environment, the server will warn and fall back to console when `--systemd` is used.
+
+Example:
+```bash
+vdm server start --systemd
+vdm wrap run   # always systemd
+```
+
 
 ---
 

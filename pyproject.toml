@@ -44,6 +44,10 @@ cli = [
     "pyyaml>=6.0",
 ]
 
+# systemd-python removed; syslog-based logging uses stdlib only
+
+
+
 [project.urls]
 Homepage = "https://github.com/elifarley/vandamme-proxy"
 Repository = "https://github.com/elifarley/vandamme-proxy.git"

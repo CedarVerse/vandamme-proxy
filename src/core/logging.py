@@ -1,13 +1,14 @@
 import fnmatch
 import hashlib
 import logging
+import logging.handlers
 import os
 import re
 import threading
 import time
 from collections import defaultdict
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, TypedDict, cast
@@ -34,12 +35,117 @@ NOISY_HTTP_LOGGERS = (
 )
 
 
+class JournaldFormatter(logging.Formatter):
+    """
+    Syslog-friendly formatter.
+    We ONLY add the 'vandamme-proxy:' prefix here.
+    SysLogHandler automatically adds the correct priority <N> wrapper.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        # 1. Inject Correlation ID if present
+        if hasattr(record, "correlation_id"):
+            prefix = f"[{record.correlation_id[:8]}]"
+            if not record.msg.startswith(prefix):
+                record.msg = f"{prefix} {record.msg}"
+
+        # 2. Standard Formatting
+        msg = super().format(record)
+
+        # 3. Hash API Keys
+        with suppress(NameError):
+            msg = hash_api_keys_in_message(msg)
+
+        # 4. Add the Tag ONLY (No <N> priority prefix!)
+        # SysLogHandler will automatically prepend <4>, <6>, etc.
+        return f"vandamme-proxy: {msg}"
+
+
 def set_noisy_http_logger_levels(current_log_level: str) -> None:
     """Ensure HTTP client noise only surfaces at DEBUG level."""
 
     noisy_level = logging.DEBUG if current_log_level == "DEBUG" else logging.WARNING
     for logger_name in NOISY_HTTP_LOGGERS:
         logging.getLogger(logger_name).setLevel(noisy_level)
+
+
+def _build_syslog_handler() -> logging.Handler | None:
+    if os.path.exists("/dev/log"):
+        handler = logging.handlers.SysLogHandler(address="/dev/log")
+        handler.setFormatter(
+            JournaldFormatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S")
+        )
+        handler.addFilter(HttpRequestLogDowngradeFilter(*NOISY_HTTP_LOGGERS))
+        handler.set_name("syslog")
+        return handler
+    return None
+
+
+def _build_console_handler(formatter: logging.Formatter) -> logging.Handler:
+    handler = logging.StreamHandler()
+    handler.addFilter(HttpRequestLogDowngradeFilter(*NOISY_HTTP_LOGGERS))
+    handler.setFormatter(formatter)
+    handler.set_name("console")
+    return handler
+
+
+def _resolve_formatter() -> logging.Formatter:
+    return CorrelationHashingFormatter(
+        "%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S"
+    )
+
+
+def configure_logging(use_systemd: bool = False) -> None:
+    """Configure logging with syslog (/dev/log) when requested, else console.
+
+    Args:
+        use_systemd: If True, attempt to send logs to syslog (/dev/log);
+                    fallback to console on failure.
+    """
+    logging.getLogger(__name__)
+
+    log_level = config.log_level.split()[0].upper()
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    if log_level not in valid_levels:
+        log_level = "INFO"
+
+    # Configure all uvicorn loggers to use the same handler
+    uvicorn_loggers = [
+        "uvicorn",
+        "uvicorn.access",
+        "uvicorn.error",
+        "uvicorn.server",
+    ]
+
+    # Get or create the appropriate handler
+    if use_systemd:
+        handler = _build_syslog_handler()
+        if not handler:
+            import sys
+
+            print(
+                "Warning: /dev/log not available; falling back to console logging", file=sys.stderr
+            )
+            handler = _build_console_handler(_resolve_formatter())
+    else:
+        handler = _build_console_handler(_resolve_formatter())
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(getattr(logging, log_level))
+
+    # Configure uvicorn loggers to use the same handler
+    for logger_name in uvicorn_loggers:
+        uvicorn_logger = logging.getLogger(logger_name)
+        uvicorn_logger.handlers.clear()
+        uvicorn_logger.addHandler(handler)
+        # Suppress uvicorn noise unless DEBUG
+        uvicorn_logger.setLevel(logging.WARNING if log_level != "DEBUG" else logging.INFO)
+
+    # Also suppress HTTP client noise
+    set_noisy_http_logger_levels(log_level)
 
 
 def get_api_key_hash(api_key: str) -> str:
@@ -980,12 +1086,6 @@ class CorrelationHashingFormatter(HashingFormatter):
         return super().format(record)
 
 
-# Configure root logger with combined formatter
-formatter = CorrelationHashingFormatter(
-    "%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S"
-)
-
-
 class HttpRequestLogDowngradeFilter(logging.Filter):
     """Downgrade noisy third-party HTTP logs to DEBUG."""
 
@@ -1003,20 +1103,9 @@ class HttpRequestLogDowngradeFilter(logging.Filter):
         return True
 
 
-handler = logging.StreamHandler()
-handler.addFilter(HttpRequestLogDowngradeFilter(*NOISY_HTTP_LOGGERS))
-handler.setFormatter(formatter)
-
-root_logger = logging.getLogger()
-root_logger.handlers.clear()
-root_logger.addHandler(handler)
-root_logger.setLevel(getattr(logging, log_level))
-
-# Configure uvicorn to be quieter
-for uvicorn_logger in ["uvicorn", "uvicorn.access", "uvicorn.error"]:
-    logging.getLogger(uvicorn_logger).setLevel(logging.WARNING)
-
-set_noisy_http_logger_levels(log_level)
+# Initialize default logging configuration (console output)
+use_journal = os.environ.get("USE_SYSTEMD_LOGGING", "true").lower() == "true"
+configure_logging(use_systemd=use_journal)
 
 # Global instances
 logger = logging.getLogger(__name__)

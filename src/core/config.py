@@ -61,8 +61,6 @@ class Config:
 
         # Add Anthropic API key for client validation
         self.proxy_api_key = os.environ.get("PROXY_API_KEY")
-        if not self.proxy_api_key:
-            print("Warning: PROXY_API_KEY not set. Client API key validation will be disabled.")
 
         # Get base URL for the default provider
         provider_upper = self.default_provider.upper()
