@@ -52,15 +52,23 @@ def format_model_page_url(template: str, model_id: str, display_name: str) -> st
     Returns:
         Fully formatted URL with encoded parameters
     """
+
+    def _poe_slug(name: str) -> str:
+        # Poe bot pages use a hyphenated slug (spaces are '-') rather than %20.
+        # We keep other characters safely URL-encoded.
+        return urllib.parse.quote(name.replace(" ", "-"))
+
+    quoted_id = urllib.parse.quote(model_id)
+    quoted_display_name = urllib.parse.quote(display_name)
+
+    if template.startswith("https://poe.com/"):
+        quoted_display_name = _poe_slug(display_name)
+
     try:
-        return template.format(
-            id=urllib.parse.quote(model_id), display_name=urllib.parse.quote(display_name)
-        )
+        return template.format(id=quoted_id, display_name=quoted_display_name)
     except Exception:
         # Fall back to just ID if display_name causes issues
-        return template.format(
-            id=urllib.parse.quote(model_id), display_name=urllib.parse.quote(model_id)
-        )
+        return template.format(id=quoted_id, display_name=quoted_id)
 
 
 def models_ag_grid(
@@ -100,9 +108,7 @@ def models_ag_grid(
             "width": 80,  # Fixed width for emoji icon with padding
             "suppressSizeToFit": True,
             "suppressMovable": True,
-            "suppressHtmlEscaping": True,
             "cellRenderer": "vdmModelPageLinkRenderer",
-            "cellRendererParams": {"suppressHtmlEscaping": True},
         },
         {
             "headerName": "Model ID",
@@ -205,25 +211,61 @@ def models_ag_grid(
 CELL_RENDERER_SCRIPTS = """
 console.info('[vdm] CELL_RENDERER_SCRIPTS loaded');
 
-// Render model page link with emoji as HTML string (AG Grid will inject as HTML)
+// Render model page link as React element (Dash uses React; DOM nodes cause React invariant #31)
 window.vdmModelPageLinkRenderer = function(params) {
     const url = params && params.data && params.data.model_page_url;
 
     if (!url) {
-        // No URL available, show disabled link icon
-        return (
-            '<span style="color: #666; opacity: 0.3; font-size: 16px;" ' +
-            'title="No model page available">🔗</span>'
+        return React.createElement(
+            'span',
+            {
+                title: 'No model page available',
+                style: { color: '#666', opacity: 0.3, fontSize: '16px' },
+            },
+            '🔗'
         );
     }
 
-    const safeUrl = window.escapeHtml(url);
-    return (
-        `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" ` +
-        `style="color: #61DAFB; text-decoration: none; font-size: 16px;" ` +
-        `title="Open model page in new tab">🔗</a>`
+    // Only allow http(s) URLs to avoid accidentally creating javascript: links
+    let parsed;
+    try {
+        parsed = new URL(url);
+    } catch (e) {
+        return React.createElement(
+            'span',
+            {
+                title: 'Invalid model page URL',
+                style: { color: '#666', opacity: 0.3, fontSize: '16px' },
+            },
+            '🔗'
+        );
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return React.createElement(
+            'span',
+            {
+                title: 'Unsupported model page URL',
+                style: { color: '#666', opacity: 0.3, fontSize: '16px' },
+            },
+            '🔗'
+        );
+    }
+
+    return React.createElement(
+        'a',
+        {
+            href: parsed.toString(),
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            title: 'Open model page in new tab',
+            style: { color: '#61DAFB', textDecoration: 'none', fontSize: '16px' },
+        },
+        '🔗'
     );
 };
+
+// Renderer returns a React element, not an HTML string.
 
 // For dash-ag-grid function registry compatibility
 window.dashAgGridFunctions = window.dashAgGridFunctions || {};

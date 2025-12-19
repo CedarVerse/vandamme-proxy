@@ -221,6 +221,32 @@ class AliasManager:
             logger.debug("No model name provided, cannot resolve alias")
             return None
 
+        # Check for literal name prefix (!) - handle at the very beginning
+        if model.startswith("!"):
+            logger.debug(f"Literal model name detected, stripping '!' prefix: '{model}'")
+            literal_part = model[1:]  # Remove the first character '!' (preserve original case)
+
+            # Edge case: empty after stripping '!'
+            if not literal_part:
+                logger.debug("Empty model name after stripping '!', returning None")
+                return None
+
+            # Check if the literal part contains a provider prefix
+            if ":" in literal_part:
+                # Format: !provider:model
+                literal_provider, literal_model = literal_part.split(":", 1)
+                # Normalize provider to lowercase but preserve model case
+                result = f"{literal_provider.lower()}:{literal_model}"
+            else:
+                # Format: !model (no provider specified)
+                # If provider parameter is given, use it; otherwise return as-is
+                # No provider context, return literal model as-is
+                # ModelManager will handle provider resolution via parse_model_name()
+                result = f"{provider}:{literal_part}" if provider else literal_part
+
+            logger.info(f"[AliasManager] literal: '{model}' -> '{result}'")
+            return result
+
         if not self.aliases:
             logger.debug("No aliases configured, returning None")
             return None

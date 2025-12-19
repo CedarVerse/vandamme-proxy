@@ -364,9 +364,14 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
 
             # Provider is not always encoded per model when fetching without a provider filter.
             # Keep a consistent value for display.
+            #
+            # IMPORTANT: When the user selects "Default provider" (provider is None), we still
+            # want model-page links to work. Prefer the actual default provider from /health
+            # for missing provider fields.
+            inferred_provider = provider or default_provider or "multiple"
             for model in models:
                 if not model.get("provider"):
-                    model["provider"] = provider or "multiple"
+                    model["provider"] = inferred_provider
 
             if not models:
                 return empty_state("No models found", "🔍"), provider_options, hint

@@ -614,3 +614,86 @@ class TestAliasManager:
 
             # Provider not configured should return None even with fallbacks
             assert alias_manager.resolve_alias("haiku", provider="openai") is None
+
+    def test_resolve_alias_literal_name_prefix(self):
+        """Test that '!' prefix bypasses alias resolution and uses literal model name."""
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "POE_ALIAS_HAIKU": "should-not-be-used",
+                    "OPENAI_ALIAS_FAST": "should-not-be-used",
+                },
+            ),
+            patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
+        ):
+            mock_pm = mock_provider_manager.return_value
+            mock_pm._configs = {"poe": {}, "openai": {}}
+
+            alias_manager = AliasManager()
+
+            # Basic literal name (no provider context)
+            assert alias_manager.resolve_alias("!my-literal-model") == "my-literal-model"
+            assert alias_manager.resolve_alias("!MY-MODEL") == "MY-MODEL"  # Preserves case
+            assert (
+                alias_manager.resolve_alias("!model_with_underscores") == "model_with_underscores"
+            )
+
+            # With provider in the literal string (!provider:model format)
+            assert alias_manager.resolve_alias("!openai:my-model") == "openai:my-model"
+            assert (
+                alias_manager.resolve_alias("!POE:ANOTHER-MODEL") == "poe:ANOTHER-MODEL"
+            )  # Provider normalized, model case preserved
+
+            # With provider parameter (for !model without provider)
+            assert alias_manager.resolve_alias("!my-model", provider="poe") == "poe:my-model"
+            assert alias_manager.resolve_alias("!MY-MODEL", provider="openai") == "openai:MY-MODEL"
+
+            # Provider in literal string should override provider parameter
+            assert alias_manager.resolve_alias("!poe:model", provider="openai") == "poe:model"
+
+            # Edge cases
+            assert alias_manager.resolve_alias("!") is None  # Empty after stripping
+            assert alias_manager.resolve_alias("! ") == " "  # Space is preserved
+            assert alias_manager.resolve_alias("!!double") == "!double"  # Only first ! stripped
+
+            # Ensure aliases don't match when ! is present
+            assert alias_manager.resolve_alias("!haiku") == "haiku"  # Not "poe:grok-4.1-fast"
+            assert alias_manager.resolve_alias("!fast") == "fast"  # Not "openai:gpt-4o-mini"
+
+            # Verify literal handling works with substring patterns that would otherwise match
+            assert (
+                alias_manager.resolve_alias("!my-haiku-model") == "my-haiku-model"
+            )  # Not poe alias
+            assert alias_manager.resolve_alias("!super-fast") == "super-fast"  # Not openai alias
+
+    def test_literal_name_through_model_manager(self):
+        """Test that literal names work correctly through ModelManager.resolve_model()."""
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "POE_ALIAS_HAIKU": "should-not-be-used",
+                },
+            ),
+            patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
+        ):
+            mock_pm = mock_provider_manager.return_value
+            mock_pm._configs = {"poe": {}}
+            mock_pm.default_provider = "poe"
+            mock_pm.parse_model_name.return_value = ("poe", "my-literal-model")
+
+            from src.core.config import Config
+            from src.core.model_manager import ModelManager
+
+            # Test through ModelManager
+            model_manager = ModelManager(Config())
+            provider, model = model_manager.resolve_model("!my-literal-model")
+
+            # Verify the model name was passed through with default provider
+            mock_pm.parse_model_name.assert_called_with("poe:my-literal-model")
+
+            # Test with explicit provider in literal
+            mock_pm.parse_model_name.return_value = ("openai", "gpt-4")
+            provider, model = model_manager.resolve_model("!openai:gpt-4")
+            mock_pm.parse_model_name.assert_called_with("openai:gpt-4")
