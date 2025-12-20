@@ -4,8 +4,6 @@
 import re
 import subprocess
 import sys
-from pathlib import Path
-from typing import Tuple
 
 
 def get_current_version() -> str:
@@ -25,7 +23,7 @@ def get_current_version() -> str:
         return "1.0.0"  # Initial version
 
 
-def parse_version(version: str) -> Tuple[int, int, int]:
+def parse_version(version: str) -> tuple[int, int, int]:
     """Parse version string into tuple."""
     match = re.match(r'^(\d+)\.(\d+)\.(\d+)$', version)
     if not match:

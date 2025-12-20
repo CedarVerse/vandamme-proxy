@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Release management utilities for vandamme-proxy."""
 
+import os
 import subprocess
 import sys
-import os
-from pathlib import Path
 
 
 # Colors for terminal output
@@ -35,20 +34,23 @@ def get_current_version():
     """Get current version from Git (only semver tags) or package."""
     try:
         # List only semver-formatted tags, sorted by version
-        result = run_cmd("git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname", capture_output=True)
+        result = run_cmd(
+            "git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname",
+            capture_output=True,
+        )
         tags = result.stdout.strip().split('\n')
         # Return first (highest) semver tag if found
         if tags and tags[0]:
             return tags[0]
         # Fall through to package version fallback
-    except:
+    except Exception:
         pass
     # Fallback to package version
     try:
         result = run_cmd("uv run python -c 'from src import __version__; print(__version__)'",
                         capture_output=True)
         return result.stdout.strip()
-    except:
+    except Exception:
         return "1.0.0"
 
 
@@ -156,7 +158,9 @@ def main():
     elif command == "post-tag":
         print(f"{Colors.BOLD}{Colors.GREEN}✅ Release initiated!{Colors.RESET}")
         print(f"{Colors.CYAN}→ Tag created, GitHub Actions will publish automatically{Colors.RESET}")
-        print(f"{Colors.CYAN}→ Track progress at: https://github.com/elifarley/vandamme-proxy/actions{Colors.RESET}")
+        print(
+            f"{Colors.CYAN}→ Track progress at: https://github.com/elifarley/vandamme-proxy/actions{Colors.RESET}"
+        )
 
     elif command == "full":
         # Full interactive version bump (tests should be run separately)
@@ -177,7 +181,9 @@ def main():
 
     elif command == "quick":
         if len(sys.argv) < 3:
-            print(f"{Colors.RED}Error: quick requires type argument (patch/minor/major){Colors.RESET}")
+            print(
+                f"{Colors.RED}Error: quick requires type argument (patch/minor/major){Colors.RESET}"
+            )
             sys.exit(1)
         bump_type = sys.argv[2]
 
