@@ -455,6 +455,35 @@ The proxy automatically provides sensible defaults for common model names:
 | sonnet | glm-4.6                  | gpt-5.1-codex         | claude-3-5-sonnet-20241022       |
 | opus   | gpt-5.2                  | gpt-5.2               | claude-3-opus-20240229           |
 
+#### Discovering Recommended Models: Top Models Feature
+
+The proxy provides a **top-models** feature to answer “what models should I use now?”:
+- Fetches curated recommendations from OpenRouter
+- Caches results locally for performance
+- Provides suggested aliases (`top`, `top-cheap`, `top-longctx`)
+- Exposes recommendations via API and CLI
+
+```bash
+# View curated models (API)
+curl "http://localhost:8082/top-models?limit=5"
+
+# View with CLI (Rich table + suggested aliases)
+vdm models top
+
+# See suggested aliases alongside your configured ones
+curl http://localhost:8082/v1/aliases | jq '.suggested'
+
+# Force refresh bypassing cache
+vdm models top --refresh
+curl "http://localhost:8082/top-models?refresh=true"
+```
+
+- **API**: `GET /top-models` (proxy metadata, not under `/v1`)
+- **CLI**: `vdm models top [--limit N] [--refresh] [--provider X] [--json]`
+- **Suggested aliases appear as non-mutating overlay in `/v1/aliases`**
+
+See [Top Models Documentation](docs/top-models.md) for full details.
+
 #### Usage Examples
 
 ```bash
