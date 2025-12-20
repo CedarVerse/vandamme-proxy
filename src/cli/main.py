@@ -6,7 +6,7 @@ import sys
 import typer
 
 # Import command modules
-from src.cli.commands import config, health, server, test
+from src.cli.commands import config, health, models, server, test
 from src.cli.commands.wrap import wrap
 
 app = typer.Typer(
@@ -20,6 +20,7 @@ app = typer.Typer(
 app.add_typer(server.app, name="server", help="Server management")
 app.add_typer(config.app, name="config", help="Configuration management")
 app.add_typer(health.app, name="health", help="Health checks")
+app.add_typer(models.app, name="models", help="Model discovery")
 app.add_typer(test.app, name="test", help="Test commands")
 
 # Add wrap as a command directly with support for extra arguments

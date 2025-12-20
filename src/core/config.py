@@ -88,6 +88,17 @@ class Config:
         self.request_timeout = int(os.environ.get("REQUEST_TIMEOUT", "90"))
         self.max_retries = int(os.environ.get("MAX_RETRIES", "2"))
 
+        # Top-models (proxy metadata)
+        self.top_models_cache_dir = os.environ.get(
+            "TOP_MODELS_CACHE_DIR", "~/.cache/vandamme-proxy"
+        )
+        self.top_models_cache_ttl_days = int(os.environ.get("TOP_MODELS_CACHE_TTL_DAYS", "2"))
+        self.top_models_timeout_seconds = float(os.environ.get("TOP_MODELS_TIMEOUT_SECONDS", "30"))
+        self.top_models_exclude = tuple(
+            s.strip() for s in os.environ.get("TOP_MODELS_EXCLUDE", "").split(",") if s.strip()
+        )
+        # Note: per-provider exclusions can be added later without breaking API.
+
         # Thought signature middleware settings
         self.gemini_thought_signatures_enabled = (
             os.environ.get("GEMINI_THOUGHT_SIGNATURES_ENABLED", "true").lower() == "true"
@@ -119,6 +130,14 @@ class Config:
         """
         global config
         config = cls()
+        # Ensure modules holding a reference to the old singleton see the fresh instance.
+        # This is primarily used for test isolation.
+        import sys
+
+        # mypy: the module-level name `config` exists at runtime; this keeps tests isolated
+        module = sys.modules.get(__name__)
+        if module is not None:
+            module.config = config  # type: ignore[attr-defined]
 
     @property
     def provider_manager(self) -> "ProviderManager":

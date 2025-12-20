@@ -374,7 +374,9 @@ class TestListAliases:
             content = json.loads(response.body)
             assert content["object"] == "list"
             assert "aliases" in content
+            assert "suggested" in content
             assert content["total"] == 3
+            assert isinstance(content["suggested"], dict)
 
             # Check aliases structure (grouped by provider)
             assert content["aliases"]["poe"]["haiku"] == "gpt-4o-mini"
@@ -398,6 +400,8 @@ class TestListAliases:
             content = json.loads(response.body)
             assert content["object"] == "list"
             assert content["aliases"] == {}
+            assert "suggested" in content
+            assert isinstance(content["suggested"], dict)
             assert content["total"] == 0
 
     @pytest.mark.asyncio

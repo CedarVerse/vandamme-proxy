@@ -1098,18 +1098,35 @@ async def list_models(
 
 @router.get("/v1/aliases")
 async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
-    """List all configured model aliases grouped by provider"""
+    """List all configured model aliases grouped by provider.
+
+    Also includes a non-mutating overlay of "suggested" aliases derived from
+    `/top-models`.
+    """
     try:
         aliases = config.alias_manager.get_all_aliases()
 
         # Return aliases grouped by provider
         total_aliases = sum(len(provider_aliases) for provider_aliases in aliases.values())
 
+        suggested: dict[str, dict[str, str]] = {}
+        try:
+            from src.top_models.service import TopModelsService
+
+            top = await TopModelsService().get_top_models(limit=10, refresh=False, provider=None)
+            if top.aliases:
+                # "default" indicates these are global suggestions, not provider-scoped.
+                suggested["default"] = top.aliases
+        except Exception as e:
+            # Suggestions should never break /v1/aliases
+            logger.debug(f"Failed to compute suggested aliases overlay: {e}")
+
         return JSONResponse(
             status_code=200,
             content={
                 "object": "list",
                 "aliases": aliases,
+                "suggested": suggested,
                 "total": total_aliases,
             },
         )
@@ -1125,6 +1142,33 @@ async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
                 },
             },
         )
+
+
+@router.get("/top-models")
+async def top_models(
+    _: None = Depends(validate_api_key),
+    limit: int = Query(10, ge=1, le=50),
+    refresh: bool = Query(False),
+    provider: str | None = Query(None),
+) -> JSONResponse:
+    """List curated top models (proxy metadata, not part of /v1 surface)."""
+    from src.top_models.service import TopModelsService
+    from src.top_models.types import top_model_to_api_dict
+
+    svc = TopModelsService()
+    result = await svc.get_top_models(limit=limit, refresh=refresh, provider=provider)
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "object": "list",
+            "source": result.source,
+            "cached": result.cached,
+            "last_updated": result.last_updated.isoformat(),
+            "data": [top_model_to_api_dict(m) for m in result.models],
+            "aliases": result.aliases,
+        },
+    )
 
 
 @router.get("/")
@@ -1144,6 +1188,8 @@ async def root() -> dict[str, Any]:
             "count_tokens": "/v1/messages/count_tokens",
             "running_totals": "/metrics/running-totals",
             "models": "/v1/models",
+            "aliases": "/v1/aliases",
+            "top_models": "/top-models",
             "health": "/health",
             "test_connection": "/test-connection",
         },
