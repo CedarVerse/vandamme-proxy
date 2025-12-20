@@ -28,17 +28,29 @@ def test_provider_rows_basic_shape() -> None:
             "total_requests": 10,
             "providers": {
                 "openai": {
-                    "total_requests": 7,
-                    "total_errors": 1,
-                    "total_input_tokens": 100,
-                    "total_output_tokens": 200,
+                    "rollup": {
+                        "total": {
+                            "requests": 7,
+                            "errors": 1,
+                            "input_tokens": 100,
+                            "output_tokens": 200,
+                        },
+                        "streaming": {"average_duration_ms": 100},
+                        "non_streaming": {"average_duration_ms": 150},
+                    },
                     "models": {},
                 },
                 "anthropic": {
-                    "total_requests": 3,
-                    "total_errors": 0,
-                    "total_input_tokens": 30,
-                    "total_output_tokens": 40,
+                    "rollup": {
+                        "total": {
+                            "requests": 3,
+                            "errors": 0,
+                            "input_tokens": 30,
+                            "output_tokens": 40,
+                        },
+                        "streaming": {"average_duration_ms": 80},
+                        "non_streaming": {"average_duration_ms": 120},
+                    },
                     "models": {},
                 },
             },
