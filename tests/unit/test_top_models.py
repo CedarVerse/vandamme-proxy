@@ -38,12 +38,14 @@ def test_top_models_endpoint_mocked(respx_mock):
 
     assert resp.status_code == 200
     payload = resp.json()
-    assert payload["object"] == "list"
+    assert payload["object"] == "top_models"
     assert payload["source"] == "openrouter"
-    assert payload["data"][0]["id"] == "openai/gpt-4o"
-    assert payload["data"][0]["pricing"]["average_per_million"] == pytest.approx(6.25)
-    assert "aliases" in payload
-    assert payload["aliases"].get("top") == "openai/gpt-4o"
+    assert payload["models"][0]["id"] == "openai/gpt-4o"
+    assert payload["models"][0]["provider"] == "openrouter"
+    assert payload["models"][0]["sub_provider"] == "openai"
+    assert payload["models"][0]["pricing"]["average_per_million"] == pytest.approx(6.25)
+    assert "suggested_aliases" in payload
+    assert payload["suggested_aliases"].get("top") == "openai/gpt-4o"
 
 
 @pytest.mark.unit

@@ -1150,23 +1150,48 @@ async def top_models(
     limit: int = Query(10, ge=1, le=50),
     refresh: bool = Query(False),
     provider: str | None = Query(None),
+    include_cache_info: bool = Query(False),
 ) -> JSONResponse:
-    """List curated top models (proxy metadata, not part of /v1 surface)."""
+    """List curated top models (proxy metadata, not part of /v1 surface).
+
+    This endpoint is intended as a dashboard-friendly discovery contract.
+    """
+    from src.core.config import config as cfg
     from src.top_models.service import TopModelsService
     from src.top_models.types import top_model_to_api_dict
 
     svc = TopModelsService()
     result = await svc.get_top_models(limit=limit, refresh=refresh, provider=provider)
 
+    models = [top_model_to_api_dict(m) for m in result.models]
+    providers_raw = [m.get("provider") for m in models if isinstance(m.get("provider"), str)]
+    providers: list[str] = sorted({p for p in providers_raw if isinstance(p, str)})
+
+    sub_providers_raw = [
+        m.get("sub_provider") for m in models if isinstance(m.get("sub_provider"), str)
+    ]
+    sub_providers: list[str] = sorted({p for p in sub_providers_raw if isinstance(p, str)})
+
+    meta: dict[str, Any] = {
+        "cache_ttl_seconds": int(svc._cfg.ttl.total_seconds()),
+        "excluded_rules": list(svc._cfg.exclude),
+    }
+
+    if include_cache_info and str(cfg.log_level).upper() == "DEBUG":
+        meta["cache_file"] = str(svc._cfg.cache_dir / "top-models.json")
+
     return JSONResponse(
         status_code=200,
         content={
-            "object": "list",
+            "object": "top_models",
             "source": result.source,
             "cached": result.cached,
             "last_updated": result.last_updated.isoformat(),
-            "data": [top_model_to_api_dict(m) for m in result.models],
-            "aliases": result.aliases,
+            "providers": providers,
+            "sub_providers": sub_providers,
+            "models": models,
+            "suggested_aliases": result.aliases,
+            "meta": meta,
         },
     )
 

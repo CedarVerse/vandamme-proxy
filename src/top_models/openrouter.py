@@ -44,9 +44,11 @@ class OpenRouterTopModelsSource:
 
             name = raw.get("name") if isinstance(raw.get("name"), str) else None
 
-            provider = None
+            provider = "openrouter"
+
+            sub_provider = None
             if "/" in model_id:
-                provider = model_id.split("/", 1)[0]
+                sub_provider = model_id.split("/", 1)[0]
 
             context_window = raw.get("context_length")
             if not isinstance(context_window, int):
@@ -83,6 +85,7 @@ class OpenRouterTopModelsSource:
                     id=model_id,
                     name=name,
                     provider=provider,
+                    sub_provider=sub_provider,
                     context_window=context_window,
                     capabilities=tuple(dict.fromkeys(capabilities)),
                     pricing=pricing,

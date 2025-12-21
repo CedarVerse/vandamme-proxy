@@ -22,7 +22,12 @@ def top_models(
     ),
     limit: int = typer.Option(10, "--limit", min=1, max=50, help="Max models to show"),
     refresh: bool = typer.Option(False, "--refresh", help="Bypass cache"),
-    provider: str | None = typer.Option(None, "--provider", help="Filter by provider"),
+    provider: str | None = typer.Option(
+        None, "--provider", help="Filter by provider (top-level source, e.g. openrouter)"
+    ),
+    sub_provider: str | None = typer.Option(
+        None, "--sub-provider", help="Filter by sub-provider (e.g. openai, google)"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Print JSON output"),
 ) -> None:
     """Show curated top models (fetched remotely, cached locally by the server)."""
@@ -30,6 +35,8 @@ def top_models(
     params: dict[str, str | int | float | bool | None] = {"limit": limit, "refresh": refresh}
     if provider:
         params["provider"] = provider
+    if sub_provider:
+        params["sub_provider"] = sub_provider
 
     url = base_url.rstrip("/") + "/top-models"
     resp = httpx.get(url, params=params, timeout=30)
@@ -43,6 +50,7 @@ def top_models(
 
     table = Table(title="Top Models")
     table.add_column("Provider", style="cyan")
+    table.add_column("Sub-provider", style="cyan")
     table.add_column("Model", style="bold")
     table.add_column("Context", justify="right")
     table.add_column("Avg $/M", justify="right")
@@ -51,8 +59,12 @@ def top_models(
 
     source = "cache" if payload.get("cached") else "live"
 
-    for m in payload.get("data", []):
+    for m in payload.get("models", []):
+        if not isinstance(m, dict):
+            continue
+
         provider_name = m.get("provider") or ""
+        sub_provider_name = m.get("sub_provider") or ""
         model_id = m.get("id") or ""
         ctx = m.get("context_window")
         ctx_s = str(ctx) if isinstance(ctx, int) else ""
@@ -64,11 +76,11 @@ def top_models(
         caps = m.get("capabilities")
         caps_s = ", ".join(caps) if isinstance(caps, list) else ""
 
-        table.add_row(provider_name, model_id, ctx_s, avg_s, caps_s, source)
+        table.add_row(provider_name, sub_provider_name, model_id, ctx_s, avg_s, caps_s, source)
 
     console.print(table)
 
-    aliases = payload.get("aliases")
+    aliases = payload.get("suggested_aliases")
     if isinstance(aliases, dict) and aliases:
         console.print("\nSuggested aliases:")
         for k, v in sorted(aliases.items()):

@@ -71,6 +71,150 @@ def format_model_page_url(template: str, model_id: str, display_name: str) -> st
         return template.format(id=quoted_id, display_name=quoted_id)
 
 
+def top_models_ag_grid(
+    models: list[dict[str, Any]],
+    *,
+    grid_id: str = "vdm-top-models-grid",
+) -> dag.AgGrid:
+    """Create an AG-Grid table for Top Models.
+
+    Expects rows shaped like the `/top-models` API output items.
+    """
+    column_defs = [
+        {
+            "headerName": "Provider",
+            "field": "provider",
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "width": 130,
+            "suppressSizeToFit": True,
+        },
+        {
+            "headerName": "Sub-provider",
+            "field": "sub_provider",
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "width": 160,
+            "suppressSizeToFit": True,
+        },
+        {
+            "headerName": "Model ID",
+            "field": "id",
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "flex": 2,
+            "minWidth": 260,
+            "cellStyle": {"cursor": "copy"},
+        },
+        {
+            "headerName": "Name",
+            "field": "name",
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "flex": 1,
+            "minWidth": 160,
+        },
+        {
+            "headerName": "Context",
+            "field": "context_window",
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "width": 120,
+            "suppressSizeToFit": True,
+        },
+        {
+            "headerName": "Avg $/M",
+            "field": "avg_per_million",
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "width": 120,
+            "suppressSizeToFit": True,
+        },
+        {
+            "headerName": "Caps",
+            "field": "capabilities",
+            "sortable": False,
+            "filter": True,
+            "resizable": True,
+            "flex": 1,
+            "minWidth": 220,
+        },
+    ]
+
+    row_data: list[dict[str, Any]] = []
+    for m in models:
+        pricing = m.get("pricing") if isinstance(m.get("pricing"), dict) else {}
+        avg = pricing.get("average_per_million") if isinstance(pricing, dict) else None
+        avg_s = f"{avg:.3f}" if isinstance(avg, (int, float)) else ""
+
+        caps = m.get("capabilities")
+        caps_s = ", ".join(c for c in caps if isinstance(c, str)) if isinstance(caps, list) else ""
+
+        row_data.append(
+            {
+                "provider": m.get("provider") or "",
+                "sub_provider": m.get("sub_provider") or "",
+                "id": m.get("id") or "",
+                "name": m.get("name") or "",
+                "context_window": m.get("context_window") or "",
+                "avg_per_million": avg_s,
+                "capabilities": caps_s,
+            }
+        )
+
+    custom_css = {
+        "height": "70vh",
+        "width": "100%",
+        "minHeight": "500px",
+    }
+
+    return dag.AgGrid(
+        id=grid_id,
+        className="ag-theme-alpine-dark",
+        style=custom_css,
+        columnDefs=column_defs,
+        rowData=row_data,
+        defaultColDef={
+            "sortable": True,
+            "resizable": True,
+            "filter": True,
+        },
+        dashGridOptions={
+            "animateRows": True,
+            "rowSelection": {"mode": "multiRow"},
+            "suppressDragLeaveHidesColumns": True,
+            "pagination": True,
+            "paginationPageSize": 50,
+            "paginationPageSizeSelector": [25, 50, 100, 200],
+            "domLayout": "normal",
+            "suppressContextMenu": False,
+            "enableCellTextSelection": True,
+            "ensureDomOrder": True,
+            "localeText": {
+                "page": "Page",
+                "to": "to",
+                "of": "of",
+                "first": "First",
+                "last": "Last",
+                "next": "Next",
+                "previous": "Previous",
+                "loadingOoo": "Loading...",
+                "noRowsToShow": "No models found",
+                "filterOoo": "Filter...",
+            },
+        },
+    )
+
+
+# --- Models AG Grid (existing) ---
+
+
 def models_ag_grid(
     models: list[dict[str, Any]],
     grid_id: str = "models-grid",
@@ -659,4 +803,7 @@ window.escapeHtml = function(text) {
 def get_ag_grid_clientside_callback() -> dict[str, dict[str, str]]:
     """Return the clientside callback for AG-Grid cell renderers."""
     # Note: the keys must match the Dash component id(s) of the AgGrid instances.
-    return {"vdm-models-grid": {"javascript": CELL_RENDERER_SCRIPTS}}
+    return {
+        "vdm-models-grid": {"javascript": CELL_RENDERER_SCRIPTS},
+        "vdm-top-models-grid": {"javascript": CELL_RENDERER_SCRIPTS},
+    }

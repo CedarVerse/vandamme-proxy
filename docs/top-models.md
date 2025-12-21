@@ -68,15 +68,17 @@ Query parameters:
 - `limit` (int, 1–50, default 10): how many models to return
 - `refresh` (bool, default false): bypass cache and fetch live
 - `provider` (string, optional): filter results by provider prefix
+- `include_cache_info` (bool, default false): in `LOG_LEVEL=DEBUG`, include `meta.cache_file` for ops/debugging
 
 **Response format**:
 ```json
 {
-  "object": "list",
+  "object": "top_models",
   "source": "openrouter",
   "cached": true,
   "last_updated": "2025-12-20T13:45:00Z",
-  "data": [
+  "providers": ["openai", "google"],
+  "models": [
     {
       "id": "openai/gpt-4o",
       "name": "GPT-4o",
@@ -90,10 +92,14 @@ Query parameters:
       }
     }
   ],
-  "aliases": {
+  "suggested_aliases": {
     "top": "openai/gpt-4o",
     "top-cheap": "google/gemini-2.0-flash",
     "top-longctx": "openai/gpt-4o"
+  },
+  "meta": {
+    "cache_ttl_seconds": 172800,
+    "excluded_rules": ["openai/"]
   }
 }
 ```
@@ -133,7 +139,7 @@ Examples:
 vdm models top
 
 # JSON for scripts
-vdm models top --json | jq '.data[0].id'
+vdm models top --json | jq '.models[0].id'
 
 # Refresh and limit
 vdm models top --refresh --limit 3

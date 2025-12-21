@@ -166,6 +166,136 @@ async def fetch_aliases(*, cfg: DashboardConfigProtocol) -> dict[str, Any]:
     return data
 
 
+async def fetch_top_models(
+    *,
+    cfg: DashboardConfigProtocol,
+    limit: int = 10,
+    refresh: bool = False,
+    provider: str | None = None,
+) -> dict[str, Any]:
+    """Fetch top models from the proxy metadata endpoint."""
+    url = f"{cfg.api_base_url}/top-models"
+    params: dict[str, str | int | bool] = {"limit": limit, "refresh": refresh}
+    if provider:
+        params["provider"] = provider
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(url, params=params)
+
+    if resp.status_code != 200:
+        raise DashboardDataError(f"Failed to fetch top models from {url}: HTTP {resp.status_code}")
+
+    try:
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        _log_and_raise("Failed to parse JSON", url, e)
+
+    if not isinstance(data, dict):
+        raise DashboardDataError(f"Unexpected /top-models JSON shape from {url}: {type(data)}")
+
+    if not isinstance(data.get("models"), list):
+        raise DashboardDataError(
+            f"Unexpected /top-models JSON shape from {url}: missing 'models' list"
+        )
+
+    return data
+
+
+def filter_top_models(
+    models: list[dict[str, Any]],
+    *,
+    provider: str | None,
+    query: str,
+) -> list[dict[str, Any]]:
+    """Client-side filtering for the dashboard Top Models page."""
+    p = (provider or "").strip().lower()
+    q = (query or "").strip().lower()
+
+    out: list[dict[str, Any]] = []
+    for m in models:
+        if p and str(m.get("sub_provider", "")).lower() != p:
+            continue
+
+        if q:
+            hay = " ".join(
+                [
+                    str(m.get("id", "")),
+                    str(m.get("name", "")),
+                ]
+            ).lower()
+            if q not in hay:
+                continue
+
+        out.append(m)
+
+    return out
+
+
+def top_models_provider_options(payload: dict[str, Any]) -> list[dict[str, str]]:
+    sub_providers = payload.get("sub_providers")
+    if not isinstance(sub_providers, list):
+        sub_providers = []
+
+    opts: list[dict[str, str]] = [{"label": "All", "value": ""}]
+    for p in sub_providers:
+        if isinstance(p, str) and p:
+            opts.append({"label": p, "value": p})
+
+    return opts
+
+
+def top_models_limit_options() -> list[dict[str, Any]]:
+    return [
+        {"label": "5", "value": 5},
+        {"label": "10", "value": 10},
+        {"label": "20", "value": 20},
+        {"label": "50", "value": 50},
+    ]
+
+
+def top_models_source_label(payload: dict[str, Any]) -> str:
+    return "cache" if payload.get("cached") else "live"
+
+
+def top_models_meta_rows(payload: dict[str, Any]) -> list[tuple[str, str]]:
+    meta = payload.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+
+    rows: list[tuple[str, str]] = []
+    ttl = meta.get("cache_ttl_seconds")
+    if isinstance(ttl, int):
+        rows.append(("cache_ttl_seconds", str(ttl)))
+
+    excluded = meta.get("excluded_rules")
+    if isinstance(excluded, list):
+        excluded_s = ", ".join(x for x in excluded if isinstance(x, str))
+        if excluded_s:
+            rows.append(("excluded_rules", excluded_s))
+
+    cache_file = meta.get("cache_file")
+    if isinstance(cache_file, str) and cache_file:
+        rows.append(("cache_file", cache_file))
+
+    return rows
+
+
+def top_models_suggested_aliases(payload: dict[str, Any]) -> dict[str, str]:
+    raw = payload.get("suggested_aliases")
+    if not isinstance(raw, dict):
+        return {}
+
+    out: dict[str, str] = {}
+    for k, v in raw.items():
+        if isinstance(k, str) and isinstance(v, str):
+            out[k] = v
+    return out
+
+
+# NOTE: dashboard layout helpers live in src/dashboard/pages.py.
+# data_sources.py should remain a pure fetch/transform layer.
+
+
 async def fetch_all_providers(*, cfg: DashboardConfigProtocol) -> list[str]:
     """Extract list of all providers from health endpoint"""
     health_data = await fetch_health(cfg=cfg)

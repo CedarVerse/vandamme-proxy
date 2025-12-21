@@ -23,6 +23,12 @@ from src.dashboard.data_sources import (
     fetch_models,
     fetch_running_totals,
     fetch_test_connection,
+    fetch_top_models,
+    filter_top_models,
+    top_models_meta_rows,
+    top_models_provider_options,
+    top_models_source_label,
+    top_models_suggested_aliases,
 )
 from src.dashboard.pages import (
     compute_metrics_views,
@@ -36,6 +42,7 @@ from src.dashboard.pages import (
     provider_breakdown_table,
     providers_table,
     token_composition_chart,
+    top_models_layout,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,6 +87,9 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
                                 dbc.NavLink("Overview", href="/dashboard/", active="exact"),
                                 dbc.NavLink("Metrics", href="/dashboard/metrics", active="exact"),
                                 dbc.NavLink("Models", href="/dashboard/models", active="exact"),
+                                dbc.NavLink(
+                                    "Top Models", href="/dashboard/top-models", active="exact"
+                                ),
                                 dbc.NavLink("Aliases", href="/dashboard/aliases", active="exact"),
                                 dbc.NavLink(
                                     "Token Counter", href="/dashboard/token-counter", active="exact"
@@ -117,6 +127,8 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
             from src.dashboard.pages import models_layout
 
             return models_layout()
+        if pathname in ("/dashboard/top-models", "/dashboard/top-models/"):
+            return top_models_layout()
         if pathname in ("/dashboard/aliases", "/dashboard/aliases/"):
             from src.dashboard.pages import aliases_layout
 
@@ -491,6 +503,143 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         prevent_initial_call=True,
     )
 
+    # -------------------- Top Models page callbacks --------------------
+
+    @app.callback(
+        Output("vdm-top-models-content", "children"),
+        Output("vdm-top-models-provider", "options"),
+        Output("vdm-top-models-status", "children"),
+        Output("vdm-top-models-meta", "children"),
+        Output("vdm-top-models-aliases", "children"),
+        Input("vdm-top-models-poll", "n_intervals"),
+        Input("vdm-top-models-refresh", "n_clicks"),
+        Input("vdm-top-models-provider", "value"),
+        Input("vdm-top-models-limit", "value"),
+        Input("vdm-top-models-search", "value"),
+        prevent_initial_call=False,
+    )
+    def refresh_top_models(
+        _n: int,
+        refresh_clicks: int | None,
+        provider_value: str | None,
+        limit_value: int | None,
+        search_value: str | None,
+    ) -> tuple[Any, list[dict[str, str]], Any, Any, Any]:
+        try:
+            provider = provider_value.strip() if provider_value else None
+            limit = int(limit_value) if isinstance(limit_value, int) else 10
+
+            # If the user explicitly clicked Refresh, bypass cache.
+            force_refresh = bool(refresh_clicks)
+
+            payload = _run(
+                fetch_top_models(cfg=cfg, limit=limit, refresh=force_refresh, provider=None)
+            )
+
+            provider_options = top_models_provider_options(payload)
+            status = html.Div(
+                [
+                    html.Div(top_models_source_label(payload), className="text-muted small"),
+                    html.Div(top_models_meta_rows(payload) and "" or "", style={"display": "none"}),
+                    html.Div(
+                        [
+                            html.Span("Updated "),
+                            monospace(str(payload.get("last_updated") or "")),
+                        ],
+                        className="text-muted small",
+                    ),
+                ]
+            )
+
+            meta_tbl = dbc.Table(
+                [
+                    html.Tbody(
+                        [
+                            html.Tr([html.Td(monospace(k)), html.Td(monospace(v))])
+                            for k, v in top_models_meta_rows(payload)
+                        ]
+                        or [
+                            html.Tr(
+                                [
+                                    html.Td(
+                                        "No metadata",
+                                        colSpan=2,
+                                        className="text-center text-muted",
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                ],
+                striped=True,
+                borderless=True,
+                size="sm",
+                responsive=True,
+                className="table-dark",
+            )
+
+            aliases = top_models_suggested_aliases(payload)
+            aliases_tbl = dbc.Table(
+                [
+                    html.Thead(html.Tr([html.Th("Alias"), html.Th("Maps To")])),
+                    html.Tbody(
+                        [
+                            html.Tr([html.Td(monospace(k)), html.Td(monospace(v))])
+                            for k, v in sorted(aliases.items())
+                        ]
+                        or [
+                            html.Tr(
+                                [
+                                    html.Td(
+                                        "No suggested aliases",
+                                        colSpan=2,
+                                        className="text-center text-muted",
+                                    )
+                                ]
+                            )
+                        ]
+                    ),
+                ],
+                striped=True,
+                borderless=True,
+                size="sm",
+                responsive=True,
+                className="table-dark",
+            )
+
+            models = payload.get("models", [])
+            models = models if isinstance(models, list) else []
+            models = [m for m in models if isinstance(m, dict)]
+
+            filtered = filter_top_models(
+                models,
+                provider=provider,
+                query=search_value or "",
+            )
+
+            if not filtered:
+                content = empty_state("No models found", "🔍")
+            else:
+                from src.dashboard.components.ag_grid import top_models_ag_grid
+
+                content = top_models_ag_grid(filtered, grid_id="vdm-top-models-grid")
+
+            # Keep provider selection stable: if user selected a provider not present,
+            # the dropdown will still show it; filtering will yield empty.
+            return content, provider_options, status, meta_tbl, aliases_tbl
+
+        except Exception:
+            logger.exception("dashboard.top-models: refresh failed")
+            return (
+                dbc.Alert(
+                    "Failed to load top models. See server logs for details.", color="danger"
+                ),
+                [{"label": "All", "value": ""}],
+                html.Span("Failed", className="text-muted"),
+                html.Div(),
+                html.Div(),
+            )
+
     # -------------------- Aliases page callbacks --------------------
 
     @app.callback(
@@ -820,11 +969,14 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
                         if (window.vdmAttachModelCellCopyListener) {
                           // Re-attach on every boot tick to handle grid re-renders.
                           window.vdmAttachModelCellCopyListener('vdm-models-grid');
+                          window.vdmAttachModelCellCopyListener('vdm-top-models-grid');
                           setTimeout(function(){
                             window.vdmAttachModelCellCopyListener('vdm-models-grid');
+                            window.vdmAttachModelCellCopyListener('vdm-top-models-grid');
                           }, 250);
                           setTimeout(function(){
                             window.vdmAttachModelCellCopyListener('vdm-models-grid');
+                            window.vdmAttachModelCellCopyListener('vdm-top-models-grid');
                           }, 1500);
                         }
                       } catch (e) {

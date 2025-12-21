@@ -23,7 +23,8 @@ class TopModelPricing:
 class TopModel:
     id: str
     name: str | None
-    provider: str | None
+    provider: str
+    sub_provider: str | None
     context_window: int | None
     capabilities: tuple[str, ...]
     pricing: TopModelPricing
@@ -51,6 +52,7 @@ def top_model_to_api_dict(model: TopModel) -> dict[str, Any]:
         "id": model.id,
         "name": model.name,
         "provider": model.provider,
+        "sub_provider": model.sub_provider,
         "context_window": model.context_window,
         "capabilities": list(model.capabilities),
         "pricing": pricing or None,
