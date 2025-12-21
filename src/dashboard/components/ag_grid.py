@@ -479,7 +479,8 @@ def models_ag_grid(
         dashGridOptions={
             "animateRows": True,
             # Community-friendly multi-row selection (AG Grid v32+ object form)
-            "rowSelection": {"mode": "multiRow"},
+            # Enable click-selection (AG Grid v32.2+).
+            "rowSelection": {"mode": "multiRow", "enableClickSelection": True},
             "suppressDragLeaveHidesColumns": True,
             "pagination": True,
             "paginationPageSize": 50,

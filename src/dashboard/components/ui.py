@@ -287,6 +287,41 @@ def model_details_modal() -> dbc.Modal:
     )
 
 
+def model_details_drawer() -> dbc.Offcanvas:
+    """Right-side drawer for displaying model details.
+
+    The models grid supports multi-select (for copy IDs). The drawer is intended to
+    show details for the *focused* row (typically the first selected row).
+
+    Callback outputs:
+    - Body: #vdm-model-details-body
+    - Open state: #vdm-model-details-drawer.is_open
+    """
+    return dbc.Offcanvas(
+        [
+            html.Div(id="vdm-model-details-header"),
+            html.Div(id="vdm-model-details-body"),
+            dbc.Button(
+                "Close",
+                id="vdm-model-details-close",
+                color="secondary",
+                outline=True,
+                size="sm",
+                className="mt-3",
+                n_clicks=0,
+            ),
+        ],
+        id="vdm-model-details-drawer",
+        title="Model details",
+        is_open=False,
+        placement="end",
+        backdrop=True,
+        scrollable=True,
+        className="bg-dark text-white",
+        style={"width": "min(560px, 92vw)"},
+    )
+
+
 def model_card(model: dict[str, Any], show_provider: bool = False) -> dbc.Card:
     """Create a reusable model display card."""
     card_content = [

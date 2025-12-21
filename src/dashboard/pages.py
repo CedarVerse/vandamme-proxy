@@ -10,6 +10,7 @@ from src.dashboard.components.ui import (
     format_duration,
     format_timestamp,
     kpi_card,
+    model_details_drawer,
     monospace,
     provider_badge,
     search_box,
@@ -785,6 +786,8 @@ def models_layout() -> dbc.Container:
                 ],
             ),
             dcc.Store(id="vdm-models-selected-ids", data=[]),
+            dcc.Store(id="vdm-models-detail-store", data=None),
+            model_details_drawer(),
             # Hidden sinks used by clientside callbacks.
             html.Div(id="vdm-models-copy-sink", style={"display": "none"}),
             # We use a hidden button click as a reliable trigger (Dash-owned n_clicks).
