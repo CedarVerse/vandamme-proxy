@@ -2,21 +2,23 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from src.core import config as config_module
-from src.top_models.cache import TopModelsDiskCache
+from src.core.config import config as cfg
+from src.top_models.manual_rankings import ManualRankingsConfig, ManualRankingsTopModelsSource
 from src.top_models.openrouter import OpenRouterTopModelsSource
 from src.top_models.source import TopModelsSourceConfig
 from src.top_models.types import TopModel, TopModelsResult, TopModelsSourceName
+
+TopModelsSource = OpenRouterTopModelsSource | ManualRankingsTopModelsSource
 
 
 @dataclass(frozen=True, slots=True)
 class TopModelsServiceConfig:
     source: TopModelsSourceName
-    cache_dir: Path
-    ttl: timedelta
+    rankings_file: Path
     timeout_seconds: float
     exclude: tuple[str, ...]
 
@@ -29,31 +31,22 @@ def _parse_csv(value: str | None) -> tuple[str, ...]:
 
 
 def _default_service_config() -> TopModelsServiceConfig:
-    cfg = config_module.config
+    source = cfg.top_models_source
+    if source not in {"manual_rankings", "openrouter"}:
+        raise ValueError(f"Unsupported top-models source: {source}")
 
-    # If tests reset the Config singleton, some already-imported modules may still
-    # hold references to the old instance. Prefer the module's own `config` global
-    # if it exists.
-    from src.core.config import config as imported_singleton
+    typed_source: TopModelsSourceName = source  # type: ignore[assignment]
+    # mypy can't narrow `cfg.top_models_source` (a str) to the Literal, even after validation.
 
-    cfg = imported_singleton
-
-    source: TopModelsSourceName = "openrouter"
-
-    cache_dir_raw = cfg.top_models_cache_dir
-    cache_dir = Path(cache_dir_raw).expanduser()
-
-    ttl_days = cfg.top_models_cache_ttl_days
-    ttl = timedelta(days=ttl_days)
+    rankings_file = Path(cfg.top_models_rankings_file)
 
     timeout_seconds = cfg.top_models_timeout_seconds
 
     exclude = tuple(cfg.top_models_exclude)
 
     return TopModelsServiceConfig(
-        source=source,
-        cache_dir=cache_dir,
-        ttl=ttl,
+        source=typed_source,
+        rankings_file=rankings_file,
         timeout_seconds=timeout_seconds,
         exclude=exclude,
     )
@@ -109,11 +102,56 @@ class TopModelsService:
         # Do not capture env-derived config at import time; tests rely on resetting
         # src.core.config.config between cases.
         self._cfg = cfg or _default_service_config()
-        self._cache = TopModelsDiskCache(cache_dir=self._cfg.cache_dir, ttl=self._cfg.ttl)
 
+        self._source: TopModelsSource
         if self._cfg.source == "openrouter":
             self._source = OpenRouterTopModelsSource(
                 TopModelsSourceConfig(timeout_seconds=self._cfg.timeout_seconds)
+            )
+        elif self._cfg.source == "manual_rankings":
+            # We inject a small fetcher so the manual source can reuse the same
+            # fetch+cache semantics as `/v1/models`, while preserving OpenRouter
+            # catalog metadata (pricing/context) that `/v1/models?format=openai`
+            # intentionally strips.
+            from src.api.endpoints import fetch_models_unauthenticated, models_cache
+            from src.conversion.models_converter import raw_to_openai_models
+
+            async def fetch_openrouter_openai_models(
+                *, provider: str, refresh: bool
+            ) -> dict[str, Any]:
+                # DRY reuse: same caching semantics as /v1/models,
+                # without using the endpoint converter that drops pricing/context metadata.
+                if provider != "openrouter":
+                    raise ValueError(
+                        f"manual_rankings only supports provider=openrouter (got {provider})"
+                    )
+
+                base_url = "https://openrouter.ai/api/v1"
+                custom_headers: dict[str, str] = {}
+
+                raw: dict[str, Any] | None = None
+                if models_cache and not refresh:
+                    raw = models_cache.read_response_if_fresh(
+                        provider=provider,
+                        base_url=base_url,
+                        custom_headers=custom_headers,
+                    )
+
+                if raw is None:
+                    raw = await fetch_models_unauthenticated(base_url, custom_headers)
+                    if models_cache:
+                        models_cache.write_response(
+                            provider=provider,
+                            base_url=base_url,
+                            custom_headers=custom_headers,
+                            response=raw,
+                        )
+
+                return raw_to_openai_models(raw)
+
+            self._source = ManualRankingsTopModelsSource(
+                cfg=ManualRankingsConfig(rankings_file=self._cfg.rankings_file),
+                app_fetch_openai_models=fetch_openrouter_openai_models,
             )
         else:
             raise ValueError(f"Unsupported top-models source: {self._cfg.source}")
@@ -125,35 +163,19 @@ class TopModelsService:
         refresh: bool,
         provider: str | None,
     ) -> TopModelsResult:
-        cached = False
-        if not refresh:
-            cached_result = self._cache.read_if_fresh(expected_source=self._cfg.source)
-            if cached_result is not None:
-                models = cached_result.models
-                aliases = cached_result.aliases
-                last_updated = cached_result.last_updated
-                cached = True
-                return self._finalize(
-                    models=models,
-                    aliases=aliases,
-                    last_updated=last_updated,
-                    cached=cached,
-                    limit=limit,
-                    provider=provider,
-                )
+        if self._cfg.source == "manual_rankings":
+            source = self._source
+            assert isinstance(source, ManualRankingsTopModelsSource)
+            models = await source.fetch_models(refresh=refresh)
+        else:
+            source = self._source
+            assert isinstance(source, OpenRouterTopModelsSource)
+            models = await source.fetch_models()
 
-        models = await self._source.fetch_models()
         last_updated = datetime.now(tz=dt.timezone.utc)
 
         models = _apply_exclusions(models, self._cfg.exclude)
         aliases = _suggest_aliases(models)
-
-        self._cache._write_legacy(
-            source=self._cfg.source,
-            last_updated=last_updated,
-            models=models,
-            aliases=aliases,
-        )
 
         return self._finalize(
             models=models,

@@ -89,15 +89,18 @@ class Config:
         self.max_retries = int(os.environ.get("MAX_RETRIES", "2"))
 
         # Top-models (proxy metadata)
-        self.top_models_cache_dir = os.environ.get(
-            "TOP_MODELS_CACHE_DIR", "~/.cache/vandamme-proxy"
+        self.top_models_source = os.environ.get("TOP_MODELS_SOURCE", "manual_rankings")
+        self.top_models_rankings_file = os.environ.get(
+            "TOP_MODELS_RANKINGS_FILE", "config/top-models/programming.toml"
         )
-        self.top_models_cache_ttl_days = int(os.environ.get("TOP_MODELS_CACHE_TTL_DAYS", "2"))
         self.top_models_timeout_seconds = float(os.environ.get("TOP_MODELS_TIMEOUT_SECONDS", "30"))
         self.top_models_exclude = tuple(
             s.strip() for s in os.environ.get("TOP_MODELS_EXCLUDE", "").split(",") if s.strip()
         )
         # Note: per-provider exclusions can be added later without breaking API.
+
+        # Cache directory
+        self.cache_dir = os.environ.get("CACHE_DIR", "~/.cache/vandamme-proxy")
 
         # Models cache settings
         self.models_cache_enabled = os.environ.get("MODELS_CACHE_ENABLED", "true").lower() == "true"

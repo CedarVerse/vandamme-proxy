@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
-TopModelsSourceName = Literal["openrouter"]
+TopModelsSourceName = Literal["openrouter", "manual_rankings"]
 
 
 @dataclass(frozen=True, slots=True)

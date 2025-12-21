@@ -209,6 +209,7 @@ def top_models_ag_grid(
                 "filterOoo": "Filter...",
             },
         },
+        dangerously_allow_code=True,
     )
 
 
@@ -258,6 +259,14 @@ def models_row_data(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
             context_length = cl if isinstance(cl, int) else None
             max_output_tokens = mot if isinstance(mot, int) else None
 
+        # Some sources already flatten these fields (and tests cover this behavior).
+        if context_length is None:
+            cl2 = model.get("context_length")
+            context_length = cl2 if isinstance(cl2, int) else None
+        if max_output_tokens is None:
+            mot2 = model.get("max_output_tokens")
+            max_output_tokens = mot2 if isinstance(mot2, int) else None
+
         pricing = model.get("pricing")
         prompt_per_million = None
         completion_per_million = None
@@ -292,6 +301,15 @@ def models_row_data(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
             preview = description_text[:40]
             description_preview = preview + "..." if len(description_text) > 40 else preview
 
+        metadata = model.get("metadata")
+        image_url = None
+        if isinstance(metadata, dict):
+            image = metadata.get("image")
+            if isinstance(image, dict):
+                url = image.get("url")
+                if isinstance(url, str):
+                    image_url = url
+
         row_data.append(
             {
                 "id": model_id,
@@ -308,6 +326,7 @@ def models_row_data(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "pricing_completion_per_million": completion_per_million,
                 "description_preview": description_preview,
                 "description_full": description_text,
+                "model_icon_url": image_url,
             }
         )
 
@@ -375,6 +394,7 @@ def models_ag_grid(
             "suppressMovable": False,
             "cellStyle": {"cursor": "copy"},
             "tooltipField": "description_full",
+            "cellRenderer": "vdmModelIdWithIconRenderer",
         },
         {
             "headerName": "Modality",
@@ -433,86 +453,7 @@ def models_ag_grid(
         },
     ]
 
-    # Prepare row data for AG-Grid
-    row_data = []
-    for model in models:
-        # Handle both millisecond and second timestamps
-        created = model.get("created")
-        created_value = 0 if created is None else created
-        if created_value > 1e12:
-            created_value = created_value / 1000
-
-        created_iso = format_model_created_timestamp(created_value)
-        created_relative = format_timestamp(created_iso)
-        created_day = (created_iso or "")[:10]
-
-        provider = model.get("provider", "multiple")
-        model_id = model.get("id", "")
-        display_name = model.get("display_name", model_id)
-
-        architecture = model.get("architecture")
-        architecture_modality = None
-        if isinstance(architecture, dict):
-            modality = architecture.get("modality")
-            if isinstance(modality, str):
-                architecture_modality = modality
-
-        context_window = model.get("context_window")
-        if isinstance(context_window, dict):
-            cl = context_window.get("context_length")
-            mot = context_window.get("max_output_tokens")
-            cl if isinstance(cl, int) else None
-            mot if isinstance(mot, int) else None
-
-        pricing = model.get("pricing")
-        prompt_per_million = None
-        completion_per_million = None
-        if isinstance(pricing, dict):
-            prompt = pricing.get("prompt")
-            completion = pricing.get("completion")
-
-            try:
-                prompt_per_million = (
-                    f"{float(prompt) * 1_000_000:.2f}" if prompt is not None else None
-                )
-            except Exception:  # noqa: BLE001
-                prompt_per_million = None
-
-            try:
-                completion_per_million = (
-                    f"{float(completion) * 1_000_000:.2f}" if completion is not None else None
-                )
-            except Exception:  # noqa: BLE001
-                completion_per_million = None
-
-        model_page_url = None
-        if model_id:
-            template = get_model_page_template(provider)
-            if template:
-                model_page_url = format_model_page_url(template, model_id, display_name)
-
-        description_full = model.get("description")
-        description_text = description_full if isinstance(description_full, str) else None
-        description_preview = None
-        if description_text:
-            preview = description_text[:40]
-            description_preview = preview + "..." if len(description_text) > 40 else preview
-
-        row = {
-            "id": model_id,
-            "provider": provider,
-            "created": int(created_value),
-            "created_relative": created_relative or "Unknown",
-            "created_iso": created_day,
-            "model_page_url": model_page_url,
-            "owned_by": model.get("owned_by"),
-            "architecture_modality": architecture_modality,
-            "pricing_prompt_per_million": prompt_per_million,
-            "pricing_completion_per_million": completion_per_million,
-            "description_preview": description_preview,
-            "description_full": description_text,
-        }
-        row_data.append(row)
+    row_data = models_row_data(models)
 
     # Custom CSS for dark theme
     # NOTE: Using a viewport-based height avoids the common "100% of an auto-height parent"
@@ -568,6 +509,65 @@ def models_ag_grid(
 # These will be injected into the app's HTML
 CELL_RENDERER_SCRIPTS = """
 console.info('[vdm] CELL_RENDERER_SCRIPTS loaded');
+
+// ---- Row striping (all grids) ----
+// Use AG Grid's built-in classes (`ag-row-even` / `ag-row-odd`) instead of custom
+// rowClassRules so striping works without any grid-specific configuration.
+(function ensureStripedRowsCss() {
+    if (document.getElementById('vdm-striped-rows-css')) return;
+    const style = document.createElement('style');
+    style.id = 'vdm-striped-rows-css';
+    style.textContent = `
+      .ag-theme-alpine-dark .ag-row-even .ag-cell { background-color: rgba(255,255,255,0.06); }
+      .ag-theme-alpine-dark .ag-row-odd  .ag-cell { background-color: rgba(0,0,0,0.00); }
+    `;
+    document.head.appendChild(style);
+})();
+
+
+// Render model id with optional icon.
+window.vdmModelIdWithIconRenderer = function(params) {
+    const id = params && params.value ? String(params.value) : '';
+    const url = params && params.data && params.data.model_icon_url;
+
+    if (!url) {
+        return React.createElement('span', null, id);
+    }
+
+    // Only allow http(s) URLs.
+    let parsed;
+    try {
+        parsed = new URL(url);
+    } catch (e) {
+        return React.createElement('span', null, id);
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return React.createElement('span', null, id);
+    }
+
+    // Compact size aligned with existing row height.
+    const img = React.createElement('img', {
+        src: parsed.toString(),
+        alt: '',
+        width: 16,
+        height: 16,
+        style: {
+            width: '16px',
+            height: '16px',
+            borderRadius: '3px',
+            marginRight: '6px',
+            verticalAlign: 'text-bottom',
+            objectFit: 'cover',
+        },
+    });
+
+    return React.createElement(
+        'span',
+        { style: { display: 'inline-flex', alignItems: 'center' } },
+        img,
+        React.createElement('span', null, id)
+    );
+};
 
 // Render model page link as React element (Dash uses React; DOM nodes cause React invariant #31)
 window.vdmModelPageLinkRenderer = function(params) {
@@ -628,6 +628,10 @@ window.vdmModelPageLinkRenderer = function(params) {
 // For dash-ag-grid function registry compatibility
 window.dashAgGridFunctions = window.dashAgGridFunctions || {};
 window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {};
+
+window.dashAgGridFunctions.vdmModelIdWithIconRenderer = window.vdmModelIdWithIconRenderer;
+window.dashAgGridComponentFunctions.vdmModelIdWithIconRenderer = window.vdmModelIdWithIconRenderer;
+
 window.dashAgGridFunctions.vdmModelPageLinkRenderer = window.vdmModelPageLinkRenderer;
 window.dashAgGridComponentFunctions.vdmModelPageLinkRenderer = window.vdmModelPageLinkRenderer;
 window.__vdmModelPageLinkRenderer = window.vdmModelPageLinkRenderer;
@@ -641,10 +645,12 @@ window.__vdmModelPageLinkRenderer.suppressHtmlEscaping = true;
 window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {};
 window.dashAgGridComponentFunctions = {
     ...window.dashAgGridComponentFunctions,
+    vdmModelIdWithIconRenderer: window.vdmModelIdWithIconRenderer,
     vdmModelPageLinkRenderer: window.vdmModelPageLinkRenderer,
 };
 window.dashAgGridFunctions = {
     ...window.dashAgGridFunctions,
+    vdmModelIdWithIconRenderer: window.vdmModelIdWithIconRenderer,
     vdmModelPageLinkRenderer: window.vdmModelPageLinkRenderer,
 };
 window.__vdmModelPageLinkRenderer = window.vdmModelPageLinkRenderer;

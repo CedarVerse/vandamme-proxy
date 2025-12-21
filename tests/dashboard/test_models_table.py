@@ -47,6 +47,11 @@ def test_models_ag_grid_extracts_openai_metadata_fields() -> None:
             "architecture": {"modality": "text,image->text"},
             "context_window": {"context_length": 128000, "max_output_tokens": 16384},
             "pricing": {"prompt": "0.0000026", "completion": "0.000013"},
+            "metadata": {
+                "image": {
+                    "url": "https://example.com/icon.jpeg",
+                }
+            },
         }
     ]
 
@@ -61,6 +66,8 @@ def test_models_ag_grid_extracts_openai_metadata_fields() -> None:
 
     assert row["context_length"] == 128000
     assert row["max_output_tokens"] == 16384
+
+    assert row["model_icon_url"] == "https://example.com/icon.jpeg"
 
     # pricing is in USD/token; table shows USD per million tokens
     assert row["pricing_prompt_per_million"] == "2.60"

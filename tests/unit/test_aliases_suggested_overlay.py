@@ -6,7 +6,28 @@ from tests.config import TEST_HEADERS
 
 
 @pytest.mark.unit
-def test_aliases_endpoint_includes_suggested_overlay(respx_mock):
+def test_aliases_endpoint_includes_suggested_overlay(respx_mock, tmp_path, monkeypatch):
+    rankings = tmp_path / "programming.toml"
+    rankings.write_text(
+        """version = 1
+category = \"programming\"
+
+[[models]]
+id = \"openai/gpt-4o\"
+
+[[models]]
+id = \"google/gemini-2.0-flash\"
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("TOP_MODELS_SOURCE", "manual_rankings")
+    monkeypatch.setenv("TOP_MODELS_RANKINGS_FILE", str(rankings))
+
+    from src.core.config import Config
+
+    Config.reset_singleton()
+
     from src.main import app
 
     respx_mock.get("https://openrouter.ai/api/v1/models").mock(

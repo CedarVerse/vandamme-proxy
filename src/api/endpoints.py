@@ -36,7 +36,7 @@ router = APIRouter()
 models_cache = None
 if config.models_cache_enabled and not os.environ.get("PYTEST_CURRENT_TEST"):
     models_cache = ModelsDiskCache(
-        cache_dir=Path(config.top_models_cache_dir),
+        cache_dir=Path(config.cache_dir),
         ttl_hours=config.models_cache_ttl_hours,
     )
 
@@ -966,6 +966,10 @@ async def list_models(
         "anthropic",
         description="Response format: anthropic (default), openai, or raw",
     ),
+    refresh: bool = Query(
+        False,
+        description="Force refresh model list from upstream (bypass models cache)",
+    ),
     provider_header: str | None = Header(
         None,
         alias="provider",
@@ -1007,9 +1011,9 @@ async def list_models(
         base_url = default_client.base_url
         custom_headers = provider_config.custom_headers if provider_config else {}
 
-        # 1) Try fresh cache
+        # 1) Try fresh cache (unless refresh requested)
         raw: dict[str, Any] | None = None
-        if models_cache:
+        if models_cache and not refresh:
             raw = models_cache.read_response_if_fresh(
                 provider=provider_name,
                 base_url=base_url,
@@ -1134,7 +1138,6 @@ async def top_models(
 
     This endpoint is intended as a dashboard-friendly discovery contract.
     """
-    from src.core.config import config as cfg
     from src.top_models.service import TopModelsService
     from src.top_models.types import top_model_to_api_dict
 
@@ -1151,19 +1154,17 @@ async def top_models(
     sub_providers: list[str] = sorted({p for p in sub_providers_raw if isinstance(p, str)})
 
     meta: dict[str, Any] = {
-        "cache_ttl_seconds": int(svc._cfg.ttl.total_seconds()),
         "excluded_rules": list(svc._cfg.exclude),
     }
 
-    if include_cache_info and str(cfg.log_level).upper() == "DEBUG":
-        meta["cache_file"] = str(svc._cfg.cache_dir / "top-models.json")
+    if include_cache_info:
+        meta["rankings_file"] = str(svc._cfg.rankings_file)
 
     return JSONResponse(
         status_code=200,
         content={
             "object": "top_models",
             "source": result.source,
-            "cached": result.cached,
             "last_updated": result.last_updated.isoformat(),
             "providers": providers,
             "sub_providers": sub_providers,
