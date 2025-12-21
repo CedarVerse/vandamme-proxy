@@ -98,7 +98,7 @@ async def fetch_models(
 ) -> dict[str, Any]:
     """Fetch available models from the API"""
     url = f"{cfg.api_base_url}/v1/models"
-    params: dict[str, str] = {}
+    params: dict[str, str] = {"format": "openai"}
     headers: dict[str, str] = {}
     if provider:
         params["provider"] = provider

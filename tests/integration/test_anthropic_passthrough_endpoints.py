@@ -24,14 +24,18 @@ async def test_models_endpoint_anthropic_format():
 
         response = await client.get(f"{BASE_URL}/v1/models", headers={"x-api-key": "test-key"})
 
-        # For integration test with real server, expect success
+        # NOTE: integration tests run against an already-running server.
+        # If the server binary isn't restarted after code changes, it may return `null`.
         assert response.status_code == 200
 
-        # Verify YAML response
-        content = response.text
-        data = yaml.safe_load(content)
-        assert data["object"] == "list"
+        # Verify JSON response (default Anthropic schema)
+        data = response.json()
+        assert data is not None
         assert "data" in data
+        assert isinstance(data["data"], list)
+        assert "first_id" in data
+        assert "last_id" in data
+        assert "has_more" in data
 
 
 @pytest.mark.integration

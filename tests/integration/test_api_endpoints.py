@@ -44,10 +44,32 @@ async def test_models_endpoint():
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/v1/models")
 
+        # NOTE: integration tests run against an already-running server.
+        # If the server binary isn't restarted after code changes, it may return `null`.
         assert response.status_code == 200
         data = response.json()
+        assert data is not None
+
+        # Default is Anthropic schema (Claude consumes this endpoint)
         assert "data" in data
         assert isinstance(data["data"], list)
+        assert "first_id" in data
+        assert "last_id" in data
+        assert "has_more" in data
+
+        # OpenAI format is available
+        response_openai = await client.get(f"{BASE_URL}/v1/models?format=openai")
+        assert response_openai.status_code == 200
+        data_openai = response_openai.json()
+        assert data_openai is not None
+        assert data_openai.get("object") == "list"
+        assert isinstance(data_openai.get("data"), list)
+
+        # Raw format is available
+        response_raw = await client.get(f"{BASE_URL}/v1/models?format=raw")
+        assert response_raw.status_code == 200
+        assert response_raw.json() is not None
+        assert isinstance(response_raw.json(), dict)
 
 
 @pytest.mark.integration

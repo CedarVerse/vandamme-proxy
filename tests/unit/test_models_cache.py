@@ -119,7 +119,7 @@ class TestModelsDiskCache:
         assert data["provider"] == provider
         assert data["base_url"] == base_url
         assert "last_updated" in data
-        assert data["models"] == sample_models
+        assert data["response"] == {"object": "list", "data": sample_models}
 
     def test_atomic_write_prevents_corruption(self, models_cache, sample_models):
         """Test that atomic writes prevent corruption on error."""
@@ -146,7 +146,7 @@ class TestModelsDiskCache:
         with path.open("r") as f:
             data = json.load(f)
         assert "schema_version" in data
-        assert data["models"] == sample_models
+        assert data["response"] == {"object": "list", "data": sample_models}
 
     def test_cache_isolation(self, models_cache, sample_models):
         """Test that different providers have isolated caches."""

@@ -4,7 +4,6 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 from fastapi.testclient import TestClient
 
 
@@ -124,7 +123,10 @@ def test_models_endpoint_openai_format():
     client = TestClient(app)
 
     # Mock config and provider manager
-    with patch("src.api.endpoints.config") as mock_config:
+    with (
+        patch("src.api.endpoints.config") as mock_config,
+        patch("src.api.endpoints.fetch_models_unauthenticated") as mock_fetch,
+    ):
         # Setup mock provider config
         mock_provider_config = MagicMock()
         mock_provider_config.is_anthropic_format = False
@@ -132,16 +134,15 @@ def test_models_endpoint_openai_format():
 
         # Mock OpenAI client
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_client.base_url = "https://example.com/v1"
+
+        mock_fetch.return_value = {
             "object": "list",
             "data": [
                 {"id": "gpt-4o", "created": 1699905200},
                 {"id": "gpt-4o-mini", "created": 1699905200},
             ],
         }
-        mock_response.raise_for_status.return_value = None
-        mock_client.client.get.return_value = mock_response
 
         mock_provider_manager = MagicMock()
         mock_provider_manager.default_provider = "openai"
@@ -155,14 +156,36 @@ def test_models_endpoint_openai_format():
         response = client.get("/v1/models", headers={"x-api-key": "test-key"})
 
         assert response.status_code == 200
-        data = yaml.safe_load(response.content)
-        assert data["object"] == "list"
-        assert "data" in data
+        data = response.json()
 
-        # Check that models are transformed to Claude format
+        # Default format is Anthropic schema
+        assert "data" in data
+        assert isinstance(data["data"], list)
+        assert "first_id" in data
+        assert "last_id" in data
+        assert "has_more" in data
+
         model_ids = [model["id"] for model in data["data"]]
         assert "gpt-4o" in model_ids
         assert "gpt-4o-mini" in model_ids
+
+        # OpenAI format is also supported
+        response_openai = client.get("/v1/models?format=openai", headers={"x-api-key": "test-key"})
+        assert response_openai.status_code == 200
+        data_openai = response_openai.json()
+        assert data_openai["object"] == "list"
+        assert isinstance(data_openai.get("data"), list)
+
+        # Raw format returns the exact upstream payload
+        response_raw = client.get("/v1/models?format=raw", headers={"x-api-key": "test-key"})
+        assert response_raw.status_code == 200
+        assert response_raw.json() == {
+            "object": "list",
+            "data": [
+                {"id": "gpt-4o", "created": 1699905200},
+                {"id": "gpt-4o-mini", "created": 1699905200},
+            ],
+        }
 
 
 @pytest.mark.unit

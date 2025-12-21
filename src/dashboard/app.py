@@ -317,7 +317,7 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
     # -------------------- Models page callbacks --------------------
 
     @app.callback(
-        Output("vdm-models-content", "children"),
+        Output("vdm-models-grid", "rowData"),
         Output("vdm-models-provider", "options"),
         Output("vdm-models-provider-hint", "children"),
         Input("vdm-models-poll", "n_intervals"),
@@ -329,7 +329,7 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         _n: int,
         _clicks: int | None,
         provider_value: str | None,
-    ) -> tuple[Any, list[dict[str, str]], Any]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], Any]:
         try:
             # Provider dropdown options come from /health.
             health = _run(fetch_health(cfg=cfg))
@@ -388,25 +388,18 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
                     model["provider"] = inferred_provider
 
             if not models:
-                return empty_state("No models found", "🔍"), provider_options, hint
+                return [], provider_options, hint
 
-            from src.dashboard.components.ui import models_table
+            # IMPORTANT: The grid's columns expect the *derived* row schema
+            # (created_iso, created_relative, architecture_modality, pricing_*).
+            from src.dashboard.components.ag_grid import models_row_data
 
-            return (
-                models_table(
-                    models,
-                    sort_field="id",
-                    sort_desc=False,
-                    show_provider=True,
-                ),
-                provider_options,
-                hint,
-            )
+            return models_row_data(models), provider_options, hint
 
         except Exception:
             logger.exception("dashboard.models: refresh failed")
             return (
-                dbc.Alert("Failed to load models. See server logs for details.", color="danger"),
+                [],
                 [{"label": "Default provider", "value": ""}],
                 html.Span("Failed to load providers", className="text-muted"),
             )

@@ -962,6 +962,10 @@ async def list_models(
         None,
         description="Provider name to fetch models from (defaults to configured default provider)",
     ),
+    format: str = Query(
+        "anthropic",
+        description="Response format: anthropic (default), openai, or raw",
+    ),
     provider_header: str | None = Header(
         None,
         alias="provider",
@@ -990,125 +994,71 @@ async def list_models(
                 ),
             )
 
+        if format not in {"anthropic", "openai", "raw"}:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid format. Use format=anthropic|openai|raw",
+            )
+
         # Get the provider client and config
         default_client = config.provider_manager.get_client(provider_name)
         provider_config = config.provider_manager.get_provider_config(provider_name)
 
-        if provider_config and provider_config.is_anthropic_format:
-            # For Anthropic-compatible APIs, models list is typically static
-            # Return common Claude models that Anthropic-compatible APIs support
-            models = {
-                "object": "list",
-                "data": [
-                    {
-                        "id": "claude-3-5-sonnet-20241022",
-                        "object": "model",
-                        "created": 1699905200,
-                        "display_name": "Claude 3.5 Sonnet (October 2024)",
-                    },
-                    {
-                        "id": "claude-3-5-haiku-20241022",
-                        "object": "model",
-                        "created": 1699905200,
-                        "display_name": "Claude 3.5 Haiku (October 2024)",
-                    },
-                    {
-                        "id": "claude-3-opus-20240229",
-                        "object": "model",
-                        "created": 1699905200,
-                        "display_name": "Claude 3 Opulus",
-                    },
-                    {
-                        "id": "claude-3-sonnet-20240229",
-                        "object": "model",
-                        "created": 1699905200,
-                        "display_name": "Claude 3 Sonnet",
-                    },
-                    {
-                        "id": "claude-3-haiku-20240307",
-                        "object": "model",
-                        "created": 1699905200,
-                        "display_name": "Claude 3 Haiku",
-                    },
-                ],
-            }
-        else:
-            # OpenAI format - try cache first, then fetch from provider
-            base_url = default_client.base_url
-            custom_headers = provider_config.custom_headers if provider_config else {}
+        base_url = default_client.base_url
+        custom_headers = provider_config.custom_headers if provider_config else {}
 
-            openai_models = None
+        # 1) Try fresh cache
+        raw: dict[str, Any] | None = None
+        if models_cache:
+            raw = models_cache.read_response_if_fresh(
+                provider=provider_name,
+                base_url=base_url,
+                custom_headers=custom_headers,
+            )
+            if raw is not None:
+                logger.debug(f"Using cached models response for {provider_name}")
 
-            # Try cache first if available
-            if models_cache:
-                cached_models = models_cache.read_models_if_fresh(
-                    provider=provider_name,
-                    base_url=base_url,
-                    custom_headers=custom_headers,
-                )
-                if cached_models is not None:
-                    openai_models = {"data": cached_models}
-                    logger.debug(f"Using cached models for {provider_name}")
-
-            # Fetch from provider if cache miss
-            if openai_models is None:
-                try:
-                    # Use unauthenticated HTTP client (no provider requires auth for /models)
-                    openai_models = await fetch_models_unauthenticated(
-                        base_url,
-                        custom_headers,
+        # 2) Fetch if cache miss
+        if raw is None:
+            try:
+                raw = await fetch_models_unauthenticated(base_url, custom_headers)
+                if models_cache and raw is not None:
+                    models_cache.write_response(
+                        provider=provider_name,
+                        base_url=base_url,
+                        custom_headers=custom_headers,
+                        response=raw,
                     )
+                    logger.debug(f"Cached models response for {provider_name}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch models from {provider_name}: {e}")
 
-                    # Cache the successful response
-                    if (
-                        models_cache
-                        and openai_models
-                        and isinstance(openai_models.get("data"), list)
-                    ):
-                        models_cache.write_models(
-                            provider=provider_name,
-                            base_url=base_url,
-                            custom_headers=custom_headers,
-                            models=openai_models.get("data", []),
+                # 3) On upstream failure, return cached if any (stale allowed)
+                if models_cache:
+                    raw = models_cache.read_response_if_any(
+                        provider=provider_name,
+                        base_url=base_url,
+                        custom_headers=custom_headers,
+                    )
+                    if raw is not None:
+                        logger.debug(
+                            "Using stale cached models response for %s after fetch failure",
+                            provider_name,
                         )
-                        logger.debug(f"Cached models for {provider_name}")
 
-                except Exception as e:
-                    # Log error and fall back to common models if provider doesn't support /models
-                    logger.warning(f"Failed to fetch models from {provider_name}: {e}")
+        if raw is None:
+            raise RuntimeError("Models response was not constructed")
 
-                # Fallback to common models
-                models = {
-                    "object": "list",
-                    "data": [
-                        {
-                            "id": "gpt-4o",
-                            "object": "model",
-                            "created": 1699905200,
-                            "display_name": "GPT-4o",
-                        },
-                        {
-                            "id": "gpt-4o-mini",
-                            "object": "model",
-                            "created": 1699905200,
-                            "display_name": "GPT-4o Mini",
-                        },
-                        {
-                            "id": "gpt-4-turbo",
-                            "object": "model",
-                            "created": 1699905200,
-                            "display_name": "GPT-4 Turbo",
-                        },
-                        {
-                            "id": "gpt-3.5-turbo",
-                            "object": "model",
-                            "created": 1699905200,
-                            "display_name": "GPT-3.5 Turbo",
-                        },
-                    ],
-                }
+        if format == "raw":
+            return JSONResponse(status_code=200, content=raw)
 
-        return JSONResponse(status_code=200, content=models)
+        from src.conversion.models_converter import raw_to_anthropic_models, raw_to_openai_models
+
+        if format == "openai":
+            return JSONResponse(status_code=200, content=raw_to_openai_models(raw))
+
+        # Default: anthropic
+        return JSONResponse(status_code=200, content=raw_to_anthropic_models(raw))
 
     except Exception as e:
         logger.error(f"Error listing models: {e}")

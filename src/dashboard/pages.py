@@ -711,6 +711,8 @@ def models_layout() -> dbc.Container:
     Filtering and sorting are handled directly in the AG-Grid table.
     """
 
+    from src.dashboard.components.ui import models_table
+
     return dbc.Container(
         [
             dbc.Row(
@@ -809,11 +811,25 @@ def models_layout() -> dbc.Container:
             dbc.Row(
                 [
                     dbc.Col(
-                        html.Div(id="vdm-models-content"),
+                        html.Div(
+                            [
+                                models_table(
+                                    [],
+                                    sort_field="id",
+                                    sort_desc=False,
+                                    show_provider=True,
+                                )
+                            ],
+                            id="vdm-models-content",
+                        ),
                         md=12,
                     ),
                 ],
             ),
+            dcc.Store(id="vdm-models-rowdata", data=[]),
+            dcc.Store(id="vdm-models-grid-initialized", data=False),
+            # Dedicated rowData output avoids recreating the grid and preserves filters.
+            html.Div(id="vdm-models-rowdata-sink", style={"display": "none"}),
             dcc.Interval(id="vdm-models-poll", interval=30_000, n_intervals=0),
         ],
         fluid=True,
