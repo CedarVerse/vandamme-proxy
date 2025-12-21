@@ -319,6 +319,7 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
     @app.callback(
         Output("vdm-models-grid", "rowData"),
         Output("vdm-models-provider", "options"),
+        Output("vdm-models-provider", "value"),
         Output("vdm-models-provider-hint", "children"),
         Input("vdm-models-poll", "n_intervals"),
         Input("vdm-models-refresh", "n_clicks"),
@@ -329,7 +330,12 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         _n: int,
         _clicks: int | None,
         provider_value: str | None,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], Any]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], str | None, Any]:
+        """Refresh models and keep provider selection normalized.
+
+        Provider selection is always a real provider name; the default provider is
+        pre-selected and labeled in the dropdown.
+        """
         try:
             # Provider dropdown options come from /health.
             health = _run(fetch_health(cfg=cfg))
@@ -338,69 +344,79 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
             if not isinstance(default_provider, str):
                 default_provider = ""
 
-            default_label = (
-                ["Default provider (", default_provider, ")"]
-                if default_provider
-                else ["Default provider"]
-            )
+            sorted_providers = sorted(providers)
 
-            provider_options = [{"label": "".join(default_label), "value": ""}] + [
-                {"label": p, "value": p} for p in sorted(providers)
-            ]
+            selected_provider = provider_value.strip() if provider_value else ""
+            if not selected_provider:
+                if default_provider:
+                    selected_provider = default_provider
+                elif sorted_providers:
+                    selected_provider = sorted_providers[0]
 
-            # Normalize provider selection (empty -> None)
-            provider = provider_value.strip() if provider_value else None
+            # Build dropdown options: real providers only, with default pinned + labeled.
+            provider_options: list[dict[str, str]] = []
+            if default_provider and default_provider in sorted_providers:
+                provider_options.append(
+                    {
+                        "label": f"{default_provider} (default)",
+                        "value": default_provider,
+                    }
+                )
 
-            hint = (
-                [html.Span("Listing models for "), provider_badge(provider)]
-                if provider
-                else [
-                    html.Span("Listing models for default provider "),
-                    provider_badge(default_provider)
-                    if default_provider
-                    else html.Span("(unknown)", className="text-muted"),
-                    html.Span(" · clear to override", className="text-muted"),
+            provider_options.extend(
+                [
+                    {"label": p, "value": p}
+                    for p in sorted_providers
+                    if p != default_provider
                 ]
             )
 
-            # Fetch models (filtering/sorting handled in-grid)
-            models_data = _run(fetch_models(cfg=cfg, provider=provider))
+            hint = [
+                html.Span("Listing models for "),
+                provider_badge(selected_provider)
+                if selected_provider
+                else html.Span("(no providers)", className="text-muted"),
+            ]
+
+            # Fetch models (filtered by provider; sorting handled in-grid)
+            models_data = _run(fetch_models(cfg=cfg, provider=selected_provider or None))
             models = models_data.get("data", [])
+
+            provider = selected_provider or None
+            provider_value = selected_provider or None
 
             logger.debug(
                 "dashboard.models: fetched models",
                 extra={
                     "model_count": len(models),
                     "first_model_id": (models[0].get("id") if models else None),
-                    "provider": provider or "<default>",
+                    "provider": provider or "<unknown>",
                 },
             )
 
             # Provider is not always encoded per model when fetching without a provider filter.
             # Keep a consistent value for display.
-            #
-            # IMPORTANT: When the user selects "Default provider" (provider is None), we still
-            # want model-page links to work. Prefer the actual default provider from /health
-            # for missing provider fields.
             inferred_provider = provider or default_provider or "multiple"
             for model in models:
                 if not model.get("provider"):
                     model["provider"] = inferred_provider
 
             if not models:
-                return [], provider_options, hint
+                return [], provider_options, provider_value, hint
+
 
             # IMPORTANT: The grid's columns expect the *derived* row schema
             # (created_iso, created_relative, architecture_modality, pricing_*).
             from src.dashboard.components.ag_grid import models_row_data
 
-            return models_row_data(models), provider_options, hint
+            return models_row_data(models), provider_options, provider_value, hint
 
         except Exception:
             logger.exception("dashboard.models: refresh failed")
             return (
                 [],
-                [{"label": "Default provider", "value": ""}],
+                [],
+                None,
                 html.Span("Failed to load providers", className="text-muted"),
             )
 

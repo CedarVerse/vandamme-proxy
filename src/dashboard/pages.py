@@ -725,9 +725,9 @@ def models_layout() -> dbc.Container:
                                 dcc.Dropdown(
                                     id="vdm-models-provider",
                                     options=[],
-                                    value="",
-                                    placeholder="Default provider",
-                                    clearable=True,
+                                    value=None,
+                                    placeholder="Provider",
+                                    clearable=False,
                                     style={"minWidth": "14rem"},
                                 ),
                             ],
