@@ -4,6 +4,113 @@ import json
 from typing import Any
 
 
+def _text_parts_from_openai_content(content: Any) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+
+    if isinstance(content, list):
+        parts: list[dict[str, Any]] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                parts.append({"type": "text", "text": str(part.get("text", ""))})
+        return parts
+
+    return []
+
+
+def _system_text_from_openai_messages(messages: list[dict[str, Any]]) -> str | None:
+    system_parts: list[str] = []
+    for msg in messages:
+        if msg.get("role") != "system":
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            system_parts.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    system_parts.append(str(part.get("text", "")))
+
+    joined = "\n\n".join([p for p in system_parts if p])
+    return joined or None
+
+
+def _anthropic_tools_from_openai_tools(tools: Any) -> list[dict[str, Any]]:
+    if not isinstance(tools, list):
+        return []
+
+    anthropic_tools: list[dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict) or tool.get("type") != "function":
+            continue
+        fn = tool.get("function")
+        if not isinstance(fn, dict):
+            continue
+        name = fn.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+
+        anthropic_tools.append(
+            {
+                "name": name,
+                "description": fn.get("description") or "",
+                "input_schema": fn.get("parameters") or {"type": "object", "properties": {}},
+            }
+        )
+
+    return anthropic_tools
+
+
+def _anthropic_tool_use_blocks_from_openai_tool_calls(tool_calls: Any) -> list[dict[str, Any]]:
+    if not isinstance(tool_calls, list):
+        return []
+
+    blocks: list[dict[str, Any]] = []
+    for tc in tool_calls:
+        if not isinstance(tc, dict) or tc.get("type") != "function":
+            continue
+        fn = tc.get("function")
+        if not isinstance(fn, dict):
+            continue
+        name = fn.get("name")
+        args = fn.get("arguments")
+        if not isinstance(name, str) or not name:
+            continue
+        try:
+            input_obj = json.loads(args) if isinstance(args, str) and args else {}
+        except Exception:
+            input_obj = {}
+
+        blocks.append(
+            {
+                "type": "tool_use",
+                "id": tc.get("id") or f"call-{name}",
+                "name": name,
+                "input": input_obj,
+            }
+        )
+
+    return blocks
+
+
+def _anthropic_tool_result_message_from_openai_tool_message(msg: dict[str, Any]) -> dict[str, Any]:
+    tool_call_id = msg.get("tool_call_id")
+    content = msg.get("content")
+
+    tool_content = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+
+    return {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": tool_call_id,
+                "content": tool_content,
+            }
+        ],
+    }
+
+
 def openai_chat_completions_to_anthropic_messages(
     *,
     openai_request: dict[str, Any],
@@ -33,115 +140,46 @@ def openai_chat_completions_to_anthropic_messages(
         # (Cursor/Continue generally do.)
         raise ValueError("OpenAI request missing max_tokens")
 
-    system_parts: list[str] = []
+    openai_messages = openai_request.get("messages") or []
+
+    # System
+    system_text = _system_text_from_openai_messages(openai_messages)
+    if system_text is not None:
+        out["system"] = system_text
+
+    # Messages
     messages_out: list[dict[str, Any]] = []
-
-    for msg in openai_request.get("messages", []):
+    for msg in openai_messages:
         role = msg.get("role")
-        content = msg.get("content")
-
-        if role == "system":
-            if isinstance(content, str):
-                system_parts.append(content)
-            elif isinstance(content, list):
-                # Best-effort: join text parts.
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        system_parts.append(str(part.get("text", "")))
-            continue
 
         if role in ("user", "assistant"):
+            content = msg.get("content")
             tool_calls = msg.get("tool_calls")
-            if content is None and isinstance(tool_calls, list):
-                # Assistant tool call message -> Anthropic tool_use blocks.
-                blocks: list[dict[str, Any]] = []
-                for tc in tool_calls:
-                    if not isinstance(tc, dict) or tc.get("type") != "function":
-                        continue
-                    fn = tc.get("function") or {}
-                    if not isinstance(fn, dict):
-                        continue
-                    name = fn.get("name")
-                    args = fn.get("arguments")
-                    if not isinstance(name, str) or not name:
-                        continue
-                    try:
-                        input_obj = json.loads(args) if isinstance(args, str) and args else {}
-                    except Exception:
-                        input_obj = {}
-                    blocks.append(
-                        {
-                            "type": "tool_use",
-                            "id": tc.get("id") or f"call-{name}",
-                            "name": name,
-                            "input": input_obj,
-                        }
-                    )
 
-                messages_out.append({"role": role, "content": blocks})
+            if content is None and tool_calls is not None:
+                messages_out.append(
+                    {
+                        "role": role,
+                        "content": _anthropic_tool_use_blocks_from_openai_tool_calls(tool_calls),
+                    }
+                )
                 continue
 
-            if content is None:
-                messages_out.append({"role": role, "content": []})
-                continue
-            if isinstance(content, str):
-                messages_out.append({"role": role, "content": [{"type": "text", "text": content}]})
-            elif isinstance(content, list):
-                # Already content parts; pass through text parts only.
-                parts: list[dict[str, Any]] = []
-                for part in content:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        parts.append({"type": "text", "text": str(part.get("text", ""))})
-                messages_out.append({"role": role, "content": parts})
+            messages_out.append({"role": role, "content": _text_parts_from_openai_content(content)})
             continue
 
         if role == "tool":
-            # OpenAI tool result message -> Anthropic tool_result content block.
-            tool_call_id = msg.get("tool_call_id")
-            if isinstance(content, str):
-                tool_content = content
-            else:
-                tool_content = json.dumps(content, ensure_ascii=False)
-            messages_out.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_call_id,
-                            "content": tool_content,
-                        }
-                    ],
-                }
-            )
+            messages_out.append(_anthropic_tool_result_message_from_openai_tool_message(msg))
             continue
 
-    if system_parts:
-        out["system"] = "\n\n".join([p for p in system_parts if p])
+        # Ignore other roles in subset implementation.
+        continue
 
     out["messages"] = messages_out
 
     # Tools
-    tools = openai_request.get("tools")
-    if isinstance(tools, list):
-        anthropic_tools: list[dict[str, Any]] = []
-        for tool in tools:
-            if not isinstance(tool, dict) or tool.get("type") != "function":
-                continue
-            fn = tool.get("function") or {}
-            if not isinstance(fn, dict):
-                continue
-            name = fn.get("name")
-            if not name:
-                continue
-            anthropic_tools.append(
-                {
-                    "name": name,
-                    "description": fn.get("description") or "",
-                    "input_schema": fn.get("parameters") or {"type": "object", "properties": {}},
-                }
-            )
-        if anthropic_tools:
-            out["tools"] = anthropic_tools
+    anthropic_tools = _anthropic_tools_from_openai_tools(openai_request.get("tools"))
+    if anthropic_tools:
+        out["tools"] = anthropic_tools
 
     return out
