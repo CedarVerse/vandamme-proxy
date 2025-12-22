@@ -6,18 +6,13 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
-from src.conversion.errors import ConversionError, SSEParseError
+from src.conversion.errors import ConversionError
 from src.conversion.openai_stream_to_claude_state_machine import (
     OpenAIToClaudeStreamState,
     final_events,
     ingest_openai_chunk,
     initial_events,
     parse_openai_sse_line,
-)
-from src.conversion.tool_call_delta import (
-    ToolCallArgsAssembler,
-    ToolCallIdAllocator,
-    ToolCallIndexState,
 )
 from src.core.config import config
 from src.core.constants import Constants
@@ -195,23 +190,22 @@ async def convert_openai_streaming_to_claude_with_cancellation(
     cache_read_tokens = 0
     chunk_count = 0
 
-    # Send initial SSE events
-    yield f"event: {Constants.EVENT_MESSAGE_START}\ndata: {json.dumps({'type': Constants.EVENT_MESSAGE_START, 'message': {'id': message_id, 'type': 'message', 'role': Constants.ROLE_ASSISTANT, 'model': original_request.model, 'content': [], 'stop_reason': None, 'stop_sequence': None, 'usage': {'input_tokens': 0, 'output_tokens': 0}}}, ensure_ascii=False)}\n\n"  # noqa: E501
-
-    yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': 0, 'content_block': {'type': Constants.CONTENT_TEXT, 'text': ''}}, ensure_ascii=False)}\n\n"  # noqa: E501
-
-    yield f"event: {Constants.EVENT_PING}\ndata: {json.dumps({'type': Constants.EVENT_PING}, ensure_ascii=False)}\n\n"  # noqa: E501
-
     tool_name_map_inverse = tool_name_map_inverse or {}
 
-    # Process streaming chunks
-    text_block_index = 0
-    tool_block_counter = 0
-    tool_id_allocator = ToolCallIdAllocator(id_prefix=f"toolu_{message_id}")
-    args_assembler = ToolCallArgsAssembler()
-    current_tool_calls: dict[int, ToolCallIndexState] = {}
-    final_stop_reason = Constants.STOP_END_TURN
+    for ev in initial_events(message_id=message_id, model=original_request.model):
+        yield ev
+
+    state = OpenAIToClaudeStreamState(
+        message_id=message_id,
+        tool_name_map_inverse=tool_name_map_inverse,
+    )
+
     usage_data = {"input_tokens": 0, "output_tokens": 0}
+    final_stop_reason = Constants.STOP_END_TURN
+
+    # The cancellation path historically used local counters and allocators. After refactoring,
+    # the conversion state lives on `state`. Keep locals only where the cancellation path still
+    # needs them (e.g., usage accounting).
 
     try:
         async for line in openai_stream:
@@ -221,129 +215,67 @@ async def convert_openai_streaming_to_claude_with_cancellation(
                 openai_client.cancel_request(request_id)
                 break
 
-            if line.strip() and line.startswith("data: "):
-                chunk_data = line[6:]
-                if chunk_data.strip() == "[DONE]":
-                    break
+            chunk = parse_openai_sse_line(line)
+            if chunk is None:
+                continue
+            if chunk.get("_done"):
+                break
 
-                try:
-                    chunk = json.loads(chunk_data)
-                    chunk_count += 1
+            try:
+                chunk_count += 1
 
-                    usage = chunk.get("usage", None)
-                    if usage:
-                        cache_read_input_tokens = 0
-                        prompt_tokens_details = usage.get("prompt_tokens_details", {})
-                        if prompt_tokens_details:
-                            cache_read_input_tokens = prompt_tokens_details.get("cached_tokens", 0)
+                # Usage accounting is orthogonal to conversion; keep it here.
+                usage = chunk.get("usage", None)
+                if usage:
+                    cache_read_input_tokens = 0
+                    prompt_tokens_details = usage.get("prompt_tokens_details", {})
+                    if prompt_tokens_details:
+                        cache_read_input_tokens = prompt_tokens_details.get("cached_tokens", 0)
 
-                        input_tokens = usage.get("prompt_tokens", 0)
-                        output_tokens = usage.get("completion_tokens", 0)
-                        cache_read_tokens = cache_read_input_tokens
+                    input_tokens = usage.get("prompt_tokens", 0)
+                    output_tokens = usage.get("completion_tokens", 0)
+                    cache_read_tokens = cache_read_input_tokens
 
-                        usage_data = {
-                            "input_tokens": input_tokens,
-                            "output_tokens": output_tokens,
-                            "cache_read_input_tokens": cache_read_input_tokens,
-                        }
+                    usage_data = {
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "cache_read_input_tokens": cache_read_input_tokens,
+                    }
 
-                        # Update metrics if available
-                        if LOG_REQUEST_METRICS and metrics:
-                            metrics.input_tokens = input_tokens
-                            metrics.output_tokens = output_tokens
-                            metrics.cache_read_tokens = cache_read_tokens
+                    # Update metrics if available
+                    if LOG_REQUEST_METRICS and metrics:
+                        metrics.input_tokens = input_tokens
+                        metrics.output_tokens = output_tokens
+                        metrics.cache_read_tokens = cache_read_tokens
 
-                    choices = chunk.get("choices", [])
-                    if not choices:
-                        continue
+                choices = chunk.get("choices", [])
+                if not choices:
+                    continue
 
-                    # Log streaming progress every 50 chunks
-                    if LOG_REQUEST_METRICS and chunk_count % 50 == 0:
-                        conversation_logger.debug(
-                            f"🌊 STREAMING | Chunks: {chunk_count} | "
-                            f"Tokens so far: {input_tokens:,}→{output_tokens:,}"
-                        )
-                except json.JSONDecodeError as e:
-                    raise SSEParseError(
-                        "Failed to parse OpenAI streaming chunk as JSON",
-                        context={"chunk_data": chunk_data, "json_error": str(e)},
-                    ) from e
+                # Log streaming progress every 50 chunks
+                if LOG_REQUEST_METRICS and chunk_count % 50 == 0:
+                    conversation_logger.debug(
+                        f"🌊 STREAMING | Chunks: {chunk_count} | "
+                        f"Tokens so far: {input_tokens:,}→{output_tokens:,}"
+                    )
 
-                choice = choices[0]
-                delta = choice.get("delta", {})
-                finish_reason = choice.get("finish_reason")
+            except ConversionError:
+                raise
+            except Exception:
+                # We keep conversion errors typed, but don't let usage parsing kill the stream.
+                # This path is for unexpected shapes in usage fields.
+                logger.exception("Streaming usage accounting error")
 
-                # Handle text delta
-                if delta and "content" in delta and delta["content"] is not None:
-                    yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': text_block_index, 'delta': {'type': Constants.DELTA_TEXT, 'text': delta['content']}}, ensure_ascii=False)}\n\n"  # noqa: E501
+            for out in ingest_openai_chunk(state, chunk):
+                yield out
 
-                # Handle tool call deltas with improved incremental processing
-                if "tool_calls" in delta and delta["tool_calls"]:
-                    for tc_delta in delta["tool_calls"]:
-                        tc_index = tc_delta.get("index", 0)
+            finish_reason = choices[0].get("finish_reason") if choices else None
+            if finish_reason:
+                final_stop_reason = state.final_stop_reason
+                break
 
-                        # Initialize tool call tracking by index if not exists
-                        if tc_index not in current_tool_calls:
-                            current_tool_calls[tc_index] = ToolCallIndexState()
-
-                        tool_call = current_tool_calls[tc_index]
-
-                        # Update tool call ID if provided
-                        provided_id = tc_delta.get("id")
-                        if isinstance(provided_id, str) and provided_id:
-                            tool_call.tool_id = tool_id_allocator.get(
-                                tc_index, provided_id=provided_id
-                            )
-
-                        function_data = tc_delta.get(Constants.TOOL_FUNCTION, {})
-                        if isinstance(function_data, dict):
-                            name = function_data.get("name")
-                            if name:
-                                tool_call.tool_name = str(name)
-
-                        # Start content block when we have complete initial data
-                        if tool_call.tool_id and tool_call.tool_name and not tool_call.started:
-                            tool_block_counter += 1
-                            claude_index = text_block_index + tool_block_counter
-                            tool_call.output_index = str(claude_index)
-                            tool_call.started = True
-
-                            tool_name = tool_call.tool_name
-                            original_name = tool_name_map_inverse.get(tool_name, tool_name)
-                            tool_call.tool_name = original_name
-
-                            yield f"event: {Constants.EVENT_CONTENT_BLOCK_START}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_START, 'index': claude_index, 'content_block': {'type': Constants.CONTENT_TOOL_USE, 'id': tool_call.tool_id, 'name': original_name, 'input': {}}}, ensure_ascii=False)}\n\n"  # noqa: E501
-
-                        # Handle function arguments
-                        if (
-                            isinstance(function_data, dict)
-                            and function_data.get("arguments") is not None
-                            and tool_call.started
-                        ):
-                            args_delta = str(function_data["arguments"])
-                            tool_call.args_buffer = args_assembler.append(tc_index, args_delta)
-
-                            # Try to parse complete JSON and send delta when we have valid JSON
-                            if (
-                                tool_call.output_index is not None
-                                and not tool_call.json_sent
-                                and ToolCallArgsAssembler.is_complete_json(tool_call.args_buffer)
-                            ):
-                                yield f"event: {Constants.EVENT_CONTENT_BLOCK_DELTA}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_DELTA, 'index': tool_call.output_index, 'delta': {'type': Constants.DELTA_INPUT_JSON, 'partial_json': tool_call.args_buffer}}, ensure_ascii=False)}\n\n"  # noqa: E501
-                                tool_call.json_sent = True
-
-                        # JSON incomplete: keep buffering
-
-                # Handle finish reason
-                if finish_reason:
-                    if finish_reason == "length":
-                        final_stop_reason = Constants.STOP_MAX_TOKENS
-                    elif finish_reason in ["tool_calls", "function_call"]:
-                        final_stop_reason = Constants.STOP_TOOL_USE
-                    elif finish_reason == "stop":
-                        final_stop_reason = Constants.STOP_END_TURN
-                    else:
-                        final_stop_reason = Constants.STOP_END_TURN
+            # Continue streaming
+            continue
 
     except HTTPException as e:
         # Preserve existing cancellation behavior.
@@ -386,12 +318,17 @@ async def convert_openai_streaming_to_claude_with_cancellation(
         yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
         return
 
-    # Send final SSE events
-    yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': text_block_index}, ensure_ascii=False)}\n\n"  # noqa: E501
-
-    for tool_data in current_tool_calls.values():
-        if tool_data.started and tool_data.output_index is not None:
-            yield f"event: {Constants.EVENT_CONTENT_BLOCK_STOP}\ndata: {json.dumps({'type': Constants.EVENT_CONTENT_BLOCK_STOP, 'index': tool_data.output_index}, ensure_ascii=False)}\n\n"  # noqa: E501
+    # Send final SSE events (reuse the shared state machine implementation).
+    # NOTE: `final_events(state)` includes a message_delta/message_stop for the non-cancellation
+    # path; in this cancellation-aware path we still emit our own message_delta to include usage.
+    for ev in final_events(state):
+        # Skip the default message_delta/message_stop emitted by final_events; we'll emit our own
+        # message_delta (with usage) below and then message_stop.
+        if ev.startswith(f"event: {Constants.EVENT_MESSAGE_DELTA}"):
+            continue
+        if ev.startswith(f"event: {Constants.EVENT_MESSAGE_STOP}"):
+            continue
+        yield ev
 
     # Log streaming completion
     if LOG_REQUEST_METRICS and metrics:

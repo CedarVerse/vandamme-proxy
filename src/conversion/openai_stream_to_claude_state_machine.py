@@ -111,8 +111,11 @@ def ingest_openai_chunk(state: OpenAIToClaudeStreamState, chunk: dict[str, Any])
             )
         )
 
-    if "tool_calls" in delta:
-        for tc_delta in delta["tool_calls"]:
+    tool_calls = delta.get("tool_calls")
+    if isinstance(tool_calls, list):
+        for tc_delta in tool_calls:
+            if not isinstance(tc_delta, dict):
+                continue
             tc_index = tc_delta.get("index", 0)
 
             if tc_index not in state.current_tool_calls:
