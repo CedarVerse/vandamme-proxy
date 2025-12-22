@@ -65,9 +65,7 @@ class ThoughtSignatureMiddleware(Middleware):
                 and "tool_calls" in message
                 and message["tool_calls"]
             ):
-                tool_call_ids = {
-                    tc.get("id") for tc in message["tool_calls"] if tc.get("id")
-                }
+                tool_call_ids = {tc.get("id") for tc in message["tool_calls"] if tc.get("id")}
                 if not tool_call_ids:
                     continue
 
@@ -89,7 +87,9 @@ class ThoughtSignatureMiddleware(Middleware):
         if context.is_streaming:
             return context
 
-        await self._extract_and_store(response=context.response, request_context=context.request_context)
+        await self._extract_and_store(
+            response=context.response, request_context=context.request_context
+        )
         return context
 
     async def on_stream_chunk(self, context: StreamChunkContext) -> StreamChunkContext:
@@ -122,7 +122,9 @@ class ThoughtSignatureMiddleware(Middleware):
             }
             await self._extract_and_store(response=mock_response, request_context=context)
 
-    async def _extract_and_store(self, response: dict[str, Any], request_context: RequestContext) -> None:
+    async def _extract_and_store(
+        self, response: dict[str, Any], request_context: RequestContext
+    ) -> None:
         message = extract_message_from_response(response)
         reasoning_details = extract_reasoning_details(message)
         if not reasoning_details:

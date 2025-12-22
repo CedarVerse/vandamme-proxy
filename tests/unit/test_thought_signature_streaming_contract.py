@@ -58,7 +58,9 @@ async def test_thought_signature_streaming_persists_and_injects_from_middleware_
     )
 
     injected_ctx = await middleware.before_request(next_req)
-    assert injected_ctx.messages[0]["reasoning_details"] == [{"thought_signature": "sig1", "data": "x"}]
+    assert injected_ctx.messages[0]["reasoning_details"] == [
+        {"thought_signature": "sig1", "data": "x"}
+    ]
 
     await middleware.cleanup()
 

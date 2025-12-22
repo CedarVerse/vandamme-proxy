@@ -156,7 +156,7 @@ def metrics_layout() -> dbc.Container:
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader(html.Strong("Filters", className="text-secondary")),
+                                dbc.CardHeader(html.Strong("Filters", className="text-primary")),
                                 dbc.CardBody(
                                     dbc.Row(
                                         [
@@ -180,23 +180,27 @@ def metrics_layout() -> dbc.Container:
                                                         "Model (supports * and ?)",
                                                         className="text-muted small",
                                                     ),
-                                                    dcc.Input(
+                                                    dbc.Input(
                                                         id="vdm-model-filter",
                                                         value="",
                                                         placeholder="e.g. gpt*",
-                                                        debounce=True,
-                                                        className="form-control border-primary",
+                                                        className="border-primary",
                                                     ),
                                                 ]
                                             ),
                                             dbc.Col(
+                                                dbc.Button(
+                                                    "Apply",
+                                                    id="vdm-apply-filters",
+                                                    color="primary",
+                                                    outline=True,
+                                                    className="mt-4",
+                                                ),
+                                                width="auto",
+                                            ),
+                                            dbc.Col(
                                                 html.Div(
-                                                    [
-                                                        "Live search (debounced)",
-                                                        " · Supports * and ?",
-                                                        html.Br(),
-                                                        "wildcards",
-                                                    ],
+                                                    "Supports * and ? wildcards",
                                                     className="text-muted small mt-2",
                                                 ),
                                                 width="auto",
@@ -207,8 +211,13 @@ def metrics_layout() -> dbc.Container:
                                 ),
                             ]
                         ),
-                        md=7,
-                    ),
+                        md=12,
+                    )
+                ],
+                className="mb-3",
+            ),
+            dbc.Row(
+                [
                     dbc.Col(
                         dbc.Card(
                             [
@@ -218,11 +227,6 @@ def metrics_layout() -> dbc.Container:
                         ),
                         md=5,
                     ),
-                ],
-                className="mb-3",
-            ),
-            dbc.Row(
-                [
                     dbc.Col(
                         dbc.Card(
                             [
@@ -230,7 +234,7 @@ def metrics_layout() -> dbc.Container:
                                 dbc.CardBody(dbc.Spinner(id="vdm-provider-breakdown")),
                             ]
                         ),
-                        md=12,
+                        md=7,
                     ),
                 ],
                 className="mb-3",
@@ -450,16 +454,6 @@ def kpis_grid(totals: MetricTotals) -> dbc.Row:
             ),
             dbc.Col(
                 kpi_card(
-                    title="Total duration",
-                    value=monospace(format_duration(totals.total_duration_ms)),
-                    subtitle=f"{totals.total_duration_ms:,.0f}ms",
-                ),
-                md=2,
-                sm=6,
-                xs=12,
-            ),
-            dbc.Col(
-                kpi_card(
                     title="Streaming avg",
                     value=html.Span(
                         format_duration(totals.streaming_average_duration_ms),
@@ -508,7 +502,6 @@ def provider_breakdown_table(rows: list[dict[str, Any]]) -> html.Div:
                 html.Th("Output", className="text-end"),
                 html.Th("Tools", className="text-end"),
                 html.Th("Avg Duration", className="text-end"),
-                html.Th("Total Duration", className="text-end"),
                 html.Th("Streaming Avg", className="text-end"),
                 html.Th("Non-Streaming Avg", className="text-end"),
                 html.Th("Last Accessed", className="text-end"),
@@ -536,10 +529,6 @@ def provider_breakdown_table(rows: list[dict[str, Any]]) -> html.Div:
                             className=duration_color_class(r.get("average_duration_ms", 0)),
                             title=f"{r.get('average_duration_ms', 0):.1f}ms",
                         ),
-                        className="text-end",
-                    ),
-                    html.Td(
-                        monospace(format_duration(r.get("total_duration_ms", 0))),
                         className="text-end",
                     ),
                     html.Td(
@@ -602,7 +591,6 @@ def model_breakdown_table(rows: list[dict[str, Any]]) -> dbc.Table:
                 html.Th("Output", className="text-end"),
                 html.Th("Tools", className="text-end"),
                 html.Th("Avg Duration", className="text-end"),
-                html.Th("Total Duration", className="text-end"),
                 html.Th("Streaming Avg", className="text-end"),
                 html.Th("Non-Streaming Avg", className="text-end"),
                 html.Th("Last Accessed", className="text-end"),
@@ -630,10 +618,6 @@ def model_breakdown_table(rows: list[dict[str, Any]]) -> dbc.Table:
                             className=duration_color_class(r.get("average_duration_ms", 0)),
                             title=f"{r.get('average_duration_ms', 0):.1f}ms",
                         ),
-                        className="text-end",
-                    ),
-                    html.Td(
-                        monospace(format_duration(r.get("total_duration_ms", 0))),
                         className="text-end",
                     ),
                     html.Td(
@@ -1068,11 +1052,10 @@ def logs_layout() -> dbc.Container:
                                             [
                                                 dbc.Tab(
                                                     [
-                                                        # Grid created once
-                                                        # rowData updated via callback
+                                                        # Grid created once.
+                                                        # Row data updated via callback.
                                                         logs_errors_ag_grid(
-                                                            [],
-                                                            grid_id="vdm-logs-errors-grid",
+                                                            [], grid_id="vdm-logs-errors-grid"
                                                         ),
                                                     ],
                                                     label="Errors",
@@ -1080,11 +1063,10 @@ def logs_layout() -> dbc.Container:
                                                 ),
                                                 dbc.Tab(
                                                     [
-                                                        # Grid created once
-                                                        # rowData updated via callback
+                                                        # Grid created once.
+                                                        # Row data updated via callback.
                                                         logs_traces_ag_grid(
-                                                            [],
-                                                            grid_id="vdm-logs-traces-grid",
+                                                            [], grid_id="vdm-logs-traces-grid"
                                                         ),
                                                     ],
                                                     label="Traces",

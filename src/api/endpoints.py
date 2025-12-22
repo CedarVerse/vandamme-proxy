@@ -546,7 +546,9 @@ async def create_message(
                         # Wrap streaming to capture metrics
                         async def streaming_with_metrics() -> AsyncGenerator[str, None]:
                             try:
-                                async for chunk in convert_openai_streaming_to_claude_with_cancellation(
+                                async for (
+                                    chunk
+                                ) in convert_openai_streaming_to_claude_with_cancellation(
                                     openai_stream,
                                     request,
                                     logger,

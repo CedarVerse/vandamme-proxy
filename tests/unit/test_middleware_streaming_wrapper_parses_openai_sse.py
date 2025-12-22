@@ -1,6 +1,9 @@
 import pytest
 
-from src.api.middleware_integration import MiddlewareAwareRequestProcessor, MiddlewareStreamingWrapper
+from src.api.middleware_integration import (
+    MiddlewareAwareRequestProcessor,
+    MiddlewareStreamingWrapper,
+)
 from src.middleware.base import RequestContext
 
 
@@ -23,13 +26,17 @@ class _RecorderProcessor(MiddlewareAwareRequestProcessor):
 async def test_streaming_wrapper_extracts_openai_delta_from_sse_lines():
     async def stream():
         yield 'data: {"choices":[{"delta":{"tool_calls":[{"id":"call_1"}]}}]}\n\n'
-        yield 'data: {"choices":[{"delta":{"reasoning_details":[{"thought_signature":"sig"}]}}]}\n\n'
-        yield 'data: [DONE]\n\n'
+        yield (
+            'data: {"choices":[{"delta":{"reasoning_details":[{"thought_signature":"sig"}]}}]}\n\n'
+        )
+        yield "data: [DONE]\n\n"
 
     proc = _RecorderProcessor()
     req_ctx = RequestContext(messages=[], provider="vertex", model="gemini-3-pro", request_id="r1")
 
-    wrapper = MiddlewareStreamingWrapper(original_stream=stream(), request_context=req_ctx, processor=proc)
+    wrapper = MiddlewareStreamingWrapper(
+        original_stream=stream(), request_context=req_ctx, processor=proc
+    )
 
     # drain wrapper
     async for _ in wrapper:
