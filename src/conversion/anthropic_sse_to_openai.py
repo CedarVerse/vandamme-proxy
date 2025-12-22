@@ -6,6 +6,8 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any
 
+from src.conversion.tool_call_delta import ToolCallIdAllocator, coerce_tool_id, coerce_tool_name
+
 
 @dataclass
 class _SseEvent:
@@ -33,7 +35,7 @@ class _AnthropicToOpenAIChatCompletionsStreamTranslator:
         self.pending_event: str | None = None
         self.pending_data: str | None = None
 
-        self.tool_call_ids_by_index: dict[int, str] = {}
+        self.tool_id_allocator = ToolCallIdAllocator(id_prefix=f"call-{self.completion_id}")
         self.tool_names_by_index: dict[int, str] = {}
         self.emitted_tool_start: set[int] = set()
 
@@ -60,12 +62,7 @@ class _AnthropicToOpenAIChatCompletionsStreamTranslator:
         return self._emit_chunk({"content": text}, finish_reason=None)
 
     def _tool_id_for_index(self, index: int) -> str:
-        tool_id = self.tool_call_ids_by_index.get(index)
-        if tool_id:
-            return tool_id
-        tool_id = f"call-{self.completion_id}-{index}"
-        self.tool_call_ids_by_index[index] = tool_id
-        return tool_id
+        return self.tool_id_allocator.get(index)
 
     def emit_tool_delta(
         self, index: int, *, name: str | None = None, args_delta: str | None = None
@@ -202,12 +199,13 @@ async def anthropic_sse_to_openai_chat_completions_sse(
                 continue
 
             if block.get("type") == "tool_use":
-                name = block.get("name")
-                tool_id = block.get("id")
-                if isinstance(name, str):
-                    translator.tool_names_by_index[idx] = name
-                if isinstance(tool_id, str):
-                    translator.tool_call_ids_by_index[idx] = tool_id
+                block.get("name")
+                tool_id = coerce_tool_id(block.get("id"))
+                name_s = coerce_tool_name(block.get("name"))
+                if name_s is not None:
+                    translator.tool_names_by_index[idx] = name_s
+                if tool_id is not None:
+                    translator.tool_id_allocator.get(idx, provided_id=tool_id)
 
                 translator.emitted_tool_start.add(idx)
                 yield translator.emit_tool_delta(idx, name=translator.tool_names_by_index.get(idx))
