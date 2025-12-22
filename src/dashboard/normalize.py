@@ -15,6 +15,7 @@ class MetricTotals:
     tool_calls: int = 0
     active_requests: int = 0
     average_duration_ms: float = 0.0
+    total_duration_ms: float = 0.0
     streaming_average_duration_ms: float = 0.0
     non_streaming_average_duration_ms: float = 0.0
     last_accessed: str | None = None
@@ -91,6 +92,7 @@ def parse_metric_totals(running_totals_yaml: dict[str, Any]) -> MetricTotals:
         ),
         active_requests=_as_int(summary.get("active_requests")),
         average_duration_ms=_as_float(summary.get("average_duration_ms")),
+        total_duration_ms=_as_float(summary.get("total_duration_ms")),
         streaming_average_duration_ms=_as_float(summary.get("streaming_average_duration_ms")),
         non_streaming_average_duration_ms=_as_float(
             summary.get("non_streaming_average_duration_ms")
@@ -133,6 +135,7 @@ def provider_rows(running_totals_yaml: dict[str, Any]) -> list[dict[str, Any]]:
 
         # Extract timing metrics
         avg_duration = _as_float(rollup.get("avg_duration_ms"))
+        total_duration_ms = _as_float(total_metrics.get("total_duration_ms"))
         streaming_avg_duration = _as_float(streaming_metrics.get("average_duration_ms"))
         non_streaming_avg_duration = _as_float(non_streaming_metrics.get("average_duration_ms"))
 
@@ -152,6 +155,7 @@ def provider_rows(running_totals_yaml: dict[str, Any]) -> list[dict[str, Any]]:
                 "tool_calls": tool_calls,
                 "models": pdata.get("models", {}),
                 "average_duration_ms": avg_duration,
+                "total_duration_ms": total_duration_ms,
                 "streaming_average_duration_ms": streaming_avg_duration,
                 "non_streaming_average_duration_ms": non_streaming_avg_duration,
                 "last_accessed": last_accessed,
@@ -190,6 +194,7 @@ def model_rows_for_provider(provider_entry: dict[str, Any]) -> list[dict[str, An
 
         # Extract timing metrics
         avg_duration = _as_float(total_metrics.get("average_duration_ms"))
+        total_duration_ms = _as_float(total_metrics.get("total_duration_ms"))
         streaming_avg_duration = _as_float(streaming_metrics.get("average_duration_ms"))
         non_streaming_avg_duration = _as_float(non_streaming_metrics.get("average_duration_ms"))
 
@@ -206,6 +211,7 @@ def model_rows_for_provider(provider_entry: dict[str, Any]) -> list[dict[str, An
                 "output_tokens": output_tokens,
                 "tool_calls": tool_calls,
                 "average_duration_ms": avg_duration,
+                "total_duration_ms": total_duration_ms,
                 "streaming_average_duration_ms": streaming_avg_duration,
                 "non_streaming_average_duration_ms": non_streaming_avg_duration,
                 "last_accessed": last_accessed,

@@ -106,6 +106,7 @@ def create_hierarchical_structure(
             "total_tool_calls": summary_data.get("total_tool_calls", 0),
             "active_requests": summary_data.get("active_requests", 0),
             "average_duration_ms": summary_data.get("average_duration_ms", 0),
+            "total_duration_ms": summary_data.get("total_duration_ms", 0),
         },
         "#": None,  # Empty line separator
     }
@@ -128,6 +129,7 @@ def create_hierarchical_structure(
                 "tool_results": totals.get("tool_results", 0),
                 "tool_calls": totals.get("tool_calls", 0),
                 "average_duration_ms": totals.get("average_duration_ms", 0),
+                "total_duration_ms": totals.get("total_duration_ms", 0),
             }
 
         def format_split(split: dict[str, Any]) -> dict[str, Any]:

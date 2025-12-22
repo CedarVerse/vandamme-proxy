@@ -26,5 +26,6 @@ class HierarchicalData(TypedDict):
     total_tool_calls: int
     active_requests: int
     average_duration_ms: float
+    total_duration_ms: int
 
     providers: dict[str, dict[str, Any]]

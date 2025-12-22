@@ -282,26 +282,26 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         Output("vdm-model-breakdown", "children"),
         Output("vdm-provider-filter", "options"),
         Input("vdm-metrics-poll", "n_intervals"),
-        Input("vdm-apply-filters", "n_clicks"),
-        State("vdm-provider-filter", "value"),
-        State("vdm-model-filter", "value"),
+        Input("vdm-provider-filter", "value"),
+        Input("vdm-model-filter", "value"),
         State("vdm-metrics-poll-toggle", "value"),
         prevent_initial_call=False,
     )
     def refresh_metrics(
         _n: int,
-        _apply: int | None,
         provider_value: str,
         model_value: str,
         polling: bool,
     ) -> tuple[Any, Any, Any, Any]:
-        _ = _apply
         if not polling and _n:
             # Keep existing UI stable when polling is disabled.
             raise dash.exceptions.PreventUpdate
 
         provider_filter = provider_value or None
         model_filter = model_value.strip() or None
+
+        # Keep provider dropdown options stable even when provider filter is applied.
+        providers = _run(fetch_all_providers(cfg=cfg))
 
         running = _run(fetch_running_totals(cfg=cfg, provider=provider_filter, model=model_filter))
 
@@ -317,8 +317,9 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         totals = parse_totals_for_chart(running)
         prov_rows, model_rows = compute_metrics_views(running, provider_filter)
 
+        sorted_providers = sorted(p for p in providers if isinstance(p, str) and p)
         options = [{"label": "All", "value": ""}] + [
-            {"label": r["provider"], "value": r["provider"]} for r in prov_rows
+            {"label": p, "value": p} for p in sorted_providers
         ]
 
         token_chart = token_composition_chart(totals)

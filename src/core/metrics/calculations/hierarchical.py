@@ -119,5 +119,6 @@ def finalize_running_totals(running_totals: RunningTotals) -> HierarchicalData:
         "total_tool_calls": running_totals.total_tool_calls,
         "active_requests": running_totals.active_requests,
         "average_duration_ms": running_totals.average_duration_ms,
+        "total_duration_ms": int(round(total_duration_ms)),
         "providers": running_totals.providers,
     }

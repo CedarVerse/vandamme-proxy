@@ -109,6 +109,7 @@ async def test_running_totals_hierarchical_includes_rollup_models_and_streaming_
         assert "tool_results" in totals
         assert "tool_calls" in totals
         assert "average_duration_ms" in totals
+        assert "total_duration_ms" in totals
 
     assert "gpt-4o" in provider["models"]
 
