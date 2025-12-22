@@ -407,6 +407,7 @@ def parse_tool_result_content(content: Any) -> str:
                 if "text" in item:
                     result_parts.append(item.get("text", ""))
                 else:
+                    # Best-effort stringify of arbitrary dict blocks.
                     try:
                         result_parts.append(json.dumps(item, ensure_ascii=False))
                     except (TypeError, ValueError):
