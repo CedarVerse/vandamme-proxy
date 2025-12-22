@@ -4,6 +4,8 @@ Elegant HTTP-layer mocking for fast, reliable tests without external dependencie
 Converted from integration tests to use RESPX fixtures.
 """
 
+import json
+
 import httpx
 import pytest
 
@@ -21,6 +23,32 @@ def _last_openai_chat_completion_request_json(mock_openai_api) -> dict:
     assert route.calls, "Expected at least one upstream OpenAI call"
     request = route.calls[-1].request
     return request.json()
+
+
+def _last_anthropic_messages_request_json(mock_anthropic_api) -> dict:
+    # respx stores routes keyed by (method, url) but url is normalized.
+    route = mock_anthropic_api.routes["POST", "https://api.anthropic.com/v1/messages"]
+    assert route.calls, "Expected at least one upstream Anthropic call"
+    request = route.calls[-1].request
+    return request.json()
+
+
+def _assert_anthropic_messages_called(mock_anthropic_api) -> None:
+    assert any(
+        str(call.request.url) == "https://api.anthropic.com/v1/messages"
+        for route in mock_anthropic_api.routes
+        for call in route.calls
+    ), "Expected upstream POST https://api.anthropic.com/v1/messages"
+
+
+def _last_anthropic_messages_request_json_fallback(mock_anthropic_api) -> dict:
+    for route in mock_anthropic_api.routes:
+        for call in reversed(route.calls):
+            if str(call.request.url) == "https://api.anthropic.com/v1/messages":
+                content = call.request.content
+                assert content is not None
+                return json.loads(content.decode("utf-8"))
+    raise AssertionError("Expected at least one upstream Anthropic call")
 
 
 @pytest.mark.unit
@@ -77,6 +105,79 @@ def test_openai_chat_completions_passthrough_mocked(mock_openai_api, openai_chat
     assert data["object"] == "chat.completion"
     assert data["choices"][0]["message"]["content"] == "Hello! How can I help you today?"
     assert data["choices"][0]["message"]["role"] == "assistant"
+
+
+@pytest.mark.unit
+def test_openai_chat_completions_anthropic_translation_non_stream(
+    mock_anthropic_api, anthropic_message_response
+):
+    """OpenAI /v1/chat/completions -> Anthropic provider -> OpenAI response."""
+    from src.main import app
+
+    # The OpenAI endpoint accepts the same proxy auth headers as the Claude endpoint.
+    # We keep using TEST_HEADERS here for consistency.
+
+    mock_anthropic_api.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200, json=anthropic_message_response)
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "anthropic:claude-3-5-sonnet-20241022",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "max_tokens": 100,
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["object"] == "chat.completion"
+    assert data["choices"][0]["message"]["role"] == "assistant"
+    assert data["choices"][0]["message"]["content"] == "Hello! How can I help you today?"
+
+    _assert_anthropic_messages_called(mock_anthropic_api)
+    upstream = _last_anthropic_messages_request_json_fallback(mock_anthropic_api)
+    assert upstream["model"] == "claude-3-5-sonnet-20241022"
+    assert upstream["messages"][0]["role"] == "user"
+    assert upstream["messages"][0]["content"][0]["type"] == "text"
+
+
+@pytest.mark.unit
+def test_openai_chat_completions_anthropic_translation_stream(
+    mock_anthropic_api, anthropic_streaming_events
+):
+    """OpenAI /v1/chat/completions (stream) -> Anthropic SSE -> OpenAI SSE."""
+    from src.main import app
+
+    # Return an Anthropic SSE stream body
+    stream_body = b"".join(anthropic_streaming_events)
+    mock_anthropic_api.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(200, content=stream_body)
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "anthropic:claude-3-5-sonnet-20241022",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "max_tokens": 10,
+                "stream": True,
+            },
+            headers=TEST_HEADERS,
+        )
+
+        assert response.status_code == 200
+        assert response.headers.get("content-type", "").startswith("text/event-stream")
+
+        body = b"".join(response.iter_bytes())
+
+    # Expect OpenAI-style chunks and termination
+    assert b"chat.completion.chunk" in body
+    assert b"data: [DONE]" in body
 
 
 @pytest.mark.unit

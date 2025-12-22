@@ -175,13 +175,15 @@ class AnthropicClient:
                 ) as response:
                     response.raise_for_status()
 
-                    # Pass through SSE events directly
+                    # Pass through SSE events directly.
+                    # IMPORTANT: preserve line boundaries. Some downstream consumers buffer
+                    # `event:` and `data:` lines separately.
                     async for line in response.aiter_lines():
                         if line.strip():
-                            yield f"data: {line}"
+                            yield f"data: {line}\n"
 
                     # Success: end stream and exit rotation loop
-                    yield "data: [DONE]"
+                    yield "data: [DONE]\n"
                     return
 
             except httpx.HTTPStatusError as e:

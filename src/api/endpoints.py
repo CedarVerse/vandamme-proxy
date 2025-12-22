@@ -13,6 +13,9 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 from src.api.utils.yaml_formatter import format_health_yaml
+from src.conversion.anthropic_sse_to_openai import anthropic_sse_to_openai_chat_completions_sse
+from src.conversion.anthropic_to_openai import anthropic_message_to_openai_chat_completion
+from src.conversion.openai_to_anthropic import openai_chat_completions_to_anthropic_messages
 from src.conversion.request_converter import convert_claude_to_openai
 from src.conversion.response_converter import (
     convert_openai_streaming_to_claude_with_cancellation,
@@ -120,7 +123,7 @@ def _is_error_response(response: dict) -> bool:
     return "error" in response
 
 
-@router.post("/v1/chat/completions")
+@router.post("/v1/chat/completions", response_model=None)
 async def chat_completions(
     request: OpenAIChatCompletionsRequest,
     http_request: Request,
@@ -150,25 +153,6 @@ async def chat_completions(
         if provider_config is None:
             raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found")
 
-        # OpenAI client support first: passthrough OpenAI-format providers.
-        if provider_config.is_anthropic_format:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Provider is configured for Anthropic format; OpenAI chat/completions "
-                    "translation is not implemented yet"
-                ),
-            )
-
-        if provider_config.uses_passthrough and not client_api_key:
-            raise HTTPException(
-                status_code=401,
-                detail=(
-                    f"Provider '{provider_name}' requires API key passthrough, "
-                    "but no client API key was provided"
-                ),
-            )
-
         openai_client = config.provider_manager.get_client(provider_name, client_api_key)
 
         provider_api_key: str | None = None
@@ -185,6 +169,70 @@ async def chat_completions(
                 k = await config.provider_manager.get_next_provider_api_key(provider_name)
                 if k not in exclude:
                     return k
+
+        if provider_config.uses_passthrough and not client_api_key:
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    f"Provider '{provider_name}' requires API key passthrough, "
+                    "but no client API key was provided"
+                ),
+            )
+
+        if provider_config.is_anthropic_format:
+            # Translate OpenAI Chat Completions -> Anthropic Messages request.
+            anthropic_request = openai_chat_completions_to_anthropic_messages(
+                openai_request=openai_request,
+                resolved_model=resolved_model,
+            )
+
+            if request.stream:
+                anthropic_stream = openai_client.create_chat_completion_stream(
+                    anthropic_request,
+                    request_id,
+                    api_key=(
+                        client_api_key if provider_config.uses_passthrough else provider_api_key
+                    ),
+                    next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+                )
+
+                async def anthropic_stream_as_openai() -> AsyncGenerator[str, None]:
+                    try:
+                        async for chunk in anthropic_sse_to_openai_chat_completions_sse(
+                            anthropic_sse_lines=anthropic_stream,
+                            model=resolved_model,
+                            completion_id=f"chatcmpl-{request_id}",
+                        ):
+                            yield chunk
+                    finally:
+                        if LOG_REQUEST_METRICS:
+                            tracker = get_request_tracker(http_request)
+                            await tracker.end_request(request_id)
+
+                return StreamingResponse(
+                    anthropic_stream_as_openai(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Headers": "*",
+                    },
+                )
+
+            anthropic_response = await openai_client.create_chat_completion(
+                anthropic_request,
+                request_id,
+                api_key=(client_api_key if provider_config.uses_passthrough else provider_api_key),
+                next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+            )
+
+            openai_response = anthropic_message_to_openai_chat_completion(
+                anthropic=anthropic_response
+            )
+            return JSONResponse(status_code=200, content=openai_response)
+
+        # OpenAI-format providers: passthrough request/response.
 
         if request.stream:
             openai_stream = openai_client.create_chat_completion_stream(
@@ -234,7 +282,7 @@ async def chat_completions(
         return JSONResponse(status_code=200, content=openai_response)
 
 
-@router.post("/v1/messages")
+@router.post("/v1/messages", response_model=None)
 async def create_message(
     request: ClaudeMessagesRequest,
     http_request: Request,
