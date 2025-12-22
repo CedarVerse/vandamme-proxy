@@ -3,19 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from src.conversion.content_utils import extract_openai_text_parts, safe_json_loads
+
 
 def _text_parts_from_openai_content(content: Any) -> list[dict[str, Any]]:
-    if isinstance(content, str):
-        return [{"type": "text", "text": content}]
-
-    if isinstance(content, list):
-        parts: list[dict[str, Any]] = []
-        for part in content:
-            if isinstance(part, dict) and part.get("type") == "text":
-                parts.append({"type": "text", "text": str(part.get("text", ""))})
-        return parts
-
-    return []
+    return extract_openai_text_parts(content)
 
 
 def _system_text_from_openai_messages(messages: list[dict[str, Any]]) -> str | None:
@@ -76,10 +68,10 @@ def _anthropic_tool_use_blocks_from_openai_tool_calls(tool_calls: Any) -> list[d
         args = fn.get("arguments")
         if not isinstance(name, str) or not name:
             continue
-        try:
-            input_obj = json.loads(args) if isinstance(args, str) and args else {}
-        except Exception:
-            input_obj = {}
+        input_obj: dict[str, Any] = safe_json_loads(
+            args if isinstance(args, str) else None,
+            default={},
+        )
 
         blocks.append(
             {

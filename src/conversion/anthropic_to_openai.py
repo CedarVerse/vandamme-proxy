@@ -4,6 +4,8 @@ import json
 import time
 from typing import Any
 
+from src.conversion.content_utils import extract_anthropic_text
+
 
 def _openai_finish_reason_from_anthropic_stop_reason(stop_reason: str | None) -> str:
     if stop_reason == "tool_use":
@@ -37,17 +39,7 @@ def _openai_tool_calls_from_anthropic_content(content: Any) -> list[dict[str, An
 
 
 def _assistant_text_from_anthropic_content(content: Any) -> str | None:
-    if not isinstance(content, list):
-        return None
-
-    parts: list[str] = []
-    for block in content:
-        if not isinstance(block, dict) or block.get("type") != "text":
-            continue
-        parts.append(str(block.get("text", "")))
-
-    text = "".join(parts)
-    return text or None
+    return extract_anthropic_text(content)
 
 
 def _openai_usage_from_anthropic_usage(usage: Any) -> dict[str, int] | None:
