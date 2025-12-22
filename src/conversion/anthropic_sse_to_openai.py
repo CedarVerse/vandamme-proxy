@@ -3,28 +3,151 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from typing import Any
 
 
-def _parse_sse_event(raw: str) -> tuple[str | None, str | None]:
-    """Parse a single SSE event payload into (event, data).
+@dataclass
+class _SseEvent:
+    name: str
+    data: str
 
-    Expects a single event block containing lines like:
-      event: message_start
-      data: {...}
 
-    Returns (None, None) if not parseable.
+class _AnthropicToOpenAIChatCompletionsStreamTranslator:
+    """Stateful translator for Anthropic Messages SSE -> OpenAI Chat Completions SSE.
+
+    This keeps the generator logic readable by isolating:
+    - SSE line parsing / buffering
+    - translation state (role emitted, tool id/name maps)
+    - emission helpers
+
+    The goal is *clarity without abstraction leakage*: a tiny state machine that can
+    be unit tested via the endpoint-level RESPX tests.
     """
-    event: str | None = None
-    data: str | None = None
 
-    for line in raw.splitlines():
-        if line.startswith("event:"):
-            event = line.split(":", 1)[1].strip()
-        elif line.startswith("data:"):
-            data = line.split(":", 1)[1].strip()
+    def __init__(self, *, model: str, completion_id: str) -> None:
+        self.model = model
+        self.completion_id = completion_id
+        self.created = int(time.time())
 
-    return event, data
+        self.pending_event: str | None = None
+        self.pending_data: str | None = None
+
+        self.tool_call_ids_by_index: dict[int, str] = {}
+        self.tool_names_by_index: dict[int, str] = {}
+        self.emitted_tool_start: set[int] = set()
+
+        self.emitted_role = False
+        self.finished = False
+
+    def _emit_chunk(self, delta: dict[str, Any], *, finish_reason: str | None) -> str:
+        chunk = {
+            "id": self.completion_id,
+            "object": "chat.completion.chunk",
+            "created": self.created,
+            "model": self.model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+        return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+    def emit_role_if_needed(self) -> str:
+        if self.emitted_role:
+            return ""
+        self.emitted_role = True
+        return self._emit_chunk({"role": "assistant"}, finish_reason=None)
+
+    def emit_text_delta(self, text: str) -> str:
+        return self._emit_chunk({"content": text}, finish_reason=None)
+
+    def _tool_id_for_index(self, index: int) -> str:
+        tool_id = self.tool_call_ids_by_index.get(index)
+        if tool_id:
+            return tool_id
+        tool_id = f"call-{self.completion_id}-{index}"
+        self.tool_call_ids_by_index[index] = tool_id
+        return tool_id
+
+    def emit_tool_delta(
+        self, index: int, *, name: str | None = None, args_delta: str | None = None
+    ) -> str:
+        tool_id = self._tool_id_for_index(index)
+
+        fn: dict[str, str] = {}
+        if name is not None:
+            fn["name"] = name
+        if args_delta is not None:
+            fn["arguments"] = args_delta
+
+        entry: dict[str, Any] = {"index": index, "id": tool_id, "type": "function"}
+        if fn:
+            entry["function"] = fn
+
+        return self._emit_chunk({"tool_calls": [entry]}, finish_reason=None)
+
+    def emit_finish(self, finish_reason: str) -> str:
+        self.finished = True
+        return self._emit_chunk({}, finish_reason=finish_reason)
+
+    @staticmethod
+    def finish_reason_from_stop_reason(stop_reason: str | None) -> str:
+        if stop_reason == "tool_use":
+            return "tool_calls"
+        if stop_reason == "max_tokens":
+            return "length"
+        return "stop"
+
+    @staticmethod
+    def parse_sse_block(raw: str) -> tuple[str | None, str | None]:
+        event: str | None = None
+        data: str | None = None
+        for line in raw.splitlines():
+            if line.startswith("event:"):
+                event = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                data = line.split(":", 1)[1].strip()
+        return event, data
+
+    def ingest_line(self, raw_line: str) -> _SseEvent | None:
+        """Ingest a single upstream line and return a complete (event,data) when available."""
+        line = raw_line.strip()
+        if not line:
+            return None
+
+        if line.startswith("data: "):
+            line = line[len("data: ") :]
+
+        if line == "[DONE]":
+            return _SseEvent(name="__done__", data="")
+
+        event, data = self.parse_sse_block(line)
+
+        # Single-line buffering mode
+        if event is None and data is None:
+            if line.startswith("event:"):
+                self.pending_event = line.split(":", 1)[1].strip()
+                return None
+            if line.startswith("data:"):
+                self.pending_data = line.split(":", 1)[1].strip()
+                if self.pending_event is not None:
+                    ev = _SseEvent(name=self.pending_event, data=self.pending_data)
+                    self.pending_event = None
+                    self.pending_data = None
+                    return ev
+                return None
+            return None
+
+        # Full block mode
+        if event is not None and data is None:
+            self.pending_event = event
+            return None
+        if event is None and self.pending_event is not None:
+            event = self.pending_event
+
+        if event is None or data is None:
+            return None
+
+        self.pending_event = None
+        return _SseEvent(name=event, data=data)
 
 
 async def anthropic_sse_to_openai_chat_completions_sse(
@@ -53,164 +176,46 @@ async def anthropic_sse_to_openai_chat_completions_sse(
             until we have both event and data.
     """
 
-    created = int(time.time())
-
-    pending_event: str | None = None
-    pending_data: str | None = None
-    tool_call_ids_by_index: dict[int, str] = {}
-    tool_names_by_index: dict[int, str] = {}
-    emitted_tool_start: set[int] = set()
-    emitted_role: bool = False
-    finished: bool = False
-
-    def _emit_role_delta() -> str:
-        nonlocal emitted_role
-        if emitted_role:
-            return ""
-        emitted_role = True
-        chunk = {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": model,
-            "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
-        }
-        return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-    def _emit_tool_delta(
-        index: int, *, name: str | None = None, args_delta: str | None = None
-    ) -> str:
-        # OpenAI tool delta format: tool_calls is a list; each entry has index, id, function fields.
-        tool_id = tool_call_ids_by_index.get(index) or f"call-{completion_id}-{index}"
-        tool_call_ids_by_index[index] = tool_id
-
-        fn: dict[str, str] = {}
-        if name is not None:
-            fn["name"] = name
-        if args_delta is not None:
-            fn["arguments"] = args_delta
-
-        entry: dict[str, Any] = {"index": index, "id": tool_id, "type": "function"}
-        if fn:
-            entry["function"] = fn
-
-        chunk = {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": model,
-            "choices": [{"index": 0, "delta": {"tool_calls": [entry]}, "finish_reason": None}],
-        }
-        return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-    def _emit_text_delta(text: str) -> str:
-        chunk = {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": model,
-            "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}],
-        }
-        return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-    def _emit_finish(finish_reason: str) -> str:
-        chunk = {
-            "id": completion_id,
-            "object": "chat.completion.chunk",
-            "created": created,
-            "model": model,
-            "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}],
-        }
-        return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-    def _finish_reason_from_stop_reason(stop_reason: str | None) -> str:
-        if stop_reason == "tool_use":
-            return "tool_calls"
-        if stop_reason == "max_tokens":
-            return "length"
-        return "stop"
+    translator = _AnthropicToOpenAIChatCompletionsStreamTranslator(
+        model=model, completion_id=completion_id
+    )
 
     async for raw_line in anthropic_sse_lines:
-        line = raw_line.strip()
-        if not line:
+        ev = translator.ingest_line(raw_line)
+        if ev is None:
             continue
-
-        # Handle wrappers that yield `data: ...` for each upstream line.
-        if line.startswith("data: "):
-            line = line[len("data: ") :]
-
-        # Anthropic stream may include [DONE] sentinel from our passthrough client.
-        if line == "[DONE]":
+        if ev.name == "__done__":
             break
 
-        # Case (a): the payload is a full SSE block containing both event + data.
-        event, data = _parse_sse_event(line)
-
-        # Case (b): payload is a single SSE line; buffer until we have both.
-        if event is None and data is None:
-            if line.startswith("event:"):
-                pending_event = line.split(":", 1)[1].strip()
-                continue
-            if line.startswith("data:"):
-                line.split(":", 1)[1].strip()
-                continue
-            continue
-
-        # If we only received an event name, buffer it and wait for a data line.
-        if event is not None and data is None:
-            pending_event = event
-            continue
-
-        # If we only received data, use buffered event if available.
-        if event is None and pending_event is not None:
-            event = pending_event
-
-        # If we received a data line without an event line, ignore.
-        if event is None or data is None:
-            continue
-
-        # Clear buffers after successful assembly.
-        pending_event = None
-
-        # Handle out-of-band data buffering for implementations that send `event:` and
-        # `data:` as separate chunks.
-        if event is not None and data is None:
-            pending_event = event
-            continue
-        if event is not None and data is not None:
-            pending_data = data
-
-        if pending_data is not None:
-            data = pending_data
-            pending_data = None
-
-        role_delta = _emit_role_delta()
+        role_delta = translator.emit_role_if_needed()
         if role_delta:
             yield role_delta
 
-        if event == "content_block_start":
+        if ev.name == "content_block_start":
             try:
-                payload = json.loads(data)
+                payload = json.loads(ev.data)
             except Exception:
                 continue
             idx = payload.get("index")
             block = payload.get("content_block") or {}
             if not isinstance(idx, int) or not isinstance(block, dict):
                 continue
+
             if block.get("type") == "tool_use":
                 name = block.get("name")
                 tool_id = block.get("id")
                 if isinstance(name, str):
-                    tool_names_by_index[idx] = name
+                    translator.tool_names_by_index[idx] = name
                 if isinstance(tool_id, str):
-                    tool_call_ids_by_index[idx] = tool_id
-                emitted_tool_start.add(idx)
-                yield _emit_tool_delta(idx, name=tool_names_by_index.get(idx))
+                    translator.tool_call_ids_by_index[idx] = tool_id
+
+                translator.emitted_tool_start.add(idx)
+                yield translator.emit_tool_delta(idx, name=translator.tool_names_by_index.get(idx))
             continue
 
-        if event == "content_block_delta":
+        if ev.name == "content_block_delta":
             try:
-                payload = json.loads(data)
+                payload = json.loads(ev.data)
             except Exception:
                 continue
             idx = payload.get("index")
@@ -222,7 +227,7 @@ async def anthropic_sse_to_openai_chat_completions_sse(
             if delta_type == "text_delta":
                 text = delta.get("text")
                 if isinstance(text, str) and text:
-                    yield _emit_text_delta(text)
+                    yield translator.emit_text_delta(text)
                 continue
 
             if delta_type == "input_json_delta":
@@ -230,34 +235,31 @@ async def anthropic_sse_to_openai_chat_completions_sse(
                 if not isinstance(partial, str) or partial == "":
                     continue
 
-                # Emit tool call start if we didn't see content_block_start for some reason.
-                if idx not in emitted_tool_start:
-                    emitted_tool_start.add(idx)
-                    yield _emit_tool_delta(idx, name=tool_names_by_index.get(idx))
+                if idx not in translator.emitted_tool_start:
+                    translator.emitted_tool_start.add(idx)
+                    yield translator.emit_tool_delta(
+                        idx, name=translator.tool_names_by_index.get(idx)
+                    )
 
-                yield _emit_tool_delta(idx, args_delta=partial)
+                yield translator.emit_tool_delta(idx, args_delta=partial)
                 continue
 
-        if event == "message_delta":
+        if ev.name == "message_delta":
             try:
-                payload = json.loads(data)
+                payload = json.loads(ev.data)
             except Exception:
                 continue
 
             stop_reason = (payload.get("delta") or {}).get("stop_reason")
-            finish_reason = _finish_reason_from_stop_reason(stop_reason)
-            if not finished:
-                finished = True
-                yield _emit_finish(finish_reason)
+            finish_reason = translator.finish_reason_from_stop_reason(stop_reason)
+            if not translator.finished:
+                yield translator.emit_finish(finish_reason)
             continue
 
-        if event == "message_stop":
+        if ev.name == "message_stop":
             break
 
-        # Unhandled events are ignored.
-        continue
-
-    if not finished:
-        yield _emit_finish("stop")
+    if not translator.finished:
+        yield translator.emit_finish("stop")
 
     yield "data: [DONE]\n\n"
