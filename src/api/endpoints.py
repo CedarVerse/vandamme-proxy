@@ -25,6 +25,7 @@ from src.core.model_manager import get_model_manager
 from src.middleware import RequestContext, ResponseContext
 from src.models.cache import ModelsDiskCache
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
+from src.models.openai import OpenAIChatCompletionsRequest
 
 LOG_REQUEST_METRICS = config.log_request_metrics
 logger = logging.getLogger(__name__)
@@ -119,12 +120,126 @@ def _is_error_response(response: dict) -> bool:
     return "error" in response
 
 
+@router.post("/v1/chat/completions")
+async def chat_completions(
+    request: OpenAIChatCompletionsRequest,
+    http_request: Request,
+    client_api_key: str | None = Depends(validate_api_key),
+) -> JSONResponse | StreamingResponse:
+    """OpenAI-compatible chat completions endpoint.
+
+    - If the resolved provider is OpenAI-format: passthrough request/response.
+    - If the resolved provider is Anthropic-format: (future) translate OpenAI request to
+      Anthropic Messages API and translate response back.
+
+    For now, this endpoint supports OpenAI-format providers.
+    """
+    request_id = str(uuid.uuid4())
+
+    with ConversationLogger.correlation_context(request_id):
+        start_time = time.time()
+
+        # Resolve provider + model via alias/prefix machinery.
+        provider_name, resolved_model = model_manager.resolve_model(request.model)
+
+        # Build upstream request dict and attach resolved model.
+        openai_request: dict[str, Any] = request.model_dump(exclude_none=True)
+        openai_request["model"] = resolved_model
+
+        provider_config = config.provider_manager.get_provider_config(provider_name)
+        if provider_config is None:
+            raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found")
+
+        # OpenAI client support first: passthrough OpenAI-format providers.
+        if provider_config.is_anthropic_format:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Provider is configured for Anthropic format; OpenAI chat/completions "
+                    "translation is not implemented yet"
+                ),
+            )
+
+        if provider_config.uses_passthrough and not client_api_key:
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    f"Provider '{provider_name}' requires API key passthrough, "
+                    "but no client API key was provided"
+                ),
+            )
+
+        openai_client = config.provider_manager.get_client(provider_name, client_api_key)
+
+        provider_api_key: str | None = None
+        if not provider_config.uses_passthrough:
+            provider_api_key = await config.provider_manager.get_next_provider_api_key(
+                provider_name
+            )
+
+        async def _next_provider_key(exclude: set[str]) -> str:
+            keys = provider_config.get_api_keys()
+            if len(exclude) >= len(keys):
+                raise HTTPException(status_code=429, detail="All provider API keys exhausted")
+            while True:
+                k = await config.provider_manager.get_next_provider_api_key(provider_name)
+                if k not in exclude:
+                    return k
+
+        if request.stream:
+            openai_stream = openai_client.create_chat_completion_stream(
+                openai_request,
+                request_id,
+                api_key=(client_api_key if provider_config.uses_passthrough else provider_api_key),
+                next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+            )
+
+            async def streaming_with_metrics() -> AsyncGenerator[str, None]:
+                try:
+                    async for chunk in openai_stream:
+                        # Ensure SSE lines end with newline for broad client compatibility.
+                        yield f"{chunk}\n"
+                finally:
+                    if LOG_REQUEST_METRICS:
+                        tracker = get_request_tracker(http_request)
+                        await tracker.end_request(request_id)
+
+            return StreamingResponse(
+                streaming_with_metrics(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "*",
+                },
+            )
+
+        openai_response = await openai_client.create_chat_completion(
+            openai_request,
+            request_id,
+            api_key=(client_api_key if provider_config.uses_passthrough else provider_api_key),
+            next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+        )
+
+        # Basic timing log (metrics system is handled elsewhere for /v1/messages).
+        duration_ms = (time.time() - start_time) * 1000
+        logger.debug(
+            "OpenAI chat/completions completed in %.0fms (provider=%s model=%s)",
+            duration_ms,
+            provider_name,
+            resolved_model,
+        )
+
+        return JSONResponse(status_code=200, content=openai_response)
+
+
 @router.post("/v1/messages")
-async def create_message(  # type: ignore[no-untyped-def]
+async def create_message(
     request: ClaudeMessagesRequest,
     http_request: Request,
     client_api_key: str | None = Depends(validate_api_key),
-):
+) -> JSONResponse | StreamingResponse:
     # Generate unique request ID for tracking
     request_id = str(uuid.uuid4())
 

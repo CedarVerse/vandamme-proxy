@@ -25,7 +25,7 @@ def _last_openai_chat_completion_request_json(mock_openai_api) -> dict:
 
 @pytest.mark.unit
 def test_basic_chat_mocked(mock_openai_api, openai_chat_completion):
-    """Test basic chat completion with mocked OpenAI API."""
+    """Test basic chat completion via Claude-format /v1/messages."""
     # Import app after fixture setup to get fresh config
     from src.main import app
 
@@ -50,6 +50,33 @@ def test_basic_chat_mocked(mock_openai_api, openai_chat_completion):
     data = response.json()
     assert data["content"][0]["text"] == "Hello! How can I help you today?"
     assert data["role"] == "assistant"
+
+
+@pytest.mark.unit
+def test_openai_chat_completions_passthrough_mocked(mock_openai_api, openai_chat_completion):
+    """Test OpenAI-compatible /v1/chat/completions passthrough (non-streaming)."""
+    from src.main import app
+
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=openai_chat_completion)
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "openai:gpt-4",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "max_tokens": 100,
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["object"] == "chat.completion"
+    assert data["choices"][0]["message"]["content"] == "Hello! How can I help you today?"
+    assert data["choices"][0]["message"]["role"] == "assistant"
 
 
 @pytest.mark.unit
