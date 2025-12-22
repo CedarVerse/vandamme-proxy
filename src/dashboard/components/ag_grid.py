@@ -1510,7 +1510,7 @@ def logs_traces_ag_grid(
             "width": 100,
             "suppressSizeToFit": True,
             "tooltipField": "duration_ms",
-            "sortComparator": {"function": "vdmNumericComparator"},
+            "comparator": {"function": "vdmNumericComparator"},
         },
         {
             "headerName": "In Tokens",
