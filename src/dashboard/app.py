@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import dash
@@ -73,6 +74,8 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
     app = dash.Dash(
         __name__,
         requests_pathname_prefix="/dashboard/",
+        assets_folder=str(Path(__file__).resolve().parents[2] / "assets"),
+        assets_url_path="assets",
         external_stylesheets=[dbc.themes.DARKLY],
         suppress_callback_exceptions=True,
         title="Vandamme Dashboard",
@@ -85,34 +88,65 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
             dbc.Navbar(
                 dbc.Container(
                     [
-                        dbc.NavbarBrand("Vandamme", href="/dashboard/"),
-                        dbc.Nav(
+                        html.Div(
                             [
-                                dbc.NavLink("Overview", href="/dashboard/", active="exact"),
-                                dbc.NavLink("Metrics", href="/dashboard/metrics", active="exact"),
-                                dbc.NavLink("Models", href="/dashboard/models", active="exact"),
-                                dbc.NavLink(
-                                    "Top Models", href="/dashboard/top-models", active="exact"
+                                dbc.NavbarBrand(
+                                    html.A(
+                                        html.Img(
+                                            src=app.get_asset_url("vandamme-91x48px.png"),
+                                            alt="Vandamme Dashboard",
+                                            className="vdm-navbar-logo",
+                                        ),
+                                        href="/dashboard/",
+                                        className="d-flex align-items-center",
+                                        title="Vandamme",
+                                    ),
+                                    href="/dashboard/",
                                 ),
-                                dbc.NavLink("Aliases", href="/dashboard/aliases", active="exact"),
-                                dbc.NavLink(
-                                    "Token Counter", href="/dashboard/token-counter", active="exact"
+                                dbc.Nav(
+                                    [
+                                        dbc.NavLink("Overview", href="/dashboard/", active="exact"),
+                                        dbc.NavLink(
+                                            "Metrics", href="/dashboard/metrics", active="exact"
+                                        ),
+                                        dbc.NavLink(
+                                            "Models", href="/dashboard/models", active="exact"
+                                        ),
+                                        dbc.NavLink(
+                                            "Top Models",
+                                            href="/dashboard/top-models",
+                                            active="exact",
+                                        ),
+                                        dbc.NavLink(
+                                            "Aliases", href="/dashboard/aliases", active="exact"
+                                        ),
+                                        dbc.NavLink(
+                                            "Token Counter",
+                                            href="/dashboard/token-counter",
+                                            active="exact",
+                                        ),
+                                        dbc.NavLink("Logs", href="/dashboard/logs", active="exact"),
+                                    ],
+                                    pills=True,
                                 ),
-                                dbc.NavLink("Logs", href="/dashboard/logs", active="exact"),
+                                dbc.Nav(
+                                    [
+                                        dbc.NavLink(
+                                            "API Docs",
+                                            href="/redoc",
+                                            target="_blank",
+                                            external_link=True,
+                                        ),
+                                    ],
+                                    pills=True,
+                                ),
                             ],
-                            pills=True,
-                            className="me-3",
-                        ),
-                        dbc.Nav(
-                            [
-                                dbc.NavLink(
-                                    "API Docs", href="/redoc", target="_blank", external_link=True
-                                ),
-                            ],
-                            pills=True,
+                            className="d-flex align-items-center gap-2 ps-2",
                         ),
                         html.Span(id="vdm-global-error", className="text-danger ms-auto"),
-                    ]
+                    ],
+                    fluid=True,
+                    className="px-0",
                 ),
                 color="dark",
                 dark=True,

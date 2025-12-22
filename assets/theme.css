@@ -25,6 +25,14 @@ body, .app-entry {
   color: var(--vdm-text);
 }
 
+/* Navbar */
+.vdm-navbar-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 2px #00ff00);
+}
+
 .card, .dbc-card, .dash-card {
   background-color: var(--vdm-surface);
   border-color: var(--vdm-border);
