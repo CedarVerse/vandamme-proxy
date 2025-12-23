@@ -23,9 +23,6 @@ from src.dashboard.routing import render_page_for_path
 
 logger = logging.getLogger(__name__)
 
-# NOTE: AG-Grid JS helpers are imported inside create_dashboard when building index_string.
-# Keeping this import out of module scope avoids scoping pitfalls.
-
 
 def _run(coro: Any) -> Any:
     try:
@@ -133,7 +130,7 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
 
     # Inject AG Grid renderer scripts as external files.
     # Scripts are loaded in dependency order (renderers → helpers → init).
-    # The scripts are also loaded via dash-ag-grid's clientside callback API.
+    # Dash automatically includes these scripts on all dashboard pages.
     scripts_html = "\n".join(
         [
             '<script src="/dashboard/assets/ag_grid/vdm-grid-renderers.js"></script>',
