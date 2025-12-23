@@ -93,7 +93,7 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
                                 dbc.NavbarBrand(
                                     html.A(
                                         html.Img(
-                                            src=app.get_asset_url("vandamme-91x48px.png"),
+                                            src=app.get_asset_url("vandamme-93x64px.png"),
                                             alt="Vandamme Dashboard",
                                             className="vdm-navbar-logo",
                                         ),

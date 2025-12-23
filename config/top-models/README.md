@@ -2,9 +2,7 @@
 
 This folder contains a **human-maintained** ranked list of the best models for *programming* tasks.
 
-OpenRouter’s public API (`/api/v1/models`) provides the **full catalog** of models, but does **not** provide the “Rankings → Categories → Programming” ordering in a stable machine-readable way.
-
-So we keep the ordering here (as TOML), and Vandamme Proxy enriches that ordering using OpenRouter’s catalog (name, context, pricing, capabilities) via the proxy’s existing `/v1/models` endpoint.
+Vandamme Proxy enriches that list using OpenRouter’s catalog (name, context, pricing, capabilities) via the proxy’s existing `/v1/models` endpoint.
 
 ## Files
 
@@ -27,7 +25,7 @@ If an ID in TOML is missing from the OpenRouter catalog response, it will be ski
 Open `programming.toml` and update the `[[models]]` list in the exact order you want.
 
 Guidelines:
-- Use OpenRouter model IDs of the form `provider/model` (example: `x-ai/grok-code-fast-1`).
+- Use OpenRouter model IDs of the form `sub-provider/model` (example: `x-ai/grok-code-fast-1`).
 - Keep the list ordered (rank #1 first).
 - Prefer stable IDs (avoid temporary preview suffixes unless intentionally chosen).
 
@@ -38,8 +36,7 @@ Only `[[models]].id` is required.
 ```toml
 version = 1
 category = "programming"
-source = "https://openrouter.ai/rankings#categories"
-last_verified = "YYYY-MM-DD"
+last-updated = "YYYY-MM-DD"
 
 [[models]]
 id = "x-ai/grok-code-fast-1"

@@ -27,10 +27,10 @@ body, .app-entry {
 
 /* Navbar */
 .vdm-navbar-logo {
-  height: 32px;
+  height: auto;
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 0 2px #00ff00);
+  #filter: drop-shadow(0 0 1px #00ff00);
 }
 
 .card, .dbc-card, .dash-card {

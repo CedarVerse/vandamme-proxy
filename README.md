@@ -10,9 +10,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-|||
-|-|-|
-|![Vandamme Proxy Logo](assets/vandamme-128px.png)| **Transform Claude Code (or any Anthropic API client) into a multi-provider client for OpenAI, Anthropic, Poe, Azure, Gemini, and other compatible APIs.** |
+|                                                     ||
+|-----------------------------------------------------|-|
+| ![Vandamme Proxy Logo](assets/vandamme-93x64px.png) | **Transform Claude Code (or any Anthropic API client) into a multi-provider client for OpenAI, Anthropic, Poe, Azure, Gemini, and other compatible APIs.** |
 
 ## 🚀 Why Vandamme Proxy?
 
