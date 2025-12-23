@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
+
 # Register v1 routes using the proven working implementations from src.api.endpoints
 # This provides a clean router module while preserving exact runtime behavior.
 def _register_routes() -> None:
@@ -14,6 +15,7 @@ def _register_routes() -> None:
 
 
 _register_routes()
+
 
 # Include remaining legacy routes (models, aliases, health, etc.)
 def _include_legacy_routes() -> None:

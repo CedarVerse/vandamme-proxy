@@ -145,6 +145,8 @@ def setup_test_environment_for_unit_tests():
             "KIMI_API_KEY": "test-kimi-key",
             "VDM_DEFAULT_PROVIDER": DEFAULT_TEST_CONFIG["DEFAULT_PROVIDER"],
             "LOG_LEVEL": DEFAULT_TEST_CONFIG["LOG_LEVEL"],
+            # Ensure top-models endpoints work deterministically in unit tests.
+            "TOP_MODELS_SOURCE": "manual_rankings",
         }
 
         os.environ.update(test_env)

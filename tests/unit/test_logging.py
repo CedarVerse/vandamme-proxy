@@ -3,12 +3,12 @@ from io import StringIO
 
 import pytest
 
+from src.core.config import config
 from src.core.logging.configuration import (
     NOISY_HTTP_LOGGERS,
     configure_root_logging,
     set_noisy_http_logger_levels,
 )
-from src.core.config import config
 from src.core.logging.filters.http import HttpRequestLogDowngradeFilter
 from src.core.logging.formatters.correlation import CorrelationFormatter
 

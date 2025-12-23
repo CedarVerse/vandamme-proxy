@@ -333,4 +333,8 @@ async def fetch_all_providers(*, cfg: DashboardConfigProtocol) -> list[str]:
     # Handle both dict (old format) and list (new format) for resilience
     if isinstance(providers, dict):
         return list(providers.keys())
-    return providers
+
+    if isinstance(providers, list):
+        return [p for p in providers if isinstance(p, str)]
+
+    return []

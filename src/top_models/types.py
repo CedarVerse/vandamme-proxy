@@ -40,6 +40,7 @@ class TopModelsResult:
 
 
 def top_model_to_api_dict(model: TopModel) -> dict[str, Any]:
+    # Keep pricing as an object (not null) for API stability.
     pricing: dict[str, Any] = {}
     if model.pricing.input_per_million is not None:
         pricing["input_per_million"] = model.pricing.input_per_million
@@ -55,5 +56,5 @@ def top_model_to_api_dict(model: TopModel) -> dict[str, Any]:
         "sub_provider": model.sub_provider,
         "context_window": model.context_window,
         "capabilities": list(model.capabilities),
-        "pricing": pricing or None,
+        "pricing": pricing,
     }

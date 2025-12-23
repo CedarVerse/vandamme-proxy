@@ -52,12 +52,12 @@ def openrouter_model_dict_to_top_model(raw: dict[str, Any]) -> TopModel | None:
     if isinstance(pricing_raw, dict):
         prompt = pricing_raw.get("prompt")
         completion = pricing_raw.get("completion")
-        if isinstance(prompt, (int, float)):
+        if isinstance(prompt, (int, float, str)):
             pricing = TopModelPricing(
                 input_per_million=float(prompt) * 1_000_000,
                 output_per_million=pricing.output_per_million,
             )
-        if isinstance(completion, (int, float)):
+        if isinstance(completion, (int, float, str)):
             pricing = TopModelPricing(
                 input_per_million=pricing.input_per_million,
                 output_per_million=float(completion) * 1_000_000,
@@ -65,12 +65,12 @@ def openrouter_model_dict_to_top_model(raw: dict[str, Any]) -> TopModel | None:
 
         input_pm = pricing_raw.get("input_per_million")
         output_pm = pricing_raw.get("output_per_million")
-        if isinstance(input_pm, (int, float)):
+        if isinstance(input_pm, (int, float, str)):
             pricing = TopModelPricing(
                 input_per_million=float(input_pm),
                 output_per_million=pricing.output_per_million,
             )
-        if isinstance(output_pm, (int, float)):
+        if isinstance(output_pm, (int, float, str)):
             pricing = TopModelPricing(
                 input_per_million=pricing.input_per_million,
                 output_per_million=float(output_pm),
