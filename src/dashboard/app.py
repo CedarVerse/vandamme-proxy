@@ -11,25 +11,16 @@ import dash_bootstrap_components as dbc  # type: ignore[import-untyped]
 from dash import Input, Output, State, dcc, html
 
 from src.dashboard.components.ui import (
-    alias_table,
-    empty_state,
     monospace,
     provider_badge,
     token_display,
 )
 from src.dashboard.data_sources import (
     DashboardConfigProtocol,
-    fetch_aliases,
     fetch_health,
     fetch_models,
     fetch_running_totals,
     fetch_test_connection,
-    fetch_top_models,
-    filter_top_models,
-    top_models_meta_rows,
-    top_models_provider_options,
-    top_models_source_label,
-    top_models_suggested_aliases,
 )
 from src.dashboard.pages import (
     health_banner,
@@ -725,107 +716,18 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         search_value: str | None,
     ) -> tuple[Any, list[dict[str, str]], Any, Any, Any]:
         try:
-            provider = provider_value.strip() if provider_value else None
-            limit = int(limit_value) if isinstance(limit_value, int) else 10
+            from src.dashboard.services.top_models import build_top_models_view
 
-            # If the user explicitly clicked Refresh, bypass cache.
-            force_refresh = bool(refresh_clicks)
-
-            payload = _run(
-                fetch_top_models(cfg=cfg, limit=limit, refresh=force_refresh, provider=None)
+            view = _run(
+                build_top_models_view(
+                    cfg=cfg,
+                    provider_value=provider_value,
+                    limit_value=limit_value,
+                    search_value=search_value,
+                    force_refresh=bool(refresh_clicks),
+                )
             )
-
-            provider_options = top_models_provider_options(payload)
-            status = html.Div(
-                [
-                    html.Div(top_models_source_label(payload), className="text-muted small"),
-                    html.Div(top_models_meta_rows(payload) and "" or "", style={"display": "none"}),
-                    html.Div(
-                        [
-                            html.Span("Updated "),
-                            monospace(str(payload.get("last_updated") or "")),
-                        ],
-                        className="text-muted small",
-                    ),
-                ]
-            )
-
-            meta_tbl = dbc.Table(
-                [
-                    html.Tbody(
-                        [
-                            html.Tr([html.Td(monospace(k)), html.Td(monospace(v))])
-                            for k, v in top_models_meta_rows(payload)
-                        ]
-                        or [
-                            html.Tr(
-                                [
-                                    html.Td(
-                                        "No metadata",
-                                        colSpan=2,
-                                        className="text-center text-muted",
-                                    )
-                                ]
-                            )
-                        ]
-                    )
-                ],
-                striped=True,
-                borderless=True,
-                size="sm",
-                responsive=True,
-                className="table-dark",
-            )
-
-            aliases = top_models_suggested_aliases(payload)
-            aliases_tbl = dbc.Table(
-                [
-                    html.Thead(html.Tr([html.Th("Alias"), html.Th("Maps To")])),
-                    html.Tbody(
-                        [
-                            html.Tr([html.Td(monospace(k)), html.Td(monospace(v))])
-                            for k, v in sorted(aliases.items())
-                        ]
-                        or [
-                            html.Tr(
-                                [
-                                    html.Td(
-                                        "No suggested aliases",
-                                        colSpan=2,
-                                        className="text-center text-muted",
-                                    )
-                                ]
-                            )
-                        ]
-                    ),
-                ],
-                striped=True,
-                borderless=True,
-                size="sm",
-                responsive=True,
-                className="table-dark",
-            )
-
-            models = payload.get("models", [])
-            models = models if isinstance(models, list) else []
-            models = [m for m in models if isinstance(m, dict)]
-
-            filtered = filter_top_models(
-                models,
-                provider=provider,
-                query=search_value or "",
-            )
-
-            if not filtered:
-                content = empty_state("No models found", "🔍")
-            else:
-                from src.dashboard.components.ag_grid import top_models_ag_grid
-
-                content = top_models_ag_grid(filtered, grid_id="vdm-top-models-grid")
-
-            # Keep provider selection stable: if user selected a provider not present,
-            # the dropdown will still show it; filtering will yield empty.
-            return content, provider_options, status, meta_tbl, aliases_tbl
+            return view.content, view.provider_options, view.status, view.meta, view.aliases
 
         except Exception:
             logger.exception("dashboard.top-models: refresh failed")
@@ -854,61 +756,10 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         search_term: str | None,
     ) -> Any:
         try:
-            aliases_data = _run(fetch_aliases(cfg=cfg))
-            aliases = aliases_data.get("aliases", {})
+            from src.dashboard.services.aliases import build_aliases_view
 
-            # Filter aliases based on search term
-            if search_term and search_term.strip():
-                search_lower = search_term.lower().strip()
-                filtered_aliases = {}
-                for provider, provider_aliases in aliases.items():
-                    if isinstance(provider_aliases, dict):
-                        filtered = {
-                            alias: mapping
-                            for alias, mapping in provider_aliases.items()
-                            if search_lower in alias.lower() or search_lower in mapping.lower()
-                        }
-                        if filtered:
-                            filtered_aliases[provider] = filtered
-                aliases = filtered_aliases
-
-            if not aliases:
-                return empty_state("No aliases found matching your criteria", "🔍")
-
-            # Create expandable sections for each provider
-            sections = []
-            for provider, provider_aliases in aliases.items():
-                if not isinstance(provider_aliases, dict):
-                    continue
-
-                # Create table for this provider's aliases
-                rows = []
-                for alias_name, maps_to in provider_aliases.items():
-                    rows.append(
-                        html.Tr(
-                            [
-                                html.Td(alias_name),
-                                html.Td(monospace(maps_to)),
-                            ]
-                        )
-                    )
-
-                if rows:
-                    sections.append(
-                        dbc.AccordionItem(
-                            [
-                                html.H5([provider_badge(provider), f" {provider}"]),
-                                alias_table({provider: provider_aliases}),
-                            ],
-                            title=f"{provider} ({len(rows)} aliases)",
-                            item_id=provider,
-                        )
-                    )
-
-            if not sections:
-                return empty_state("No aliases configured", "📋")
-
-            return dbc.Accordion(sections, start_collapsed=True, flush=True)
+            view = _run(build_aliases_view(cfg=cfg, search_term=search_term))
+            return view.content
 
         except Exception as e:
             return dbc.Alert(f"Failed to load aliases: {e}", color="danger")
