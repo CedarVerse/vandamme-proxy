@@ -164,6 +164,7 @@ def models_ag_grid(
             "suppressMovable": False,
             "cellStyle": {"cursor": "copy"},
             "tooltipField": "description_full",
+            # Render as: icon + id (cell click-to-copy is attached by JS listener)
             "cellRenderer": "vdmModelIdWithIconRenderer",
         },
         {

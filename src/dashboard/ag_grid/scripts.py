@@ -349,12 +349,24 @@ window.dashAgGridFunctions = window.dashAgGridFunctions || {};
 // Some dash-ag-grid versions also look under dashAgGridComponentFunctions for components.
 window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {};
 
-// Register our custom cell renderer
-window.dashAgGridFunctions.vdmModelPageLinkRenderer = window.vdmModelPageLinkRenderer;
-window.dashAgGridComponentFunctions.vdmModelPageLinkRenderer = window.vdmModelPageLinkRenderer;
+// Register our custom cell renderers.
+// dash-ag-grid resolves string component names via these global maps.
+const vdmCellRenderers = {
+    vdmModelPageLinkRenderer: window.vdmModelPageLinkRenderer,
+    vdmModelIdWithIconRenderer: window.vdmModelIdWithIconRenderer,
+};
 
-// Expose as a global for debugging
-window.__vdmModelPageLinkRenderer = window.vdmModelPageLinkRenderer;
+for (const [name, fn] of Object.entries(vdmCellRenderers)) {
+    if (typeof fn !== 'function') {
+        console.warn('[vdm] cell renderer not found:', name);
+        continue;
+    }
+    window.dashAgGridFunctions[name] = fn;
+    window.dashAgGridComponentFunctions[name] = fn;
+
+    // Expose as a global for debugging
+    window['__' + name] = fn;
+}
 
 // Utility function to escape HTML
 window.escapeHtml = function(text) {

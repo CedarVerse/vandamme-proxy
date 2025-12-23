@@ -118,3 +118,16 @@ def test_models_ag_grid_rejects_unsafe_icon_urls() -> None:
     assert row["model_icon_url"] is None
     # Ensure we still render the row and ID.
     assert row["id"] == "Claude-Sonnet-4.5"
+
+
+def test_models_ag_grid_uses_registered_model_id_renderer() -> None:
+    grid = models_ag_grid([])
+
+    # Dash components store props in .to_plotly_json()
+    props = grid.to_plotly_json()["props"]
+    col_defs = props["columnDefs"]
+
+    model_id_col = next(c for c in col_defs if c.get("field") == "id")
+    assert model_id_col["cellRenderer"] == "vdmModelIdWithIconRenderer"
+    # Copy-to-clipboard is handled by a JS listener attached to the grid API.
+    assert model_id_col["cellStyle"]["cursor"] == "copy"

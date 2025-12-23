@@ -4,6 +4,21 @@ from src.dashboard.app import create_dashboard
 from src.dashboard.data_sources import DashboardConfig
 
 
+def test_ag_grid_scripts_register_models_renderers() -> None:
+    from src.dashboard.ag_grid.scripts import CELL_RENDERER_SCRIPTS
+
+    # These names are referenced in columnDefs via string lookup.
+    assert "dashAgGridFunctions.vdmModelPageLinkRenderer" in CELL_RENDERER_SCRIPTS
+    assert "dashAgGridFunctions.vdmModelIdWithIconRenderer" in CELL_RENDERER_SCRIPTS
+
+    assert "dashAgGridComponentFunctions.vdmModelPageLinkRenderer" in CELL_RENDERER_SCRIPTS
+    assert "dashAgGridComponentFunctions.vdmModelIdWithIconRenderer" in CELL_RENDERER_SCRIPTS
+
+    # Sanity-check that functions exist (registered from window.* definitions)
+    assert "window.vdmModelPageLinkRenderer" in CELL_RENDERER_SCRIPTS
+    assert "window.vdmModelIdWithIconRenderer" in CELL_RENDERER_SCRIPTS
+
+
 def test_create_dashboard_smoke() -> None:
     app = create_dashboard(cfg=DashboardConfig(api_base_url="http://localhost:8082"))
     assert app is not None
