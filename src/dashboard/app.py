@@ -189,7 +189,7 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
 
     # Inject clientside renderer scripts for AG-Grid (models grid)
     # Inline-inject the JS so dash-ag-grid can use vdmModelPageLinkRenderer.
-    from src.dashboard.components.ag_grid import CELL_RENDERER_SCRIPTS
+    from src.dashboard.ag_grid.scripts import CELL_RENDERER_SCRIPTS
 
     app.index_string = app.index_string.replace(
         "</body>", f"<script>{CELL_RENDERER_SCRIPTS}</script></body>"
@@ -1129,7 +1129,7 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
         return None, None
 
     # Add AG-Grid JavaScript and custom CSS to layout
-    from src.dashboard.components.ag_grid import CELL_RENDERER_SCRIPTS
+    from src.dashboard.ag_grid.scripts import CELL_RENDERER_SCRIPTS
 
     # Custom CSS for AG-Grid dark theme (general theme lives in /assets/theme.css)
     ag_grid_css = """
