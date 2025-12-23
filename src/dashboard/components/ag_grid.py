@@ -4,6 +4,7 @@ from typing import Any
 
 import dash_ag_grid as dag  # type: ignore[import-untyped]
 
+from src.dashboard.ag_grid.factories import build_ag_grid
 from src.dashboard.ag_grid.scripts import (
     get_ag_grid_clientside_callback as _get_ag_grid_clientside_callback,
 )
@@ -91,50 +92,11 @@ def top_models_ag_grid(
         },
     ]
 
-    row_data = top_models_row_data(models)
-
-    custom_css = {
-        "height": "70vh",
-        "width": "100%",
-        "minHeight": "500px",
-    }
-
-    return dag.AgGrid(
-        id=grid_id,
-        className="ag-theme-alpine-dark",
-        style=custom_css,
-        columnDefs=column_defs,
-        rowData=row_data,
-        defaultColDef={
-            "sortable": True,
-            "resizable": True,
-            "filter": True,
-        },
-        dashGridOptions={
-            "animateRows": True,
-            "rowSelection": {"mode": "multiRow"},
-            "suppressDragLeaveHidesColumns": True,
-            "pagination": True,
-            "paginationPageSize": 50,
-            "paginationPageSizeSelector": [25, 50, 100, 200],
-            "domLayout": "normal",
-            "suppressContextMenu": False,
-            "enableCellTextSelection": True,
-            "ensureDomOrder": True,
-            "localeText": {
-                "page": "Page",
-                "to": "to",
-                "of": "of",
-                "first": "First",
-                "last": "Last",
-                "next": "Next",
-                "previous": "Previous",
-                "loadingOoo": "Loading...",
-                "noRowsToShow": "No models found",
-                "filterOoo": "Filter...",
-            },
-        },
-        dangerously_allow_code=True,
+    return build_ag_grid(
+        grid_id=grid_id,
+        column_defs=column_defs,
+        row_data=top_models_row_data(models),
+        no_rows_message="No models found",
     )
 
 
@@ -261,54 +223,14 @@ def models_ag_grid(
         },
     ]
 
-    # Custom CSS for dark theme
-    # NOTE: Using a viewport-based height avoids the common "100% of an auto-height parent"
-    # trap where AG-Grid renders but no rows are visible.
-    custom_css = {
-        "height": "70vh",
-        "width": "100%",
-        "minHeight": "500px",
-    }
-
-    # Create the AG-Grid component with proper parameter names
-    return dag.AgGrid(
-        id=grid_id,
-        className="ag-theme-alpine-dark",
-        style=custom_css,
-        columnDefs=column_defs,
-        rowData=row_data,
-        defaultColDef={
-            "sortable": True,
-            "resizable": True,
-            "filter": True,
+    return build_ag_grid(
+        grid_id=grid_id,
+        column_defs=column_defs,
+        row_data=row_data,
+        no_rows_message="No models found",
+        dash_grid_options_overrides={
+            "rowSelection": {"enableClickSelection": True},
         },
-        dashGridOptions={
-            "animateRows": True,
-            # Community-friendly multi-row selection (AG Grid v32+ object form)
-            # Enable click-selection (AG Grid v32.2+).
-            "rowSelection": {"mode": "multiRow", "enableClickSelection": True},
-            "suppressDragLeaveHidesColumns": True,
-            "pagination": True,
-            "paginationPageSize": 50,
-            "paginationPageSizeSelector": [25, 50, 100, 200],
-            "domLayout": "normal",
-            "suppressContextMenu": False,
-            "enableCellTextSelection": True,
-            "ensureDomOrder": True,
-            "localeText": {
-                "page": "Page",
-                "to": "to",
-                "of": "of",
-                "first": "First",
-                "last": "Last",
-                "next": "Next",
-                "previous": "Previous",
-                "loadingOoo": "Loading...",
-                "noRowsToShow": "No models found",
-                "filterOoo": "Filter...",
-            },
-        },
-        dangerously_allow_code=True,
     )
 
 
@@ -382,49 +304,11 @@ def logs_errors_ag_grid(
         },
     ]
 
-    # Custom CSS for dark theme
-    custom_css = {
-        "height": "70vh",
-        "width": "100%",
-        "minHeight": "500px",
-    }
-
-    return dag.AgGrid(
-        id=grid_id,
-        className="ag-theme-alpine-dark",
-        style=custom_css,
-        columnDefs=column_defs,
-        rowData=row_data,
-        defaultColDef={
-            "sortable": True,
-            "resizable": True,
-            "filter": True,
-        },
-        dashGridOptions={
-            "animateRows": True,
-            "rowSelection": {"mode": "multiRow"},
-            "suppressDragLeaveHidesColumns": True,
-            "pagination": True,
-            "paginationPageSize": 50,
-            "paginationPageSizeSelector": [25, 50, 100, 200],
-            "domLayout": "normal",
-            "suppressContextMenu": False,
-            "enableCellTextSelection": True,
-            "ensureDomOrder": True,
-            "localeText": {
-                "page": "Page",
-                "to": "to",
-                "of": "of",
-                "first": "First",
-                "last": "Last",
-                "next": "Next",
-                "previous": "Previous",
-                "loadingOoo": "Loading...",
-                "noRowsToShow": "No errors found",
-                "filterOoo": "Filter...",
-            },
-        },
-        dangerously_allow_code=True,
+    return build_ag_grid(
+        grid_id=grid_id,
+        column_defs=column_defs,
+        row_data=row_data,
+        no_rows_message="No errors found",
     )
 
 
@@ -539,49 +423,11 @@ def logs_traces_ag_grid(
         },
     ]
 
-    # Custom CSS for dark theme
-    custom_css = {
-        "height": "70vh",
-        "width": "100%",
-        "minHeight": "500px",
-    }
-
-    return dag.AgGrid(
-        id=grid_id,
-        className="ag-theme-alpine-dark",
-        style=custom_css,
-        columnDefs=column_defs,
-        rowData=row_data,
-        defaultColDef={
-            "sortable": True,
-            "resizable": True,
-            "filter": True,
-        },
-        dashGridOptions={
-            "animateRows": True,
-            "rowSelection": {"mode": "multiRow"},
-            "suppressDragLeaveHidesColumns": True,
-            "pagination": True,
-            "paginationPageSize": 50,
-            "paginationPageSizeSelector": [25, 50, 100, 200],
-            "domLayout": "normal",
-            "suppressContextMenu": False,
-            "enableCellTextSelection": True,
-            "ensureDomOrder": True,
-            "localeText": {
-                "page": "Page",
-                "to": "to",
-                "of": "of",
-                "first": "First",
-                "last": "Last",
-                "next": "Next",
-                "previous": "Previous",
-                "loadingOoo": "Loading...",
-                "noRowsToShow": "No traces found",
-                "filterOoo": "Filter...",
-            },
-        },
-        dangerously_allow_code=True,
+    return build_ag_grid(
+        grid_id=grid_id,
+        column_defs=column_defs,
+        row_data=row_data,
+        no_rows_message="No traces found",
     )
 
 

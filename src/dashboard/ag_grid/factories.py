@@ -51,6 +51,7 @@ def build_ag_grid(
     row_data: list[dict[str, Any]],
     custom_css: dict[str, Any] | None = None,
     no_rows_message: str | None = None,
+    dash_grid_options_overrides: dict[str, Any] | None = None,
 ) -> dag.AgGrid:
     """Build an AG-Grid component with standard dark theme and options.
 
@@ -65,10 +66,22 @@ def build_ag_grid(
         no_rows_message: Optional override for the "no rows" text
     """
     options: dict[str, Any] = dict(_BASE_DASH_GRID_OPTIONS)
+    if dash_grid_options_overrides:
+        options.update(dash_grid_options_overrides)
+
     if no_rows_message:
         base_locale_text: dict[str, str] = dict(options["localeText"])  # type: ignore[assignment]
         base_locale_text["noRowsToShow"] = no_rows_message
         options["localeText"] = base_locale_text
+
+    # If rowSelection is overridden, merge it with the base selection settings.
+    if dash_grid_options_overrides and "rowSelection" in dash_grid_options_overrides:
+        base_row_selection: dict[str, Any] = {"mode": "multiRow"}
+        override_row_selection = dash_grid_options_overrides["rowSelection"]
+        if isinstance(override_row_selection, dict):
+            options["rowSelection"] = {**base_row_selection, **override_row_selection}
+        else:
+            options["rowSelection"] = base_row_selection
 
     return dag.AgGrid(
         id=grid_id,
