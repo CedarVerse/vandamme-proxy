@@ -10,14 +10,14 @@ def test_ag_grid_asset_files_exist() -> None:
     """Verify that AG Grid JavaScript asset files exist and contain expected content."""
     assets_dir = Path(__file__).resolve().parents[2] / "assets" / "ag_grid"
 
-    # Check that all three script files exist
-    renderers_js = assets_dir / "vdm-grid-renderers.js"
-    helpers_js = assets_dir / "vdm-grid-helpers.js"
-    init_js = assets_dir / "vdm-grid-init.js"
+    # Check that all three script files exist (numeric prefixes ensure Dash loads in order)
+    renderers_js = assets_dir / "10-vdm-grid-renderers.js"
+    helpers_js = assets_dir / "20-vdm-grid-helpers.js"
+    init_js = assets_dir / "30-vdm-grid-init.js"
 
-    assert renderers_js.exists(), "vdm-grid-renderers.js should exist"
-    assert helpers_js.exists(), "vdm-grid-helpers.js should exist"
-    assert init_js.exists(), "vdm-grid-init.js should exist"
+    assert renderers_js.exists(), "10-vdm-grid-renderers.js should exist"
+    assert helpers_js.exists(), "20-vdm-grid-helpers.js should exist"
+    assert init_js.exists(), "30-vdm-grid-init.js should exist"
 
     # Verify renderers file contains the renderer functions
     renderers_content = renderers_js.read_text(encoding="utf-8")

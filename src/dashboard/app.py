@@ -128,18 +128,6 @@ def create_dashboard(*, cfg: DashboardConfigProtocol) -> dash.Dash:
     def route(pathname: str | None) -> Any:
         return render_page_for_path(pathname)
 
-    # Inject AG Grid renderer scripts as external files.
-    # Scripts are loaded in dependency order (renderers → helpers → init).
-    # Dash automatically includes these scripts on all dashboard pages.
-    scripts_html = "\n".join(
-        [
-            '<script src="/dashboard/assets/ag_grid/vdm-grid-renderers.js"></script>',
-            '<script src="/dashboard/assets/ag_grid/vdm-grid-helpers.js"></script>',
-            '<script src="/dashboard/assets/ag_grid/vdm-grid-init.js"></script>',
-        ]
-    )
-    app.index_string = app.index_string.replace("</body>", f"{scripts_html}</body>")
-
     # Register callback modules (keeps app.py focused on wiring).
     register_clientside_callbacks(app=app)
     register_overview_callbacks(app=app, cfg=cfg, run=_run)
