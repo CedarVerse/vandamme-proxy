@@ -321,7 +321,7 @@ def top_models_suggested_aliases(payload: dict[str, Any]) -> dict[str, str]:
     return out
 
 
-# NOTE: dashboard layout helpers live in src/dashboard/pages.py.
+# NOTE: dashboard layout helpers live in src/dashboard/pages/ (package).
 # data_sources.py should remain a pure fetch/transform layer.
 
 

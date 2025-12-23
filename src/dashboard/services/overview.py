@@ -6,14 +6,10 @@ from typing import Any
 import dash_bootstrap_components as dbc  # type: ignore[import-untyped]
 from dash import html
 
+from src.dashboard.components.metrics import kpis_grid, metrics_disabled_callout
+from src.dashboard.components.overview import health_banner, providers_table
 from src.dashboard.data_sources import fetch_health, fetch_running_totals
-from src.dashboard.pages import (
-    health_banner,
-    kpis_grid,
-    metrics_disabled_callout,
-    parse_totals_for_chart,
-    providers_table,
-)
+from src.dashboard.pages import parse_totals_for_chart
 
 
 @dataclass(frozen=True)
