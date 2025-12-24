@@ -741,6 +741,8 @@ async def create_message(
                         metrics.cache_creation_tokens = usage.get("cache_creation_tokens", 0)
 
                     # Direct passthrough - no conversion needed
+                    if LOG_REQUEST_METRICS and metrics:
+                        await tracker.end_request(request_id)
                     return JSONResponse(status_code=200, content=anthropic_response)
                 else:
                     # OpenAI format path (existing logic)
