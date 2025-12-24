@@ -450,7 +450,6 @@ def metrics_providers_ag_grid(
             "resizable": True,
             "width": 160,
             "suppressSizeToFit": True,
-            "tooltipField": "last_accessed_iso",
             "cellRenderer": "vdmRecencyDotRenderer",
         },
         {
@@ -604,7 +603,6 @@ def metrics_models_ag_grid(
             "resizable": True,
             "width": 160,
             "suppressSizeToFit": True,
-            "tooltipField": "last_accessed_iso",
             "cellRenderer": "vdmRecencyDotRenderer",
         },
         {
