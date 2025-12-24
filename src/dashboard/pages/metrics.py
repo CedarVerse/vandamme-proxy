@@ -66,24 +66,6 @@ def metrics_layout() -> dbc.Container:
             dbc.Row(
                 [
                     dbc.Col(
-                        dbc.Accordion(
-                            [
-                                dbc.AccordionItem(
-                                    title="Token composition",
-                                    children=dbc.CardBody(dbc.Spinner(id="vdm-token-chart")),
-                                ),
-                            ],
-                            start_collapsed=True,
-                            className="mb-3",
-                        ),
-                        md=12,
-                    )
-                ],
-                className="mb-3",
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
                         dbc.Card(
                             [
                                 dbc.CardHeader(
@@ -97,6 +79,24 @@ def metrics_layout() -> dbc.Container:
                                 ),
                                 dbc.CardBody(dbc.Spinner(id="vdm-model-breakdown")),
                             ]
+                        ),
+                        md=12,
+                    )
+                ],
+                className="mb-3",
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Accordion(
+                            [
+                                dbc.AccordionItem(
+                                    title="Token composition",
+                                    children=dbc.CardBody(dbc.Spinner(id="vdm-token-chart")),
+                                ),
+                            ],
+                            start_collapsed=True,
+                            className="mb-3",
                         ),
                         md=12,
                     )

@@ -74,17 +74,35 @@ def kpi_card(*, title: str, value: Any, subtitle: str | None = None) -> dbc.Card
 
 
 def format_duration(ms: float) -> str:
-    """Convert milliseconds to human-readable format."""
+    """Convert milliseconds to a human-friendly duration.
+
+    Notes:
+    - This is used for per-request averages *and* aggregated totals.
+    - For totals we want values like "1h 02m" rather than large second counts.
+    """
     if ms == 0:
-        return "0ms"
-    elif ms < 1000:
-        return f"{ms:.0f}ms"
-    elif ms < 60000:
-        seconds = ms / 1000
-        return f"{seconds:.1f}s"
-    else:
-        minutes = ms / 60000
-        return f"{minutes:.1f}m"
+        return "0s"
+
+    if ms < 1000:
+        return "<1s"
+
+    total_seconds = int(ms / 1000)
+    if total_seconds < 60:
+        return f"{total_seconds}s"
+
+    total_minutes = total_seconds // 60
+    if total_minutes < 60:
+        seconds = total_seconds % 60
+        return f"{total_minutes}m {seconds:02d}s" if seconds else f"{total_minutes}m"
+
+    total_hours = total_minutes // 60
+    minutes = total_minutes % 60
+    if total_hours < 24:
+        return f"{total_hours}h {minutes:02d}m" if minutes else f"{total_hours}h"
+
+    days = total_hours // 24
+    hours = total_hours % 24
+    return f"{days}d {hours:02d}h" if hours else f"{days}d"
 
 
 def format_timestamp(iso_string: str | None) -> str:

@@ -89,6 +89,11 @@ if (window.vdmAttachModelCellCopyListener) {
 // dash-ag-grid expects functions under dashAgGridFunctions (kept for other formatters/comparators)
 window.dashAgGridFunctions = window.dashAgGridFunctions || {};
 
+// Helpers are resolved via dashAgGridFunctions when referenced by name in
+// valueGetter / tooltipValueGetter / comparator declarations.
+window.dashAgGridFunctions.vdmFormatDurationValue = window.vdmFormatDurationValue;
+window.dashAgGridFunctions.vdmFormatDurationTooltip = window.vdmFormatDurationTooltip;
+
 // Some dash-ag-grid versions also look under dashAgGridComponentFunctions for components.
 window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {};
 
@@ -108,6 +113,7 @@ window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {};
             vdmModelIdWithIconRenderer: window.vdmModelIdWithIconRenderer,
             vdmProviderBadgeRenderer: window.vdmProviderBadgeRenderer,
             vdmFormattedNumberRenderer: window.vdmFormattedNumberRenderer,
+            vdmQualifiedModelRenderer: window.vdmQualifiedModelRenderer,
         };
 
         let registeredCount = 0;

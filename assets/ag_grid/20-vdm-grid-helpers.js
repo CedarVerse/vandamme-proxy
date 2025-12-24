@@ -92,3 +92,37 @@ window.escapeHtml = function(text) {
     div.textContent = text;
     return div.innerHTML;
 };
+
+
+// Format a duration given milliseconds, for display in AG Grid valueGetters.
+// Keep in sync with Python `format_duration` semantics.
+window.vdmFormatDurationValue = function(ms) {
+    const n = Number(ms);
+    if (!isFinite(n) || n <= 0) return '0s';
+
+    const totalSeconds = Math.floor(n / 1000);
+    if (totalSeconds <= 0) return '<1s';
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (totalMinutes < 60) {
+        return seconds ? `${totalMinutes}m ${String(seconds).padStart(2, '0')}s` : `${totalMinutes}m`;
+    }
+
+    const totalHours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (totalHours < 24) {
+        return minutes ? `${totalHours}h ${String(minutes).padStart(2, '0')}m` : `${totalHours}h`;
+    }
+
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    return hours ? `${days}d ${String(hours).padStart(2, '0')}h` : `${days}d`;
+};
+
+window.vdmFormatDurationTooltip = function(ms) {
+    const n = Number(ms);
+    if (!isFinite(n) || n <= 0) return '0 ms';
+    return `${Math.round(n).toLocaleString('en-US')} ms`;
+};

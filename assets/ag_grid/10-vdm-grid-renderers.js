@@ -12,6 +12,14 @@
     style.textContent = `
       .ag-theme-alpine-dark .ag-row-even .ag-cell { background-color: rgba(255,255,255,0.06); }
       .ag-theme-alpine-dark .ag-row-odd  .ag-cell { background-color: rgba(0,0,0,0.00); }
+
+      /* Provider badge styling shared across the dashboard (AG Grid + non-grid).
+         Keep this minimal: Bootstrap provides the color + pill shape. */
+      .vdm-provider-badge {
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.2px;
+      }
     `;
     document.head.appendChild(style);
 })();
@@ -119,7 +127,9 @@ window.vdmModelPageLinkRenderer = function(params) {
 };
 
 
-// Render a provider badge with Bootstrap-style colors
+// Render a provider badge using Bootstrap's badge classes (DRY with dbc.Badge).
+// Contract: Python row shaping must provide `provider_color` as a valid Bootstrap
+// theme color name (e.g., "primary", "info", "danger", ...).
 window.vdmProviderBadgeRenderer = function(params) {
     const provider = params && params.value ? String(params.value) : '';
     if (!provider) {
@@ -128,28 +138,16 @@ window.vdmProviderBadgeRenderer = function(params) {
 
     const color = (params.data && params.data.provider_color) || 'secondary';
 
-    // Map Bootstrap color names to background colors
-    const colorMap = {
-        primary: '#0d6efd',
-        secondary: '#6c757d',
-        success: '#198754',
-        info: '#0dcaf0',
-        warning: '#ffc107',
-        danger: '#dc3545',
-    };
-    const bgColor = colorMap[color] || colorMap.secondary;
-
-    const style = {
-        backgroundColor: bgColor,
-        color: '#fff',
-        padding: '2px 8px',
-        borderRadius: '4px',
-        fontSize: '11px',
-        fontWeight: 500,
-        display: 'inline-block',
-    };
-
-    return React.createElement('span', { style }, provider);
+    // Match the look of `dbc.Badge(..., pill=True, className="me-2")`.
+    // We avoid hard-coded hex colors so the badge stays consistent with the
+    // project's Bootstrap theme (incl. dark mode adjustments).
+    return React.createElement(
+        'span',
+        {
+            className: `badge bg-${color} rounded-pill me-2 vdm-provider-badge`,
+        },
+        provider
+    );
 };
 
 
@@ -167,4 +165,37 @@ window.vdmFormattedNumberRenderer = function(params) {
 
     const formatted = num.toLocaleString('en-US');
     return React.createElement('span', {}, formatted);
+};
+
+
+// Render a qualified model id as: <provider badge> : <model id>
+// Sorting/filtering should operate on the underlying string value (qualified_model).
+window.vdmQualifiedModelRenderer = function(params) {
+    const value = params && params.value ? String(params.value) : '';
+    const data = (params && params.data) || {};
+
+    if (!value) {
+        return React.createElement('span', {}, '');
+    }
+
+    const provider = data.provider ? String(data.provider) : '';
+    const model = data.model ? String(data.model) : '';
+
+    if (!provider || !model) {
+        // Fallback: render the raw value.
+        return React.createElement('span', {}, value);
+    }
+
+    const badge = window.vdmProviderBadgeRenderer({
+        value: provider,
+        data: data,
+    });
+
+    return React.createElement(
+        'span',
+        { style: { display: 'inline-flex', alignItems: 'center', gap: '0px' } },
+        badge,
+        React.createElement('span', { style: { opacity: 0.85, marginRight: '6px' } }, ':'),
+        React.createElement('span', {}, model)
+    );
 };

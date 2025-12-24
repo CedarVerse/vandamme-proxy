@@ -443,6 +443,16 @@ def metrics_providers_ag_grid(
 
     column_defs = [
         {
+            "headerName": "Last",
+            "field": "last_accessed",
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "width": 160,
+            "suppressSizeToFit": True,
+            "tooltipField": "last_accessed_iso",
+        },
+        {
             "headerName": "Provider",
             "field": "provider",
             "sortable": True,
@@ -451,6 +461,7 @@ def metrics_providers_ag_grid(
             "width": 130,
             "suppressSizeToFit": True,
             "cellRenderer": "vdmProviderBadgeRenderer",
+            "sort": "asc",
         },
         {
             "headerName": "Requests",
@@ -543,13 +554,19 @@ def metrics_providers_ag_grid(
             "tooltipField": "average_duration_ms",
         },
         {
-            "headerName": "Last",
-            "field": "last_accessed",
+            "headerName": "Total time",
+            "field": "total_duration_ms_raw",
             "sortable": True,
             "filter": True,
             "resizable": True,
-            "flex": 1,
-            "minWidth": 160,
+            "width": 120,
+            "suppressSizeToFit": True,
+            "valueGetter": {
+                "function": "vdmFormatDurationValue(params.data.total_duration_ms_raw)"
+            },
+            "tooltipValueGetter": {
+                "function": "vdmFormatDurationTooltip(params.data.total_duration_ms_raw)"
+            },
         },
     ]
 
@@ -558,6 +575,15 @@ def metrics_providers_ag_grid(
         column_defs=column_defs,
         row_data=metrics_providers_row_data(running_totals),
         no_rows_message="No provider metrics yet",
+        dash_grid_options_overrides={
+            "paginationPageSize": 5,
+            "paginationPageSizeSelector": [5, 15, 50],
+        },
+        custom_css={
+            "height": "360px",
+            "width": "100%",
+            "minHeight": "360px",
+        },
     )
 
 
@@ -570,24 +596,28 @@ def metrics_models_ag_grid(
 
     column_defs = [
         {
-            "headerName": "Provider",
-            "field": "provider",
+            "headerName": "Last",
+            "field": "last_accessed",
             "sortable": True,
             "filter": True,
             "resizable": True,
-            "width": 130,
+            "width": 160,
             "suppressSizeToFit": True,
-            "cellRenderer": "vdmProviderBadgeRenderer",
+            "tooltipField": "last_accessed_iso",
         },
         {
             "headerName": "Model",
-            "field": "model",
+            "field": "qualified_model",
             "sortable": True,
             "filter": True,
             "resizable": True,
             "flex": 2,
-            "minWidth": 260,
+            "minWidth": 320,
+            # Display: <provider badge> : <model id>
+            # Sort/filter should use the underlying text value.
+            "cellRenderer": "vdmQualifiedModelRenderer",
             "cellStyle": {"fontFamily": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas"},
+            "sort": "asc",
         },
         {
             "headerName": "Requests",
@@ -660,13 +690,19 @@ def metrics_models_ag_grid(
             "tooltipField": "average_duration_ms",
         },
         {
-            "headerName": "Last",
-            "field": "last_accessed",
+            "headerName": "Total time",
+            "field": "total_duration_ms_raw",
             "sortable": True,
             "filter": True,
             "resizable": True,
-            "flex": 1,
-            "minWidth": 160,
+            "width": 120,
+            "suppressSizeToFit": True,
+            "valueGetter": {
+                "function": "vdmFormatDurationValue(params.data.total_duration_ms_raw)"
+            },
+            "tooltipValueGetter": {
+                "function": "vdmFormatDurationTooltip(params.data.total_duration_ms_raw)"
+            },
         },
     ]
 
@@ -675,6 +711,15 @@ def metrics_models_ag_grid(
         column_defs=column_defs,
         row_data=metrics_models_row_data(running_totals),
         no_rows_message="No model metrics yet",
+        dash_grid_options_overrides={
+            "paginationPageSize": 15,
+            "paginationPageSizeSelector": [5, 15, 50, 100],
+        },
+        custom_css={
+            "height": "600px",
+            "width": "100%",
+            "minHeight": "600px",
+        },
     )
 
 
