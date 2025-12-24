@@ -36,7 +36,7 @@ def metrics_layout() -> dbc.Container:
                                         {"label": "10s", "value": 10_000},
                                         {"label": "30s", "value": 30_000},
                                     ],  # type: ignore[arg-type]
-                                    value=10_000,
+                                    value=5_000,
                                     clearable=False,
                                     style={"minWidth": "7rem"},
                                     className="ms-1",
@@ -54,60 +54,27 @@ def metrics_layout() -> dbc.Container:
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader(html.Strong("Filters", className="text-primary")),
-                                dbc.CardBody(
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(
-                                                [
-                                                    html.Div(
-                                                        "Provider", className="text-muted small"
-                                                    ),
-                                                    dcc.Dropdown(
-                                                        id="vdm-provider-filter",
-                                                        options=[{"label": "All", "value": ""}],  # type: ignore[arg-type]
-                                                        value="",
-                                                        clearable=False,
-                                                        className="border-primary",
-                                                    ),
-                                                ]
-                                            ),
-                                            dbc.Col(
-                                                [
-                                                    html.Div(
-                                                        "Model (supports * and ?)",
-                                                        className="text-muted small",
-                                                    ),
-                                                    dbc.Input(
-                                                        id="vdm-model-filter",
-                                                        value="",
-                                                        placeholder="e.g. gpt*",
-                                                        className="border-primary",
-                                                    ),
-                                                ]
-                                            ),
-                                            dbc.Col(
-                                                dbc.Button(
-                                                    "Apply",
-                                                    id="vdm-apply-filters",
-                                                    color="primary",
-                                                    outline=True,
-                                                    className="mt-4",
-                                                ),
-                                                width="auto",
-                                            ),
-                                            dbc.Col(
-                                                html.Div(
-                                                    "Supports * and ? wildcards",
-                                                    className="text-muted small mt-2",
-                                                ),
-                                                width="auto",
-                                            ),
-                                        ],
-                                        className="g-3 align-items-end",
-                                    )
-                                ),
+                                dbc.CardHeader("Provider breakdown"),
+                                dbc.CardBody(dbc.Spinner(id="vdm-provider-breakdown")),
                             ]
+                        ),
+                        md=12,
+                    ),
+                ],
+                className="mb-3",
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Accordion(
+                            [
+                                dbc.AccordionItem(
+                                    title="Token composition",
+                                    children=dbc.CardBody(dbc.Spinner(id="vdm-token-chart")),
+                                ),
+                            ],
+                            start_collapsed=True,
+                            className="mb-3",
                         ),
                         md=12,
                     )
@@ -119,37 +86,9 @@ def metrics_layout() -> dbc.Container:
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader("Token composition"),
-                                dbc.CardBody(dbc.Spinner(id="vdm-token-chart")),
-                            ]
-                        ),
-                        md=5,
-                    ),
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Provider breakdown"),
-                                dbc.CardBody(dbc.Spinner(id="vdm-provider-breakdown")),
-                            ]
-                        ),
-                        md=7,
-                    ),
-                ],
-                className="mb-3",
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dbc.Card(
-                            [
                                 dbc.CardHeader(
                                     [
                                         html.Span("Model breakdown"),
-                                        dbc.Badge(
-                                            "Select a provider to enable model breakdown",
-                                            color="info",
-                                            className="ms-2",
-                                        ),
                                         html.Span(
                                             "· Last updated on refresh or polling",
                                             className="text-muted small ms-2",
@@ -164,7 +103,9 @@ def metrics_layout() -> dbc.Container:
                 ],
                 className="mb-3",
             ),
-            dcc.Interval(id="vdm-metrics-poll", interval=10_000, n_intervals=0),
+            dcc.Interval(id="vdm-metrics-poll", interval=5_000, n_intervals=0),
+            dcc.Interval(id="vdm-metrics-user-active-poll", interval=500, n_intervals=0),
+            dcc.Store(id="vdm-metrics-user-active", data=False),
         ],
         fluid=True,
         className="py-3",

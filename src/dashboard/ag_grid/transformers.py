@@ -231,6 +231,84 @@ def top_models_row_data(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return row_data
 
 
+def metrics_providers_row_data(running_totals_yaml: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build AG-Grid rowData for the Metrics Providers grid."""
+
+    from src.dashboard.normalize import provider_rows
+
+    rows = provider_rows(running_totals_yaml)
+
+    row_data: list[dict[str, Any]] = []
+    for r in rows:
+        provider = str(r.get("provider") or "")
+
+        requests = int(r.get("requests") or 0)
+        errors = int(r.get("errors") or 0)
+        error_rate = float(r.get("error_rate") or 0.0)
+
+        row_data.append(
+            {
+                "provider": provider,
+                "provider_color": provider_badge_color(provider),
+                "requests": requests,
+                "errors": errors,
+                "error_rate": error_rate,
+                "error_rate_pct": f"{error_rate * 100:.2f}%",
+                "input_tokens_raw": int(r.get("input_tokens") or 0),
+                "output_tokens_raw": int(r.get("output_tokens") or 0),
+                "cache_read_tokens_raw": int(r.get("cache_read_tokens") or 0),
+                "cache_creation_tokens_raw": int(r.get("cache_creation_tokens") or 0),
+                "tool_calls_raw": int(r.get("tool_calls") or 0),
+                "average_duration_ms": r.get("average_duration_ms") or 0.0,
+                "last_accessed": r.get("last_accessed") or "",
+            }
+        )
+
+    return row_data
+
+
+def metrics_models_row_data(running_totals_yaml: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build AG-Grid rowData for the Metrics Models grid across all providers."""
+
+    from src.dashboard.normalize import model_rows_for_provider, provider_rows
+
+    provs = provider_rows(running_totals_yaml)
+
+    row_data: list[dict[str, Any]] = []
+    for prov in provs:
+        provider = str(prov.get("provider") or "")
+        for mr in model_rows_for_provider(prov):
+            model = str(mr.get("model") or "")
+            requests = int(mr.get("requests") or 0)
+            errors = int(mr.get("errors") or 0)
+            error_rate = float(mr.get("error_rate") or 0.0)
+
+            row_data.append(
+                {
+                    "provider": provider,
+                    "provider_color": provider_badge_color(provider),
+                    "model": model,
+                    "requests": requests,
+                    "errors": errors,
+                    "error_rate": error_rate,
+                    "error_rate_pct": f"{error_rate * 100:.2f}%",
+                    "input_tokens_raw": int(mr.get("input_tokens") or 0),
+                    "output_tokens_raw": int(mr.get("output_tokens") or 0),
+                    "cache_read_tokens_raw": int(mr.get("cache_read_tokens") or 0),
+                    "cache_creation_tokens_raw": int(mr.get("cache_creation_tokens") or 0),
+                    "tool_calls_raw": int(mr.get("tool_calls") or 0),
+                    "average_duration_ms": mr.get("average_duration_ms") or 0.0,
+                    "last_accessed": mr.get("last_accessed") or "",
+                }
+            )
+
+    row_data.sort(
+        key=lambda r: (r.get("requests", 0), r.get("provider", ""), r.get("model", "")),
+        reverse=True,
+    )
+    return row_data
+
+
 def models_row_data(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build AG-Grid rowData for the Models page."""
 

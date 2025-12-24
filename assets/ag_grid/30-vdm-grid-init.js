@@ -106,6 +106,8 @@ window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {};
         const vdmCellRenderers = {
             vdmModelPageLinkRenderer: window.vdmModelPageLinkRenderer,
             vdmModelIdWithIconRenderer: window.vdmModelIdWithIconRenderer,
+            vdmProviderBadgeRenderer: window.vdmProviderBadgeRenderer,
+            vdmFormattedNumberRenderer: window.vdmFormattedNumberRenderer,
         };
 
         let registeredCount = 0;
@@ -151,3 +153,54 @@ window.dashAgGridComponentFunctions = window.dashAgGridComponentFunctions || {};
 })();
 
 console.info('[vdm] AG Grid init script loaded');
+
+// --- Metrics polling UX helpers ---
+// Provide a simple global "user is interacting" flag driven by pointer/focus.
+// Dash can read this flag via a lightweight clientside callback.
+(function initMetricsUserActiveTracking() {
+    if (window.__vdmMetricsUserActiveInit) return;
+    window.__vdmMetricsUserActiveInit = true;
+
+    window.__vdm_metrics_user_active = false;
+    let idleTimer = null;
+
+    function setActiveTemporarily() {
+        window.__vdm_metrics_user_active = true;
+        if (idleTimer) {
+            clearTimeout(idleTimer);
+        }
+        idleTimer = setTimeout(function() {
+            window.__vdm_metrics_user_active = false;
+        }, 1500);
+    }
+
+    function attach(containerId) {
+        const el = document.getElementById(containerId);
+        if (!el || el.__vdmActiveAttached) return;
+        el.__vdmActiveAttached = true;
+
+        el.addEventListener('pointermove', setActiveTemporarily, {passive: true});
+        el.addEventListener('wheel', setActiveTemporarily, {passive: true});
+        el.addEventListener('keydown', setActiveTemporarily, {passive: true});
+        el.addEventListener('focusin', setActiveTemporarily, {passive: true});
+    }
+
+    // Retry attach because Dash may mount later.
+    function boot() {
+        attach('vdm-provider-breakdown');
+        attach('vdm-model-breakdown');
+    }
+
+    boot();
+    setTimeout(boot, 250);
+    setTimeout(boot, 1000);
+})();
+
+window.dash_clientside = window.dash_clientside || {};
+window.dash_clientside.vdm_metrics = window.dash_clientside.vdm_metrics || {};
+
+// Return the current value of the active flag.
+// Used by dcc.Store polling (see Dash callback wiring).
+window.dash_clientside.vdm_metrics.user_active = function(n) {
+    return !!window.__vdm_metrics_user_active;
+};

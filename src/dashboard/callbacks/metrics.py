@@ -18,34 +18,51 @@ def register_metrics_callbacks(
         Output("vdm-token-chart", "children"),
         Output("vdm-provider-breakdown", "children"),
         Output("vdm-model-breakdown", "children"),
-        Output("vdm-provider-filter", "options"),
         Input("vdm-metrics-poll", "n_intervals"),
-        Input("vdm-provider-filter", "value"),
-        Input("vdm-model-filter", "value"),
         State("vdm-metrics-poll-toggle", "value"),
         prevent_initial_call=False,
     )
     def refresh_metrics(
         n: int,
-        provider_value: str,
-        model_value: str,
         polling: bool,
-    ) -> tuple[Any, Any, Any, Any]:
+    ) -> tuple[Any, Any, Any]:
         if not polling and n:
             raise dash.exceptions.PreventUpdate
 
         from src.dashboard.services.metrics import build_metrics_view
 
-        view = run(
-            build_metrics_view(cfg=cfg, provider_value=provider_value, model_value=model_value)
-        )
+        view = run(build_metrics_view(cfg=cfg))
         return (
             view.token_chart,
             view.provider_breakdown,
             view.model_breakdown,
-            view.provider_options,
         )
 
     @app.callback(Output("vdm-metrics-poll", "interval"), Input("vdm-metrics-interval", "value"))
     def set_metrics_interval(ms: int) -> int:
         return ms
+
+    app.clientside_callback(
+        """
+        function(n) {
+            if (window.dash_clientside
+                && window.dash_clientside.vdm_metrics
+                && window.dash_clientside.vdm_metrics.user_active) {
+                return window.dash_clientside.vdm_metrics.user_active(n);
+            }
+            return false;
+        }
+        """,
+        Output("vdm-metrics-user-active", "data"),
+        Input("vdm-metrics-user-active-poll", "n_intervals"),
+        prevent_initial_call=False,
+    )
+
+    @app.callback(
+        Output("vdm-metrics-poll", "disabled"),
+        Input("vdm-metrics-user-active", "data"),
+        State("vdm-metrics-poll-toggle", "value"),
+    )
+    def pause_polling_while_active(user_active: bool, polling_enabled: bool) -> bool:
+        # Disable polling if user is interacting; also disable if polling is manually off.
+        return (not polling_enabled) or bool(user_active)
