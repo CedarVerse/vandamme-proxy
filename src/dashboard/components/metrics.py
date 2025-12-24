@@ -33,20 +33,26 @@ def kpis_grid(totals: MetricTotals) -> dbc.Row:
 
     return dbc.Row(
         [
-            _kpi_col("Last activity", totals.last_accessed, raw=True),
+            _kpi_col(
+                "Last activity",
+                totals.last_accessed,
+                subtitle=totals.last_accessed or "",
+                raw=True,
+            ),
+            _kpi_duration_col("Total time", totals.total_duration_ms, color_class="text-body"),
+            _kpi_duration_col("Avg duration", totals.average_duration_ms),
+            _kpi_col("Tool calls", f"{totals.tool_calls:,}"),
+            _kpi_col("Active requests", f"{totals.active_requests:,}"),
             _kpi_col("Total requests", f"{totals.total_requests:,}"),
+            _kpi_col("Input tokens", f"{totals.total_input_tokens:,}"),
+            _kpi_col("Output tokens", f"{totals.total_output_tokens:,}"),
+            _kpi_duration_col("Streaming avg", totals.streaming_average_duration_ms),
+            _kpi_duration_col("Non-streaming avg", totals.non_streaming_average_duration_ms),
             _kpi_col(
                 "Errors",
                 f"{totals.total_errors:,}",
                 subtitle=f"{err_rate:.2f}% error rate",
             ),
-            _kpi_col("Input tokens", f"{totals.total_input_tokens:,}"),
-            _kpi_col("Output tokens", f"{totals.total_output_tokens:,}"),
-            _kpi_col("Active requests", f"{totals.active_requests:,}"),
-            _kpi_col("Tool calls", f"{totals.tool_calls:,}"),
-            _kpi_duration_col("Avg duration", totals.average_duration_ms),
-            _kpi_duration_col("Streaming avg", totals.streaming_average_duration_ms),
-            _kpi_duration_col("Non-streaming avg", totals.non_streaming_average_duration_ms),
         ],
         className="g-3",
     )
@@ -60,7 +66,11 @@ def _kpi_col(title: str, value: Any, *, subtitle: str | None = None, raw: bool =
     )
 
     display = (
-        timestamp_with_recency_dot(value, id_override="vdm-overview-last-activity")
+        timestamp_with_recency_dot(
+            value,
+            id_override="vdm-overview-last-activity",
+            show_tooltip=False,
+        )
         if raw and title == "Last activity"
         else monospace(value)
     )
@@ -73,13 +83,16 @@ def _kpi_col(title: str, value: Any, *, subtitle: str | None = None, raw: bool =
     )
 
 
-def _kpi_duration_col(title: str, ms: float) -> dbc.Col:
+def _kpi_duration_col(title: str, ms: float, *, color_class: str | None = None) -> dbc.Col:
     from src.dashboard.components.ui import kpi_card
 
     return dbc.Col(
         kpi_card(
             title=title,
-            value=html.Span(format_duration(ms), className=duration_color_class(ms)),
+            value=html.Span(
+                format_duration(ms),
+                className=color_class if color_class is not None else duration_color_class(ms),
+            ),
         ),
         md=2,
         sm=6,

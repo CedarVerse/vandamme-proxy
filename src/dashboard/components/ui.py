@@ -291,8 +291,11 @@ def timestamp_with_recency_dot(
     iso_string: str | None,
     *,
     id_override: str | None = None,
+    show_tooltip: bool = True,
 ) -> html.Span:
-    """Render a recency dot + relative time text, with absolute timestamp on hover.
+    """Render a recency dot + relative time text.
+
+    When `show_tooltip` is True, hovering shows the absolute timestamp.
 
     This is used both in AG Grid cells and in KPI cards. We attach predictable
     DOM hooks so a lightweight client-side ticker can update the dot/text
@@ -304,31 +307,27 @@ def timestamp_with_recency_dot(
     """
 
     hover_text = iso_string if iso_string else "No timestamp available"
-    dot = recency_dot_with_data_attrs(iso_string)
 
-    # Place the tooltip on the actual hover targets. Some environments may not
-    # reliably surface the wrapper `title`.
     text = html.Span(
         format_timestamp(iso_string),
         className="vdm-recency-text",
-        title=hover_text,
+        title=hover_text if show_tooltip else None,
     )
 
-    # Recreate the dot with the same styling, but ensure it also has `title`.
     dot = recency_dot_with_data_attrs(iso_string)
 
     return html.Span(
         [dot, text],
         className="vdm-recency-wrap",
         id=id_override,
-        title=hover_text,
+        title=hover_text if show_tooltip else None,
         style={
             "display": "inline-flex",
             "alignItems": "center",
             "gap": "6px",
-            "cursor": "help",
-            "textDecoration": "underline",
-            "textDecorationStyle": "dotted",
+            "cursor": "help" if show_tooltip else "default",
+            "textDecoration": "underline" if show_tooltip else "none",
+            "textDecorationStyle": "dotted" if show_tooltip else "solid",
         },
     )
 
