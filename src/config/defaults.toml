@@ -30,6 +30,7 @@ max-retries = 2
 haiku = "gpt-5.1-mini"
 sonnet = "gpt-5.1-codex-mini"
 opus = "gpt-5.1-codex-max"
+cheap = "glm-4.6"
 top = "gpt-5.2"
 
 # OpenRouter provider defaults
@@ -44,10 +45,11 @@ max-retries = 2
 haiku = "openai/gpt-5.1-codex-mini"
 sonnet = "openai/gpt-5.1-codex-mini"
 opus = "openai/gpt-5.1-codex-max"
-cheap = "minimax/minimax-m2"
+free   = "kwaipilot/kat-coder-pro:free"
+free1  = "mistralai/devstral-2512:free"
+cheap  = "minimax/minimax-m2"
 cheap1 = "openai/gpt-oss-120b"
 cheap2 = "qwen/qwen3-vl-235b-a22b-instruct"
-cheap3 = "kwaipilot/kat-coder-pro:free"
 top = "openai/gpt-5.2"
 
 # Z.AI provider defaults
