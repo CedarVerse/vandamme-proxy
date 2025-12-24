@@ -13,6 +13,23 @@
       .ag-theme-alpine-dark .ag-row-even .ag-cell { background-color: rgba(255,255,255,0.06); }
       .ag-theme-alpine-dark .ag-row-odd  .ag-cell { background-color: rgba(0,0,0,0.00); }
 
+      /* Allow multi-line header labels so we can keep columns narrow.
+         TODO(dashboard/metrics): This does not appear to impact the metrics grids
+         in practice (likely CSS specificity or header DOM differences). Revisit with
+         a metrics-scoped headerClass and targeted CSS once we confirm the exact
+         header markup produced by dash-ag-grid.
+      */
+      .ag-theme-alpine-dark .ag-header-cell-label {
+        white-space: normal;
+      }
+      .ag-theme-alpine-dark .ag-header-cell-text {
+        white-space: normal;
+        line-height: 1.1;
+      }
+      .ag-theme-alpine-dark .ag-header-cell-label .ag-header-cell-label-text {
+        white-space: normal;
+      }
+
       /* Provider badge styling shared across the dashboard (AG Grid + non-grid).
          Keep this minimal: Bootstrap provides the color + pill shape. */
       .vdm-provider-badge {

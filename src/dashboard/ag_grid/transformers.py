@@ -262,7 +262,8 @@ def metrics_providers_row_data(running_totals_yaml: dict[str, Any]) -> list[dict
                 "cache_read_tokens_raw": int(r.get("cache_read_tokens") or 0),
                 "cache_creation_tokens_raw": int(r.get("cache_creation_tokens") or 0),
                 "tool_calls_raw": int(r.get("tool_calls") or 0),
-                "average_duration_ms": r.get("average_duration_ms") or 0.0,
+                "average_duration_ms": float(r.get("average_duration_ms") or 0.0),
+                "average_duration": format_duration(float(r.get("average_duration_ms") or 0.0)),
                 "total_duration_ms_raw": float(r.get("total_duration_ms") or 0.0),
                 "total_duration": format_duration(float(r.get("total_duration_ms") or 0.0)),
                 "last_accessed": format_timestamp(r.get("last_accessed")) or "",
@@ -310,7 +311,10 @@ def metrics_models_row_data(running_totals_yaml: dict[str, Any]) -> list[dict[st
                     "cache_read_tokens_raw": int(mr.get("cache_read_tokens") or 0),
                     "cache_creation_tokens_raw": int(mr.get("cache_creation_tokens") or 0),
                     "tool_calls_raw": int(mr.get("tool_calls") or 0),
-                    "average_duration_ms": mr.get("average_duration_ms") or 0.0,
+                    "average_duration_ms": float(mr.get("average_duration_ms") or 0.0),
+                    "average_duration": format_duration(
+                        float(mr.get("average_duration_ms") or 0.0)
+                    ),
                     "total_duration_ms_raw": float(mr.get("total_duration_ms") or 0.0),
                     "total_duration": format_duration(float(mr.get("total_duration_ms") or 0.0)),
                     "last_accessed": format_timestamp(mr.get("last_accessed")) or "",
