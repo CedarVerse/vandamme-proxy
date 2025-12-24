@@ -33,6 +33,7 @@ def kpis_grid(totals: MetricTotals) -> dbc.Row:
 
     return dbc.Row(
         [
+            _kpi_col("Last activity", totals.last_accessed, raw=True),
             _kpi_col("Total requests", f"{totals.total_requests:,}"),
             _kpi_col(
                 "Errors",
@@ -46,7 +47,6 @@ def kpis_grid(totals: MetricTotals) -> dbc.Row:
             _kpi_duration_col("Avg duration", totals.average_duration_ms),
             _kpi_duration_col("Streaming avg", totals.streaming_average_duration_ms),
             _kpi_duration_col("Non-streaming avg", totals.non_streaming_average_duration_ms),
-            _kpi_col("Last activity", totals.last_accessed, raw=True),
         ],
         className="g-3",
     )

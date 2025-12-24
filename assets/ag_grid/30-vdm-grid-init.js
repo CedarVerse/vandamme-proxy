@@ -221,6 +221,22 @@ window.dash_clientside.vdm_metrics.user_active = function(n) {
 
     const GRID_CONTAINER_IDS = ['vdm-metrics-providers-grid', 'vdm-metrics-models-grid'];
     const OVERVIEW_LAST_ACTIVITY_ID = 'vdm-overview-last-activity';
+    const OVERVIEW_ANCHOR_ID = 'vdm-refresh-now';
+    const OVERVIEW_FALLBACK_WRAP_SELECTOR = '.vdm-recency-wrap';
+    const OVERVIEW_FALLBACK_SCOPE_SELECTOR = '#vdm-page';
+
+    function getOverviewWrap() {
+        const byId = document.getElementById(OVERVIEW_LAST_ACTIVITY_ID);
+        if (byId) return byId;
+
+        // Fallback for older Overview layouts: if we're on the Overview page and
+        // there is exactly one recency wrap in the page, treat it as Last activity.
+        if (!document.getElementById(OVERVIEW_ANCHOR_ID)) return null;
+        const scope = document.querySelector(OVERVIEW_FALLBACK_SCOPE_SELECTOR) || document;
+        const wraps = scope.querySelectorAll(OVERVIEW_FALLBACK_WRAP_SELECTOR);
+        if (wraps.length === 1) return wraps[0];
+        return null;
+    }
 
     // Use performance.now() for smooth elapsed time, and anchor it to epoch.
     // This avoids calling Date.now() in hot loops.
@@ -231,13 +247,13 @@ window.dash_clientside.vdm_metrics.user_active = function(n) {
 
     function withinMetricsOrOverview() {
         // Run if Metrics grids exist or the Overview last-activity KPI exists.
-        if (document.getElementById(OVERVIEW_LAST_ACTIVITY_ID)) return true;
+        if (getOverviewWrap()) return true;
         return GRID_CONTAINER_IDS.some((id) => document.getElementById(id));
     }
 
     // Minimal run-time cost: only tick when there is at least one target wrap.
     function anyRecencyTargetsPresent() {
-        if (document.getElementById(OVERVIEW_LAST_ACTIVITY_ID)) return true;
+        if (getOverviewWrap()) return true;
         for (const containerId of GRID_CONTAINER_IDS) {
             const root = document.getElementById(containerId);
             if (!root) continue;
@@ -303,7 +319,7 @@ window.dash_clientside.vdm_metrics.user_active = function(n) {
     }
 
     function updateOverviewTarget(nowEpochMs, nowPerfMs, doDot, doText) {
-        const overviewWrap = document.getElementById(OVERVIEW_LAST_ACTIVITY_ID);
+        const overviewWrap = getOverviewWrap();
         if (overviewWrap) {
             updateWrap(overviewWrap, nowEpochMs, nowPerfMs, doDot, doText);
         }
