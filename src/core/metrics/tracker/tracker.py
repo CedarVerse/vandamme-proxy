@@ -19,6 +19,7 @@ per-process (and reset on restart). This matches the existing behavior.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from collections import deque
 from typing import Any, cast
@@ -50,6 +51,16 @@ class RequestTracker:
 
         self.request_count = 0
         self.total_completed_requests = 0
+
+        # Broadcast condition for notifying listeners when active requests change.
+        # NOTE: asyncio.Event is edge-triggered and can drop notifications if set/cleared
+        # before a waiter awaits. Condition gives us reliable fan-out semantics.
+        self._active_requests_changed = asyncio.Condition()
+        self._active_requests_version: int = 0
+        self._active_requests_version_seen: dict[asyncio.Task[object], int] = {}
+
+        # We track a version per-task waiter so multiple concurrent SSE clients don't
+        # miss updates. Waiters record the last seen version and wait until it changes.
 
         # Dashboard-facing observability buffers (process-local).
         self._recent_errors: deque[dict[str, object]] = deque(maxlen=100)
@@ -99,6 +110,7 @@ class RequestTracker:
             metrics.openai_model = resolved_model
         async with self._lock:
             self.active_requests[request_id] = metrics
+        await self._notify_active_requests_changed()
         return metrics
 
     async def end_request(self, request_id: str, **kwargs: Any) -> None:
@@ -163,6 +175,8 @@ class RequestTracker:
                 self._emit_summary_locked()
 
             del self.active_requests[request_id]
+
+        await self._notify_active_requests_changed()
 
     async def get_request(self, request_id: str) -> RequestMetrics | None:
         async with self._lock:
@@ -231,6 +245,49 @@ class RequestTracker:
     async def get_recent_traces(self, *, limit: int = 200) -> list[dict[str, object]]:
         async with self._lock:
             return list(self._recent_traces)[:limit]
+
+    async def _notify_active_requests_changed(self) -> None:
+        """Notify all listeners that the active request set changed."""
+
+        async with self._active_requests_changed:
+            self._active_requests_version += 1
+            self._active_requests_changed.notify_all()
+
+    async def wait_for_active_requests_change(self, timeout: float | None = None) -> None:
+        """Wait for active requests to change, with optional timeout.
+
+        Used by SSE streaming to push updates immediately when requests start/end.
+        If timeout is provided, returns after timeout even if no change occurred.
+
+        Implementation detail:
+        - A plain asyncio.Event is edge-triggered and can miss updates if it is set/cleared
+          before a waiter awaits.
+        - We instead use a Condition + monotonic version counter so each waiter can
+          deterministically observe at least one change.
+        """
+
+        task = asyncio.current_task()
+        if task is None:
+            with contextlib.suppress(asyncio.TimeoutError):
+                async with self._active_requests_changed:
+                    await asyncio.wait_for(self._active_requests_changed.wait(), timeout=timeout)
+            return
+
+        last_seen = self._active_requests_version_seen.get(task, -1)
+
+        async def _wait_for_new_version() -> None:
+            async with self._active_requests_changed:
+                while self._active_requests_version == last_seen:
+                    await self._active_requests_changed.wait()
+                self._active_requests_version_seen[task] = self._active_requests_version
+
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(_wait_for_new_version(), timeout=timeout)
+
+        # Best-effort cleanup to avoid unbounded growth.
+        # Tasks for SSE streams are long-lived; this mainly helps tests and short-lived callers.
+        if task.done():
+            self._active_requests_version_seen.pop(task, None)
 
     async def update_last_accessed(self, provider: str, model: str, timestamp: str) -> None:
         """Update last_accessed timestamps for provider, model, and top level."""

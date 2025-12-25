@@ -56,21 +56,9 @@ def metrics_layout() -> dbc.Container:
                                 className="me-3",
                             ),
                             html.Span(
-                                ["Tick", html.Span(":", className="text-muted ms-1 me-1")],
-                                className="small me-1",
-                                style={"alignSelf": "center"},
-                            ),
-                            dcc.Dropdown(
-                                id="vdm-active-requests-tick-ms",
-                                options=[
-                                    {"label": "0.5s", "value": 500},
-                                    {"label": "1s", "value": 1_000},
-                                    {"label": "2s", "value": 2_000},
-                                    {"label": "5s", "value": 5_000},
-                                ],  # type: ignore[arg-type]
-                                value=2_000,
-                                clearable=False,
-                                style={"minWidth": "5.5rem"},
+                                id="vdm-sse-connection-indicator",
+                                className="small me-2",
+                                style={"alignSelf": "center", "minWidth": "5rem"},
                             ),
                         ],
                         className="vdm-toolbar justify-content-end py-1",
@@ -84,7 +72,23 @@ def metrics_layout() -> dbc.Container:
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader("Active requests"),
+                                dbc.CardHeader(
+                                    [
+                                        html.Span(
+                                            id="vdm-active-requests-sse-indicator",
+                                            className="me-2",
+                                            style={"opacity": 0.35, "cursor": "help"},
+                                            title="Live SSE connection status",
+                                        ),
+                                        html.Span("Active requests"),
+                                    ]
+                                ),
+                                dcc.Store(id="vdm-active-requests-sse-live", data=False),
+                                dcc.Interval(
+                                    id="vdm-active-requests-sse-indicator-tick",
+                                    interval=1_000,
+                                    n_intervals=0,
+                                ),
                                 dbc.CardBody(dbc.Spinner(id="vdm-active-requests")),
                             ]
                         ),
@@ -150,6 +154,7 @@ def metrics_layout() -> dbc.Container:
             dcc.Interval(id="vdm-metrics-poll", interval=5_000, n_intervals=0),
             dcc.Interval(id="vdm-metrics-user-active-poll", interval=500, n_intervals=0),
             dcc.Store(id="vdm-metrics-user-active", data=False),
+            html.Div(id="vdm-sse-state", style={"display": "none"}),
         ],
         fluid=True,
         className="py-3",

@@ -86,6 +86,8 @@ def metrics_active_requests_ag_grid(
         no_rows_message="No active requests",
         dash_grid_options_overrides={
             "pagination": False,
+            # Ensure SSE transactions (add/update/remove) can match rows deterministically.
+            "getRowId": {"function": "params.data.request_id"},
             **metrics_common_grid_options(),
         },
         custom_css=grid_css_compact(height_px=260),
@@ -455,7 +457,6 @@ def logs_traces_ag_grid(
             "resizable": True,
             "width": 100,
             "suppressSizeToFit": True,
-            "cellRenderer": "vdmStatusBadgeRenderer",
         },
         {
             "headerName": "Duration",

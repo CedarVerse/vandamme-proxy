@@ -49,21 +49,16 @@ def register_metrics_callbacks(
 
     app.clientside_callback(
         """
-        function(n, activeReqTickMs) {
-            // Store the active-requests duration tick rate for the assets JS ticker.
-            // This keeps the grid purely client-updated without server round-trips.
-            if (typeof activeReqTickMs === 'number' && isFinite(activeReqTickMs)) {
-                window.__vdm_active_requests_duration_tick_ms = activeReqTickMs;
-                try {
-                    if (window.localStorage) {
-                        localStorage.setItem(
-                            'vdm.metrics.activeRequests.durationTickMs',
-                            String(activeReqTickMs)
-                        );
-                    }
-                } catch (e) {
-                    // ignore
+        function(n) {
+            // Active Requests duration text ticker: fixed at 1s.
+            // This is purely client-side UI (no server polling).
+            window.__vdm_active_requests_duration_tick_ms = 1000;
+            try {
+                if (window.localStorage) {
+                    localStorage.setItem('vdm.metrics.activeRequests.durationTickMs', '1000');
                 }
+            } catch (e) {
+                // ignore
             }
 
             if (window.dash_clientside
@@ -76,15 +71,83 @@ def register_metrics_callbacks(
         """,
         Output("vdm-metrics-user-active", "data"),
         Input("vdm-metrics-user-active-poll", "n_intervals"),
-        State("vdm-active-requests-tick-ms", "value"),
         prevent_initial_call=False,
     )
+
+    app.clientside_callback(
+        """
+        function(n) {
+            // Report SSE connection state to Dash.
+            // (We tick this on the existing 500ms user-active interval.)
+            if (window.__vdmActiveRequestsSSE) {
+                return {
+                    'connected': window.__vdmActiveRequestsSSE.isConnected(),
+                    'supported': true,
+                };
+            }
+            return { 'connected': false, 'supported': false };
+        }
+        """,
+        Output("vdm-sse-state", "data"),
+        Input("vdm-metrics-user-active-poll", "n_intervals"),
+        prevent_initial_call=False,
+    )
+
+    app.clientside_callback(
+        """
+        function(n) {
+            // Dedicated SSE indicator state for the Active Requests card.
+            return Boolean(
+                window.__vdmActiveRequestsSSE
+                && window.__vdmActiveRequestsSSE.isConnected
+                && window.__vdmActiveRequestsSSE.isConnected()
+            );
+        }
+        """,
+        Output("vdm-active-requests-sse-live", "data"),
+        Input("vdm-active-requests-sse-indicator-tick", "n_intervals"),
+        prevent_initial_call=False,
+    )
+
+    @app.callback(
+        Output("vdm-active-requests-sse-indicator", "children"),
+        Output("vdm-active-requests-sse-indicator", "style"),
+        Output("vdm-active-requests-sse-indicator", "title"),
+        Input("vdm-active-requests-sse-live", "data"),
+    )
+    def render_active_requests_sse_indicator(is_live: bool) -> tuple[str, dict[str, object], str]:
+        """Show a clear live indicator for the Active Requests SSE stream."""
+
+        if is_live:
+            return (
+                "📡",
+                {"opacity": 1.0, "filter": "grayscale(0%)", "cursor": "help"},
+                "Live: Active Requests updates via SSE (real-time)",
+            )
+        return (
+            "⚫",
+            {"opacity": 0.35, "filter": "grayscale(100%)", "cursor": "help"},
+            "Disconnected: Active Requests using polling fallback",
+        )
 
     @app.callback(
         Output("vdm-metrics-poll", "disabled"),
         Input("vdm-metrics-user-active", "data"),
         State("vdm-metrics-poll-toggle", "value"),
     )
-    def pause_polling_while_active(user_active: bool, polling_enabled: bool) -> bool:
-        # Disable polling if user is interacting; also disable if polling is manually off.
+    def control_polling_state(user_active: bool, polling_enabled: bool) -> bool:
+        """Control polling state based on user activity and polling toggle.
+
+        IMPORTANT: We do NOT disable polling when SSE is connected.
+        Reason: SSE only updates the Active Requests grid. Other grids (Provider breakdown,
+        Model aggregates, Token composition) still need polling updates. Disabling the
+        poll interval when SSE is live would starve those other grids of updates.
+
+        Polling is disabled when:
+        - User is actively interacting (to avoid jitter)
+        - Polling toggle is manually off
+
+        Returns True if polling should be disabled, False otherwise.
+        """
+        # Disable if user is interacting or polling is manually off
         return (not polling_enabled) or bool(user_active)

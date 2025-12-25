@@ -120,6 +120,17 @@ class Config:
             os.environ.get("THOUGHT_SIGNATURE_CLEANUP_INTERVAL", "300")
         )  # 5 minutes
 
+        # Active Requests SSE settings
+        self.active_requests_sse_enabled = (
+            os.environ.get("VDM_ACTIVE_REQUESTS_SSE_ENABLED", "true").lower() == "true"
+        )
+        self.active_requests_sse_interval = float(
+            os.environ.get("VDM_ACTIVE_REQUESTS_SSE_INTERVAL", "2.0")
+        )
+        self.active_requests_sse_heartbeat = float(
+            os.environ.get("VDM_ACTIVE_REQUESTS_SSE_HEARTBEAT", "30.0")
+        )
+
         # Provider manager will be initialized lazily
         self._provider_manager: ProviderManager | None = None
 

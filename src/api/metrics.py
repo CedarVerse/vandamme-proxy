@@ -1,10 +1,15 @@
+import asyncio
+import json
 import logging
+import time
+from collections.abc import AsyncGenerator
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 from src.api.endpoints import validate_api_key
+from src.api.services.streaming import sse_headers, streaming_response
 from src.api.utils.yaml_formatter import create_hierarchical_structure, format_running_totals_yaml
 from src.core.config import config
 from src.core.logging.configuration import get_logging_mode
@@ -71,6 +76,101 @@ async def get_active_requests(
         content={"disabled": False, "active_requests": rows},
         headers={"Cache-Control": "no-cache"},
     )
+
+
+@metrics_router.get("/active-requests/stream", response_model=None)
+async def stream_active_requests(
+    http_request: Request,
+    _: None = Depends(validate_api_key),
+) -> StreamingResponse | JSONResponse:
+    """Server-Sent Events stream for active requests.
+
+    Emits active request snapshots at the configured interval (default 2s),
+    with immediate updates when requests start or complete.
+
+    SSE Events:
+        - update: Active requests snapshot (JSON)
+        - disabled: Metrics are disabled (single event, then stream closes)
+        - heartbeat: Keep-alive comment every 30s
+    """
+
+    if not LOG_REQUEST_METRICS:
+        # Return disabled state as a single event
+        async def disabled_stream() -> AsyncGenerator[str, None]:
+            data = {
+                "disabled": True,
+                "message": "Request metrics logging is disabled",
+                "suggestion": "Set LOG_REQUEST_METRICS=true to enable tracking",
+            }
+            yield "event: disabled\n"
+            yield f"data: {json.dumps(data)}\n\n"
+
+        return StreamingResponse(
+            disabled_stream(),
+            media_type="text/event-stream",
+            headers=sse_headers(),
+        )
+
+    if not config.active_requests_sse_enabled:
+        # SSE is disabled via config, return error
+        data = {
+            "disabled": True,
+            "message": "SSE for active requests is disabled",
+            "suggestion": "Set VDM_ACTIVE_REQUESTS_SSE_ENABLED=true to enable",
+        }
+        return JSONResponse(status_code=503, content=data)
+
+    tracker = get_request_tracker(http_request)
+    interval = config.active_requests_sse_interval
+    heartbeat_interval = config.active_requests_sse_heartbeat
+
+    async def active_requests_stream() -> AsyncGenerator[str, None]:
+        """Stream active requests with push-on-change."""
+
+        last_snapshot: list[dict] = []
+        last_heartbeat = asyncio.get_event_loop().time()
+
+        def _format_update(snapshot: list[dict]) -> str:
+            data = {
+                "disabled": False,
+                "active_requests": snapshot,
+                "timestamp": time.time(),
+            }
+            return "event: update\n" + f"data: {json.dumps(data)}\n\n"
+
+        try:
+            # Always send an initial snapshot so the client syncs immediately on connect.
+            snapshot = await tracker.get_active_requests_snapshot()
+            last_snapshot = snapshot
+            yield _format_update(snapshot)
+
+            while True:
+                # Wait for change event or timeout
+                await tracker.wait_for_active_requests_change(timeout=interval)
+
+                # Get current snapshot
+                snapshot = await tracker.get_active_requests_snapshot()
+
+                # Only send if snapshot changed
+                if snapshot != last_snapshot:
+                    yield _format_update(snapshot)
+                    last_snapshot = snapshot
+
+                # Send heartbeat every 30s to keep connection alive
+                now = asyncio.get_event_loop().time()
+                if now - last_heartbeat >= heartbeat_interval:
+                    yield ": heartbeat\n\n"
+                    last_heartbeat = now
+
+        except asyncio.CancelledError:
+            # Client disconnected
+            logger.debug("SSE client disconnected from /metrics/active-requests/stream")
+            raise
+        except Exception as e:
+            logger.error(f"Error in active requests SSE stream: {e}")
+            raise
+
+    return streaming_response(stream=active_requests_stream())
 
 
 @metrics_router.get("/running-totals")
