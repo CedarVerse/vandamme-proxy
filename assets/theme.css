@@ -30,7 +30,10 @@ body, .app-entry {
   height: auto;
   width: auto;
   object-fit: contain;
-  #filter: drop-shadow(0 0 1px #00ff00);
+  filter: grayscale(100%);
+  mix-blend-mode: lighten;
+  opacity: 0.6;
+  filter: hue-rotate(110deg) saturate(80%);
 }
 
 .card, .dbc-card, .dash-card {
@@ -257,10 +260,10 @@ body, .app-entry {
 
 /* Ensure min height for dropdown controls */
 .Select-control {
-  min-height: 40px !important;
+  min-height: 32px !important;
 }
 .dash-dropdown .Select-control {
-  min-height: 40px !important;
+  min-height: 32px !important;
 }
 
 /* Apply to Dash v2 class as well */
@@ -334,7 +337,7 @@ select:hover {
 }
 .dcc-dropdown .Select-control {
   border-color: var(--vdm-primary) !important;
-  min-height: 40px !important;
+  min-height: 32px !important;
 }
 .dcc-dropdown .Select-menu {
   box-shadow: var(--vdm-shadow) !important;
@@ -439,7 +442,7 @@ select:hover {
 /* Spacing utilities for toolbars */
 .vdm-toolbar {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.25rem;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -465,4 +468,23 @@ select:hover {
   background-color: var(--vdm-surface-alt);
   border-bottom-color: var(--vdm-border);
   color: var(--vdm-text);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+/* Navbar compact */
+.navbar {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.navbar .container {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+/* AG Grid compact row padding */
+.ag-theme-quartz .ag-cell,
+.ag-theme-alpine .ag-cell {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }

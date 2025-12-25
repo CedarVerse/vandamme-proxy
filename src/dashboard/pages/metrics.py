@@ -17,62 +17,67 @@ def metrics_layout() -> dbc.Container:
     return dbc.Container(
         [
             dbc.Row(
-                [
-                    dbc.Col(html.H2("Metrics"), md=8),
-                    dbc.Col(
-                        html.Div(
-                            [
-                                html.Div("Live updates", className="text-muted small me-2"),
-                                dbc.Button(
-                                    "Refresh",
-                                    id="vdm-metrics-refresh",
-                                    color="secondary",
-                                    outline=True,
-                                    className="me-2",
-                                ),
-                                dbc.Switch(
-                                    id="vdm-metrics-poll-toggle",
-                                    label="Polling",
-                                    value=True,
-                                    className="me-2",
-                                ),
-                                dcc.Dropdown(
-                                    id="vdm-metrics-interval",
-                                    options=[
-                                        {"label": "5s", "value": 5_000},
-                                        {"label": "10s", "value": 10_000},
-                                        {"label": "30s", "value": 30_000},
-                                    ],  # type: ignore[arg-type]
-                                    value=5_000,
-                                    clearable=False,
-                                    style={"minWidth": "7rem"},
-                                    className="ms-1",
-                                ),
-                                dcc.Dropdown(
-                                    id="vdm-active-requests-tick-ms",
-                                    options=[
-                                        {"label": "0.5s", "value": 500},
-                                        {"label": "1s", "value": 1_000},
-                                        {"label": "2s", "value": 2_000},
-                                        {"label": "5s", "value": 5_000},
-                                    ],  # type: ignore[arg-type]
-                                    value=2_000,
-                                    clearable=False,
-                                    style={"minWidth": "6rem"},
-                                    className="ms-2",
-                                ),
-                                html.Div(
-                                    "Active req",
-                                    className="text-muted small ms-1",
-                                    style={"alignSelf": "center"},
-                                ),
-                            ],
-                            className="vdm-toolbar justify-content-end",
-                        ),
-                        md=4,
+                dbc.Col(
+                    html.Div(
+                        [
+                            dbc.Button(
+                                "Refresh",
+                                id="vdm-metrics-refresh",
+                                color="secondary",
+                                outline=True,
+                                className="me-2",
+                                size="sm",
+                            ),
+                            html.Span(
+                                "Polling",
+                                className="text-muted small me-1",
+                                style={"alignSelf": "center"},
+                            ),
+                            dbc.Switch(
+                                id="vdm-metrics-poll-toggle",
+                                value=True,
+                                className="me-3",
+                            ),
+                            html.Span(
+                                ["Poll", html.Span(":", className="text-muted ms-1 me-1")],
+                                className="small me-1",
+                                style={"alignSelf": "center"},
+                            ),
+                            dcc.Dropdown(
+                                id="vdm-metrics-interval",
+                                options=[
+                                    {"label": "5s", "value": 5_000},
+                                    {"label": "10s", "value": 10_000},
+                                    {"label": "30s", "value": 30_000},
+                                ],  # type: ignore[arg-type]
+                                value=5_000,
+                                clearable=False,
+                                style={"minWidth": "6rem"},
+                                className="me-3",
+                            ),
+                            html.Span(
+                                ["Tick", html.Span(":", className="text-muted ms-1 me-1")],
+                                className="small me-1",
+                                style={"alignSelf": "center"},
+                            ),
+                            dcc.Dropdown(
+                                id="vdm-active-requests-tick-ms",
+                                options=[
+                                    {"label": "0.5s", "value": 500},
+                                    {"label": "1s", "value": 1_000},
+                                    {"label": "2s", "value": 2_000},
+                                    {"label": "5s", "value": 5_000},
+                                ],  # type: ignore[arg-type]
+                                value=2_000,
+                                clearable=False,
+                                style={"minWidth": "5.5rem"},
+                            ),
+                        ],
+                        className="vdm-toolbar justify-content-end py-1",
                     ),
-                ],
-                className="align-items-center mb-3",
+                    md=12,
+                ),
+                className="mb-3",
             ),
             dbc.Row(
                 [

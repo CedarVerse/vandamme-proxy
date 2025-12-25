@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def metrics_common_grid_options(*, row_height: int = 37) -> dict[str, Any]:
+def metrics_common_grid_options(*, row_height: int = 32) -> dict[str, Any]:
     # Mirrors existing metrics grids (providers/models/active requests).
     return {
         "rowHeight": row_height,
