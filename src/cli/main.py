@@ -1,5 +1,6 @@
 """Main CLI entry point for vandamme-proxy."""
 
+import argparse
 import logging
 import sys
 
@@ -33,12 +34,41 @@ logger = logging.getLogger(__name__)
 
 
 def claude_alias() -> None:
-    """Alias that runs 'vdm wrap claude' with all arguments."""
-    # Get all arguments after 'claude.vdm'
-    args = sys.argv[1:]  # Skip 'claude.vdm'
+    """Alias that is called by the CLI as `claude.vdm`.
 
-    # Build the vdm wrap claude command
-    cmd = ["vdm", "wrap", "claude"] + args
+    Intercepts proxy parameters (--host, --port, --pid-file) and passes
+    remaining arguments to the wrapped claude command.
+
+    Examples:
+        claude.vdm --model sonnet
+        claude.vdm --port 9999 --model sonnet
+        claude.vdm --host 127.0.0.1 --pid-file /tmp/vdm.pid -- -v
+    """
+    # Create parser for proxy params only (no help to let wrapped command handle it)
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--host", type=str, default=None, help="Override proxy host")
+    parser.add_argument("--port", type=int, default=None, help="Override proxy port")
+    parser.add_argument("--pid-file", type=str, default=None, help="PID file path")
+
+    # Parse known args (proxy params), leaving unknown for the wrapped command
+    proxy_args, tool_args = parser.parse_known_args(sys.argv[1:])
+
+    # Build the vdm wrap command
+    cmd = ["vdm", "wrap", "claude"]
+
+    # Add proxy params if provided
+    if proxy_args.host is not None:
+        cmd.extend(["--host", proxy_args.host])
+    if proxy_args.port is not None:
+        cmd.extend(["--port", str(proxy_args.port)])
+    if proxy_args.pid_file is not None:
+        cmd.extend(["--pid-file", proxy_args.pid_file])
+
+    # Add separator before tool args (required for typer's allow_extra_args)
+    # The '--' is consumed by typer and doesn't appear in ctx.args
+    if tool_args:
+        cmd.append("--")
+        cmd.extend(tool_args)
 
     # Execute the command
     import subprocess

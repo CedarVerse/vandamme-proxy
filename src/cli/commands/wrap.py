@@ -25,9 +25,9 @@ def wrap(
     """Wrap a CLI tool to use the VDM proxy.
 
     Examples:
-        vdm wrap claude --port 9999 --model sonnet
-        vdm wrap gemini --host 127.0.0.1
-        vdm wrap --dry-run claude --model sonnet
+        vdm wrap --port 9999 claude -- --model sonnet
+        vdm wrap --host 127.0.0.1 gemini
+        vdm wrap --dry-run claude -- --model sonnet
     """
     # Get all remaining args from ctx.args
     # ctx.args contains everything after the tool name when using allow_extra_args
