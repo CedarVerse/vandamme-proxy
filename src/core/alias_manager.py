@@ -354,16 +354,34 @@ class AliasManager:
         # Return with provider prefix, but only if target doesn't already have one
         # Cross-provider aliases have targets like "zai:haiku" which should be returned as-is
         if ":" in best_target:
-            # Target already has provider prefix (cross-provider alias)
-            resolved_model = best_target
-            logger.info(
-                "[AliasManager] (cross-provider %s match for '%s') '%s:%s' -> '%s'",
-                match_type,
-                model,
-                best_provider,
-                best_alias,
-                resolved_model,
-            )
+            # Check if this is a cross-provider alias (provider:model) or just a model name with ':'
+            potential_provider, _ = best_target.split(":", 1)
+            # Only treat as cross-provider if the potential provider is actually known
+            if potential_provider in self.aliases:
+                # Valid cross-provider alias - return as-is
+                resolved_model = best_target
+                logger.info(
+                    "[AliasManager] (cross-provider %s match for '%s') '%s:%s' -> '%s'",
+                    match_type,
+                    model,
+                    best_provider,
+                    best_alias,
+                    resolved_model,
+                )
+            else:
+                # Model name contains ':' but it's not a provider prefix
+                # (e.g., "openrouter/model:free")
+                # Add source provider prefix
+                result_provider = explicit_provider if explicit_provider else best_provider.lower()
+                resolved_model = f"{result_provider}:{best_target}"
+                logger.info(
+                    "[AliasManager] (%s match for '%s') '%s:%s' -> '%s'",
+                    match_type,
+                    model,
+                    best_provider,
+                    best_alias,
+                    resolved_model,
+                )
         else:
             # Target is bare model name, add provider prefix
             result_provider = explicit_provider if explicit_provider else best_provider.lower()
@@ -386,6 +404,73 @@ class AliasManager:
             for m in matches[:3]
         ]
         logger.debug(f"  All matches sorted by priority: {match_details}")
+
+        # Recursive alias resolution: check if resolved_model is itself an alias
+        # This handles chained aliases like: fast -> sonnet -> gpt-4o-mini
+        max_iterations = 10
+        seen: set[str] = set()  # Track visited aliases for cycle detection
+
+        for iteration in range(max_iterations):
+            if ":" not in resolved_model:
+                # No provider prefix - must be a concrete model
+                break
+
+            potential_provider, model_part = resolved_model.split(":", 1)
+
+            # Check if this provider has any aliases configured
+            maybe_aliases = self.aliases.get(potential_provider)
+            if maybe_aliases is None:
+                # Unknown provider - must be a concrete model
+                break
+
+            # Type narrowing: aliases_for_provider is now known to be dict[str, str]
+            aliases_for_provider: dict[str, str] = maybe_aliases
+
+            # Normalize for lookup (aliases are stored lowercase)
+            model_part_lower = model_part.lower()
+
+            # Check for cycle
+            if model_part_lower in seen:
+                logger.warning(
+                    "[AliasManager] Cycle detected in alias resolution: "
+                    f"{' -> '.join(seen)} -> {model_part}. "
+                    f"Stopping at current resolved model: '{resolved_model}'"
+                )
+                break
+
+            # Check if model_part is an alias key in this provider's aliases
+            if model_part_lower not in aliases_for_provider:
+                # Not an alias key - must be a concrete model name
+                break
+
+            # It's an alias! Resolve it and continue
+            seen.add(model_part_lower)
+            target = aliases_for_provider[model_part_lower]
+
+            logger.debug(
+                f"[AliasManager] Iteration {iteration + 1}: "
+                f"'{model_part}' is an alias -> '{target}'"
+            )
+
+            # Apply the same logic as the initial resolution
+            if ":" in target:
+                # Target has a provider prefix
+                target_provider, _ = target.split(":", 1)
+                if target_provider in self.aliases:
+                    # Valid cross-provider alias - use as-is
+                    resolved_model = target
+                else:
+                    # Model name with ':' but not a provider prefix
+                    resolved_model = f"{potential_provider}:{target}"
+            else:
+                # Bare model name - add provider prefix
+                resolved_model = f"{potential_provider}:{target}"
+
+        if seen:
+            logger.info(
+                f"[AliasManager] Fully resolved '{model}' through "
+                f"{len(seen)} step(s) -> '{resolved_model}'"
+            )
 
         return resolved_model
 

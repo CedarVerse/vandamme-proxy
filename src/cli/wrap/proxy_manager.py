@@ -52,7 +52,18 @@ class ProxyManager:
         - Keep subprocess output clean for the wrapper tool
         """
         # Use uv run to ensure we're in the right environment
-        cmd = ["uv", "run", "vdm", "server", "start", "--host", self.host, "--port", str(self.port), "--systemd"]
+        cmd = [
+            "uv",
+            "run",
+            "vdm",
+            "server",
+            "start",
+            "--host",
+            self.host,
+            "--port",
+            str(self.port),
+            "--systemd",
+        ]
 
         # Check if we're already in a uv environment
         if not os.environ.get("VIRTUAL_ENV") and not os.environ.get("UV_ACTIVE"):
