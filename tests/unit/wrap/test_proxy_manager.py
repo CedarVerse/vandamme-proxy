@@ -143,3 +143,29 @@ def test_get_proxy_url():
     """Test getting proxy URL."""
     manager = ProxyManager(host="localhost", port=9999)
     assert manager.get_proxy_url() == "http://localhost:9999"
+
+
+@pytest.mark.asyncio
+@patch("src.cli.wrap.proxy_manager.subprocess.Popen")
+async def test_start_proxy_includes_systemd_flag(mock_popen):
+    """Test that _start_proxy passes --systemd flag to subprocess."""
+    manager = ProxyManager(host="127.0.0.1", port=8082)
+
+    mock_process = MagicMock()
+    mock_process.poll.return_value = None  # Process still running
+    mock_popen.return_value = mock_process
+
+    # Mock the health check to succeed after starting
+    manager._is_proxy_running = AsyncMock(side_effect=[False, True])
+
+    await manager._start_proxy()
+
+    # Verify subprocess.Popen was called
+    assert mock_popen.called
+    call_args = mock_popen.call_args
+
+    # Get the command from the call
+    cmd = call_args[0][0]
+
+    # Verify --systemd flag is present
+    assert "--systemd" in cmd, f"Expected --systemd flag in command: {cmd}"

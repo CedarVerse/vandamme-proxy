@@ -44,9 +44,15 @@ class ProxyManager:
             return False
 
     async def _start_proxy(self) -> bool:
-        """Start the proxy server."""
+        """Start the proxy server.
+
+        The proxy is started with --systemd flag to:
+        - Route logs to syslog instead of console
+        - Suppress Rich table output (wrap has its own UI)
+        - Keep subprocess output clean for the wrapper tool
+        """
         # Use uv run to ensure we're in the right environment
-        cmd = ["uv", "run", "vdm", "server", "start", "--host", self.host, "--port", str(self.port)]
+        cmd = ["uv", "run", "vdm", "server", "start", "--host", self.host, "--port", str(self.port), "--systemd"]
 
         # Check if we're already in a uv environment
         if not os.environ.get("VIRTUAL_ENV") and not os.environ.get("UV_ACTIVE"):
@@ -61,6 +67,7 @@ class ProxyManager:
                 self.host,
                 "--port",
                 str(self.port),
+                "--systemd",
             ]
 
         try:
