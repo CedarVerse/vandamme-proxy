@@ -330,7 +330,11 @@ Server Settings:
 Performance:
 - `MAX_TOKENS_LIMIT` - Maximum tokens (default: 4096)
 - `MIN_TOKENS_LIMIT` - Minimum tokens (default: 100)
-- `REQUEST_TIMEOUT` - Request timeout in seconds (default: 90)
+- `REQUEST_TIMEOUT` - Request timeout in seconds for non-streaming requests (default: 90)
+- `STREAMING_READ_TIMEOUT_SECONDS` - Read timeout for streaming SSE requests (default: None/disabled)
+  - Set to a high value (e.g., 600) to allow long-running streaming responses
+  - If unset, streaming reads have no timeout (recommended for SSE)
+- `STREAMING_CONNECT_TIMEOUT_SECONDS` - Connect timeout for streaming requests (default: 30)
 - `MAX_RETRIES` - Retry attempts (default: 2)
 
 Middleware Configuration:
@@ -577,6 +581,34 @@ curl -X POST http://localhost:8082/v1/messages \
 - Request/response conversion is logged in `request_converter.py`
 - Middleware chain execution logged in `src/middleware/base.py`
 - Thought signature operations logged in `src/middleware/thought_signature.py`
+
+### Streaming Error Handling
+
+The proxy implements elegant error handling for streaming responses to prevent "response already started" errors:
+
+**For Streaming Requests (SSE):**
+- Upstream errors (timeouts, HTTP errors) are converted to **SSE error events** instead of raising HTTPException
+- Clients receive a structured error payload in the stream:
+  ```json
+  {"error": {"message": "...", "type": "upstream_timeout", "code": "read_timeout", "suggestion": "..."}}
+  ```
+- The stream then terminates with `data: [DONE]\n\n`
+- Warning-level logs include request_id, provider, and upstream details
+
+**For Non-Streaming Requests:**
+- Timeout errors are mapped to **HTTP 504 Gateway Timeout**
+- Other errors preserve their original HTTP status codes
+
+**Streaming Timeout Configuration:**
+- `STREAMING_READ_TIMEOUT_SECONDS` controls how long to wait for SSE data
+- Recommended: Leave unset (None) for unlimited read timeout on streaming
+- Set explicitly if you want to enforce a timeout on long-running streams
+- `STREAMING_CONNECT_TIMEOUT_SECONDS` (default: 30s) bounds initial connection time
+
+This design ensures that even when upstream timeouts occur during streaming:
+- Server logs show clean warning messages (not RuntimeError stack traces)
+- Clients receive a proper error event in the SSE stream
+- Metrics are finalized correctly via `with_streaming_error_handling`
 
 ## Important Notes
 

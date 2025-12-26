@@ -86,6 +86,13 @@ class Config:
 
         # Connection settings
         self.request_timeout = int(os.environ.get("REQUEST_TIMEOUT", "90"))
+        streaming_read_timeout_str = os.environ.get("STREAMING_READ_TIMEOUT_SECONDS")
+        self.streaming_read_timeout: float | None = (
+            float(streaming_read_timeout_str) if streaming_read_timeout_str is not None else None
+        )
+        self.streaming_connect_timeout = float(
+            os.environ.get("STREAMING_CONNECT_TIMEOUT_SECONDS", "30")
+        )
         self.max_retries = int(os.environ.get("MAX_RETRIES", "2"))
 
         # Top-models (proxy metadata)

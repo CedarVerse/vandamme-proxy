@@ -25,6 +25,9 @@ NextApiKey = Callable[[set[str]], Awaitable[str]]
 class AnthropicClient:
     """Client for Anthropic-compatible APIs with passthrough mode."""
 
+    _streaming_read_timeout: float | None
+    _streaming_connect_timeout: float
+
     def __init__(
         self,
         api_key: str | None,  # Can be None for passthrough providers
@@ -38,13 +41,53 @@ class AnthropicClient:
         self.custom_headers = custom_headers or {}
         self.default_api_key = api_key
 
+        # Get streaming timeout config (None means no read timeout for SSE)
+        self._streaming_read_timeout = config.streaming_read_timeout
+        self._streaming_connect_timeout = config.streaming_connect_timeout
+
         # Don't create HTTP client yet - we'll create it per request
         # This allows us to use different API keys per request
         self._client_cache: dict[str, httpx.AsyncClient] = {}
 
-    def _get_client(self, api_key: str) -> httpx.AsyncClient:
-        """Get or create an HTTP client for the specific API key"""
-        if api_key not in self._client_cache:
+    def _get_timeout(self, for_streaming: bool = False) -> httpx.Timeout:
+        """Get appropriate timeout configuration.
+
+        For streaming, we use a longer or disabled read timeout since SSE connections
+        can be long-lived. For non-streaming, we use the standard timeout.
+
+        Args:
+            for_streaming: Whether this timeout is for a streaming request.
+
+        Returns:
+            An httpx.Timeout object configured appropriately.
+        """
+        if for_streaming:
+            # For streaming, use configured read timeout (or None for unlimited)
+            # with a bounded connect timeout
+            return httpx.Timeout(
+                connect=self._streaming_connect_timeout,
+                read=self._streaming_read_timeout,
+                write=self.timeout,
+                pool=self.timeout,
+            )
+        else:
+            # For non-streaming, use the standard timeout for all phases
+            return httpx.Timeout(timeout=self.timeout)
+
+    def _get_client(self, api_key: str, for_streaming: bool = False) -> httpx.AsyncClient:
+        """Get or create an HTTP client for the specific API key.
+
+        Args:
+            api_key: The API key to use for authentication.
+            for_streaming: Whether this client will be used for streaming requests.
+
+        Returns:
+            An httpx.AsyncClient configured with appropriate timeouts.
+        """
+        # Use a cache key that includes the streaming mode
+        cache_key = f"{api_key}_streaming" if for_streaming else api_key
+
+        if cache_key not in self._client_cache:
             # Build headers for this specific API key
             headers = {
                 "x-api-key": api_key,
@@ -53,13 +96,13 @@ class AnthropicClient:
                 **self.custom_headers,
             }
 
-            # Create HTTP client with these headers
-            self._client_cache[api_key] = httpx.AsyncClient(
-                timeout=self.timeout,
+            # Create HTTP client with appropriate timeout
+            self._client_cache[cache_key] = httpx.AsyncClient(
+                timeout=self._get_timeout(for_streaming=for_streaming),
                 headers=headers,
             )
 
-        return self._client_cache[api_key]
+        return self._client_cache[cache_key]
 
     async def create_chat_completion(
         self,
@@ -157,8 +200,8 @@ class AnthropicClient:
         while True:
             attempted_keys.add(effective_api_key)
 
-            # Get client for this specific API key
-            client = self._get_client(effective_api_key)
+            # Get streaming client for this specific API key
+            client = self._get_client(effective_api_key, for_streaming=True)
 
             if LOG_REQUEST_METRICS:
                 key_hash = hashlib.sha256(effective_api_key.encode()).hexdigest()[:8]
@@ -198,12 +241,15 @@ class AnthropicClient:
             except HTTPException as e:
                 exc = e
 
-            except Exception as e:
-                raise HTTPException(
-                    status_code=500, detail=f"Anthropic API streaming error: {str(e)}"
-                ) from e
+            # Note: Timeouts and other streaming errors should NOT be converted to
+            # HTTPException here - they will be caught by the SSE error handler wrapper
+            # in streaming.py and converted to graceful error events.
+            except Exception:
+                # Let streaming-specific errors (ReadTimeout, etc.) propagate
+                # so they can be handled by the SSE error wrapper
+                raise
 
-            # Rotation decision
+            # Rotation decision (only for auth/key errors)
             detail = str(getattr(exc, "detail", "")).lower()
             is_key_error = exc.status_code in (401, 403, 429) or "insufficient_quota" in detail
             if next_api_key is None or not is_key_error:

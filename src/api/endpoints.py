@@ -17,7 +17,7 @@ from src.api.services.provider_context import resolve_provider_context
 from src.api.services.streaming import (
     sse_headers,
     streaming_response,
-    with_streaming_metrics_finalizer,
+    with_streaming_error_handling,
 )
 from src.api.utils.yaml_formatter import format_health_yaml
 from src.conversion.anthropic_sse_to_openai import anthropic_sse_to_openai_chat_completions_sse
@@ -42,6 +42,40 @@ logger = logging.getLogger(__name__)
 conversation_logger = ConversationLogger.get_logger()
 
 router = APIRouter()
+
+
+def _is_timeout_error(exc: Exception) -> bool:
+    """Check if an exception is a timeout-related error.
+
+    Args:
+        exc: The exception to check.
+
+    Returns:
+        True if the exception is a timeout error, False otherwise.
+    """
+    # Check for httpx timeout errors
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    # Check for httpx ReadTimeout specifically
+    if isinstance(exc, httpx.ReadTimeout):
+        return True
+    # Check OpenAI SDK timeout errors
+    error_str = str(exc).lower()
+    timeout_keywords = ("timeout", "timed out", "read timeout", "connect timeout")
+    return any(keyword in error_str for keyword in timeout_keywords)
+
+
+def _map_timeout_to_504() -> HTTPException:
+    """Map a timeout error to HTTP 504 Gateway Timeout.
+
+    Returns:
+        An HTTPException with status code 504.
+    """
+    return HTTPException(
+        status_code=504,
+        detail="Upstream request timed out. Consider increasing REQUEST_TIMEOUT.",
+    )
+
 
 # Initialize models cache if enabled
 models_cache = None
@@ -242,17 +276,18 @@ async def chat_completions(
                         yield chunk
 
                 return streaming_response(
-                    stream=with_streaming_metrics_finalizer(
+                    stream=with_streaming_error_handling(
                         original_stream=anthropic_stream_as_openai(),
                         http_request=http_request,
                         request_id=request_id,
-                        enabled=LOG_REQUEST_METRICS,
+                        provider_name=provider_name,
+                        metrics_enabled=LOG_REQUEST_METRICS,
                     ),
                     headers=sse_headers(),
                 )
 
             # Non-streaming path: ensure metrics are finalized.
-            # Streaming finalization is handled by with_streaming_metrics_finalizer.
+            # Streaming finalization is handled by with_streaming_error_handling.
             try:
                 anthropic_response = await openai_client.create_chat_completion(
                     anthropic_request,
@@ -267,6 +302,9 @@ async def chat_completions(
                     metrics.error = str(e)
                     metrics.error_type = "upstream_error"
                     await tracker.end_request(request_id)
+                # Map timeout errors to 504 Gateway Timeout
+                if _is_timeout_error(e):
+                    raise _map_timeout_to_504() from e
                 raise
 
             openai_response = anthropic_message_to_openai_chat_completion(
@@ -293,11 +331,12 @@ async def chat_completions(
                     yield f"{chunk}\n"
 
             return streaming_response(
-                stream=with_streaming_metrics_finalizer(
+                stream=with_streaming_error_handling(
                     original_stream=openai_stream_as_sse_lines(),
                     http_request=http_request,
                     request_id=request_id,
-                    enabled=LOG_REQUEST_METRICS,
+                    provider_name=provider_name,
+                    metrics_enabled=LOG_REQUEST_METRICS,
                 ),
                 headers=sse_headers(),
             )
@@ -314,6 +353,9 @@ async def chat_completions(
                 metrics.error = str(e)
                 metrics.error_type = "upstream_error"
                 await tracker.end_request(request_id)
+            # Map timeout errors to 504 Gateway Timeout
+            if _is_timeout_error(e):
+                raise _map_timeout_to_504() from e
             raise
 
         # Basic timing log (metrics system is handled elsewhere for /v1/messages).
@@ -535,11 +577,12 @@ async def create_message(
                         )
 
                         return streaming_response(
-                            stream=with_streaming_metrics_finalizer(
+                            stream=with_streaming_error_handling(
                                 original_stream=anthropic_stream,
                                 http_request=http_request,
                                 request_id=request_id,
-                                enabled=LOG_REQUEST_METRICS,
+                                provider_name=provider_name,
+                                metrics_enabled=LOG_REQUEST_METRICS,
                             ),
                             headers=sse_headers(),
                         )
@@ -608,11 +651,12 @@ async def create_message(
                             tool_name_map_inverse=tool_name_map_inverse,
                         )
 
-                        stream_with_metrics = with_streaming_metrics_finalizer(
+                        stream_with_error_handling = with_streaming_error_handling(
                             original_stream=converted_stream,
                             http_request=http_request,
                             request_id=request_id,
-                            enabled=LOG_REQUEST_METRICS,
+                            provider_name=provider_name,
+                            metrics_enabled=LOG_REQUEST_METRICS,
                         )
 
                         # Apply middleware to streaming deltas (e.g., capture thought signatures)
@@ -626,7 +670,7 @@ async def create_message(
                             processor.middleware_chain = config.provider_manager.middleware_chain
 
                             wrapped_stream = MiddlewareStreamingWrapper(
-                                original_stream=stream_with_metrics,
+                                original_stream=stream_with_error_handling,
                                 request_context=RequestContext(
                                     messages=openai_request.get("messages", []),
                                     provider=provider_name,
@@ -640,7 +684,9 @@ async def create_message(
 
                             return streaming_response(stream=wrapped_stream, headers=sse_headers())
 
-                        return streaming_response(stream=stream_with_metrics, headers=sse_headers())
+                        return streaming_response(
+                            stream=stream_with_error_handling, headers=sse_headers()
+                        )
                     except HTTPException as e:
                         # Convert to proper error response for streaming
                         if LOG_REQUEST_METRICS and metrics:
@@ -900,6 +946,14 @@ async def create_message(
                 await tracker.end_request(request_id)
             raise
         except Exception as e:
+            # Check if this is a timeout error and map to 504
+            if _is_timeout_error(e):
+                if LOG_REQUEST_METRICS and metrics:
+                    metrics.error = "Upstream timeout"
+                    metrics.error_type = "timeout"
+                    metrics.end_time = time.time()
+                    await tracker.end_request(request_id)
+                raise _map_timeout_to_504() from e
             import traceback
 
             duration_ms = (time.time() - start_time) * 1000

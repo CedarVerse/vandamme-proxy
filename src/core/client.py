@@ -287,8 +287,12 @@ class OpenAIClient:
                 )
             except HTTPException as e:
                 exc = e
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}") from e
+            # Note: Timeouts and other streaming errors should NOT be converted to
+            # HTTPException here - they will be caught by the SSE error handler wrapper
+            # in streaming.py and converted to graceful error events.
+            except Exception:
+                # Let timeout errors propagate so they can be handled by the SSE wrapper
+                raise
             finally:
                 # Clean up active request tracking
                 if request_id and request_id in self.active_requests:
