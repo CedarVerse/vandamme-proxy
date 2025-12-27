@@ -69,3 +69,63 @@ jobs:
             ```bash
             pip install vandamme-proxy==${{ steps.version.outputs.version }}
             ```
+
+  build-binaries:
+    name: Build Binaries
+    needs: release  # Run after PyPI release succeeds
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            platform_os: linux
+            binary_ext: ""
+          - os: macos-latest
+            platform_os: darwin
+            binary_ext: ""
+          - os: windows-latest
+            platform_os: windows
+            binary_ext: ".exe"
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write  # Required for uploading artifacts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-path: uv.lock
+
+      - name: Install dependencies
+        run: make install-dev
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build CLI binary (${{ matrix.platform_os }})
+        run: |
+          make build-cli
+        shell: bash
+
+      - name: Upload binaries to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Upload all binaries
+          gh release upload ${{ steps.version.outputs.version }} \
+            dist/nuitka/vdm-*${{ matrix.binary_ext }} \
+            --clobber
+        shell: bash

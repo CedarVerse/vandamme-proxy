@@ -1,186 +1,127 @@
-# Claude Code Proxy - Binary Packaging Guide
+# Vandamme Proxy - Binary Packaging Guide
 
-This document provides detailed instructions for packaging the Claude Code Proxy Python project into binary executables.
+This document provides instructions for packaging the Vandamme Proxy CLI tool into standalone binary executables using Nuitka.
 
-## Packaging Overview
+## Overview
 
-We use PyInstaller to package the Python FastAPI application into a standalone binary executable that can run without requiring Python to be installed on the target system.
+The `vdm` CLI tool is compiled into standalone binaries that can run without requiring Python installation. Users can download pre-built binaries from [GitHub Releases](https://github.com/elifarley/vandamme-proxy/releases).
 
-### Generated Binary Files
+## Available Binaries
 
-- **Directory Version**: `dist/claude-code-proxy/` (6.4MB executable + 49MB dependencies)
-- **Single-file Version**: `dist/claude-code-proxy-single` (24MB standalone executable)
+Pre-built binaries are available for:
+- **Linux**: `vdm-linux-x86_64`
+- **macOS**: `vdm-darwin-x86_64` (runs on Apple Silicon via Rosetta 2)
+- **Windows**: `vdm-windows-x86_64.exe`
 
-## Environment Requirements
+## Installation from Binaries
 
-### Development Environment
+### Download
 
-- Python 3.9+
-- uv package manager
-- Operating Systems: Linux/macOS/Windows
-
-### Installing Packaging Tools
-
-```bash
-# Install PyInstaller using uv
-uv add --dev pyinstaller
-```
-
-## Packaging Steps
-
-### 1. Directory Version Packaging (Recommended for development/testing)
+1. Visit [GitHub Releases](https://github.com/elifarley/vandamme-proxy/releases)
+2. Download the appropriate binary for your platform
+3. Make it executable (Linux/macOS):
 
 ```bash
-# Use custom spec file
-uv run pyinstaller claude-proxy.spec
+chmod +x vdm-linux-x86_64  # or vdm-darwin-x86_64
 ```
 
-### 2. Single-file Version Packaging (Recommended for deployment)
+### Verify Installation
 
 ```bash
-# Quick single-file packaging
-uv run pyinstaller --onefile --name claude-code-proxy-single src/main.py
+./vdm-linux-x86_64 --version
 ```
 
-### 3. Custom Configuration Packaging
+### Usage
+
+The binary supports all CLI commands:
 
 ```bash
-# Include specific modules
-uv run pyinstaller --onefile --hidden-import=src.api.endpoints src/main.py
+# Start server
+./vdm-linux-x86_64 server start
 
-# Include data files
-uv run pyinstaller --onefile --add-data="src:src" src/main.py
+# Check health
+./vdm-linux-x86_64 health
+
+# View models
+./vdm-linux-x86_64 models list
 ```
 
-## PyInstaller Configuration Details
+## Building Binaries Locally
 
-### claude-proxy.spec Configuration
+### Requirements
 
-```python
-# Main configuration items explanation
-a = Analysis(
-    ['src/main.py'],           # Entry file
-    pathex=['.'],              # Search path
-    binaries=[],               # Binary files
-    datas=[('src', 'src')],    # Data files
-    hiddenimports=[...],       # Hidden import modules
-)
+- Python 3.10+
+- UV package manager
+- Nuitka 2.0+
+- **Linux**: `patchelf` (install via `sudo apt install patchelf` or `sudo dnf install patchelf`)
 
-# Key hidden imports included
-hiddenimports=[
-    'src.api.endpoints',
-    'src.core.config',
-    'src.core.client',
-    'uvicorn.logging',
-    'uvicorn.loops.auto',
-    'fastapi.openapi.utils',
-    'pydantic.v1',
-]
-```
-
-## Cross-platform Packaging
-
-### Linux (Current Environment)
+### Installation
 
 ```bash
-# Build on Linux system
-uv run pyinstaller --onefile src/main.py
-# Output: claude-code-proxy-single (Linux ELF)
+# Install development dependencies (includes Nuitka)
+make install-dev
 ```
 
-### Windows
+### Build for Current Platform
 
 ```bash
-# Build on Windows system
-pyinstaller --onefile src/main.py
-# Output: claude-code-proxy-single.exe
+# Build CLI binary
+make build-cli
+
+# Output: dist/nuitka/vdm-{platform}-{arch}
 ```
 
-### macOS
+### Build for All Platforms
+
+Use the provided GitHub Actions workflow:
+
+1. Push a semantic version tag: `git tag 1.2.3 && git push origin 1.2.3`
+2. GitHub Actions automatically builds binaries for all platforms
+3. Find binaries in the GitHub Release
+
+## Configuration
+
+Binaries embed required configuration files (`src/config/*.toml`) automatically. Additional configuration via environment variables:
 
 ```bash
-# Build on macOS system
-pyinstaller --onefile src/main.py
-# Output: claude-code-proxy-single (macOS executable)
+# Set API keys
+export OPENAI_API_KEY="your-key"
+
+# Optional: Set proxy authentication
+export ANTHROPIC_API_KEY="proxy-auth-key"
+
+# Start server
+./vdm-linux-x86_64 server start
 ```
 
-## Usage Instructions
+## Deployment
 
-### Basic Execution
-
-```bash
-# Directory version
-./dist/claude-code-proxy/claude-code-proxy
-
-# Single-file version
-./dist/claude-code-proxy-single
-```
-
-### Environment Variable Configuration
+### Systemd Service (Linux)
 
 ```bash
-# Set required environment variables
-export OPENAI_API_KEY="your-api-key-here"
+# 1. Copy binary
+sudo cp vdm-linux-x86_64 /usr/local/bin/vdm
+sudo chmod +x /usr/local/bin/vdm
 
-# Optional environment variables
-export ANTHROPIC_API_KEY="anthropic-key"
-export HOST="0.0.0.0"
-export PORT="8082"
-export LOG_LEVEL="INFO"
-```
-
-### Viewing Help
-
-```bash
-./claude-code-proxy --help
-```
-
-### Starting the Server
-
-```bash
-# Run in foreground
-OPENAI_API_KEY="your-key" ./claude-code-proxy
-
-# Run in background
-OPENAI_API_KEY="your-key" nohup ./claude-code-proxy &
-```
-
-## Deployment Instructions
-
-### System Requirements
-
-- **Memory**: Minimum 512MB RAM
-- **Storage**: Minimum 100MB available space
-- **Network**: Access to OpenAI API
-- **Permissions**: No root privileges required
-
-### Production Environment Deployment
-
-```bash
-# 1. Upload binary file to server
-scp claude-code-proxy-single user@server:/opt/claude-proxy/
-
-# 2. Set environment variables
-cat > /opt/claude-proxy/.env << EOF
-OPENAI_API_KEY=sk-your-actual-key
-ANTHROPIC_API_KEY=your-anthropic-key
+# 2. Create environment file
+sudo cat > /etc/vandamme-proxy.env << EOF
+OPENAI_API_KEY=sk-your-key
 HOST=0.0.0.0
 PORT=8082
-LOG_LEVEL=WARNING
+LOG_LEVEL=INFO
 EOF
 
-# 3. Create system service (systemd)
-cat > /etc/systemd/system/claude-proxy.service << EOF
+# 3. Create systemd service
+sudo cat > /etc/systemd/system/vandamme-proxy.service << EOF
 [Unit]
-Description=Claude Code Proxy
+Description=Vandamme Proxy Server
 After=network.target
 
 [Service]
 Type=simple
-User=www-data
-WorkingDirectory=/opt/claude-proxy
-EnvironmentFile=/opt/claude-proxy/.env
-ExecStart=/opt/claude-proxy/claude-code-proxy-single
+User=vandamme
+EnvironmentFile=/etc/vandamme-proxy.env
+ExecStart=/usr/local/bin/vdm server start
 Restart=always
 RestartSec=5
 
@@ -189,165 +130,71 @@ WantedBy=multi-user.target
 EOF
 
 # 4. Start service
-systemctl daemon-reload
-systemctl start claude-proxy
-systemctl enable claude-proxy
+sudo systemctl daemon-reload
+sudo systemctl enable vandamme-proxy
+sudo systemctl start vandamme-proxy
 ```
 
-### Docker Container Deployment
+### Docker
 
 ```dockerfile
 FROM alpine:latest
 RUN apk add --no-cache libstdc++
-COPY claude-code-proxy-single /usr/local/bin/claude-code-proxy
-EXPOSE 8082
-CMD ["claude-code-proxy"]
+COPY vdm-linux-x86_64 /usr/local/bin/vdm
+RUN chmod +x /usr/local/bin/vdm
+ENTRYPOINT ["/usr/local/bin/vdm", "server", "start"]
 ```
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Permission Errors**
-
-   ```bash
-   # Add execution permissions
-   chmod +x claude-code-proxy
-   ```
-
-2. **Missing Dependencies Error**
-
-   - Regenerate spec file to include more hidden imports
-   - Check PyInstaller version compatibility
-
-3. **Environment Variables Not Set**
-
-   ```bash
-   # Check environment variables
-   env | grep -E "(OPENAI|ANTHROPIC)"
-   ```
-
-4. **Port Already in Use**
-
-   ```bash
-   # Find process using port
-   lsof -i :8082
-   # Or use different port
-   PORT=8083 ./claude-code-proxy
-   ```
-
-5. **Insufficient Memory**
-   - Single-file version requires more memory for decompression
-   - Consider using directory version
-
-### Log Debugging
+### Permission Denied (Linux/macOS)
 
 ```bash
-# Enable detailed logging
-LOG_LEVEL=DEBUG ./claude-code-proxy
-
-# View system logs
-journalctl -u claude-proxy -f
+chmod +x vdm-*
 ```
 
-## Performance Optimization
-
-### Reducing Binary Size
-
-1. **Using UPX Compression** (Windows only)
-
-   ```bash
-   pyinstaller --onefile --upx-dir=/path/to/upx src/main.py
-   ```
-
-2. **Removing Unnecessary Dependencies**
-
-   - Clean up requirements.txt
-   - Use --exclude to exclude large modules
-
-3. **Selective Imports**
-   - Import only required modules
-   - Avoid wildcard imports
-
-### Startup Optimization
+### Missing API Keys
 
 ```bash
-# Preload optimization
-export PYTHONOPTIMIZE=2
-
-# Memory optimization
-export PYTHONDONTWRITEBYTECODE=1
+export OPENAI_API_KEY="your-key"
+./vdm server start
 ```
 
-## File Structure Explanation
-
-```
-dist/
-├── claude-code-proxy/           # Directory version
-│   ├── claude-code-proxy        # Main executable (6.4MB)
-│   └── _internal/               # Dependencies (49MB)
-│       ├── base_library.zip
-│       ├── libpython3.10.so.1.0
-│       └── ...
-└── claude-code-proxy-single     # Single-file version (24MB)
-```
-
-## Version Management
-
-### Updating Binaries
-
-1. Rebuild the project
-2. Backup old version
-3. Deploy new version
-4. Restart service
-
-### Rollback Strategy
+### Port Already in Use
 
 ```bash
-# Keep previous version
-cp claude-code-proxy claude-code-proxy.bak
-
-# Rollback command
-mv claude-code-proxy.bak claude-code-proxy
-systemctl restart claude-proxy
+# Use different port
+PORT=8083 ./vdm server start
 ```
 
-## Security Considerations
+### Version Check
 
-1. **API Key Security**
+```bash
+./vdm --version
+```
 
-   - Use environment variables instead of hardcoding
-   - Rotate keys regularly
-   - Restrict file permissions
+## Binary Size
 
-2. **Network Security**
+Typical binary sizes:
+- **Linux**: ~20-25 MB
+- **macOS**: ~22-28 MB
+- **Windows**: ~18-23 MB
 
-   - Use HTTPS
-   - Configure firewall rules
-   - Monitor access logs
+Binaries are compiled with `--enable-plugin=anti-bloat` for size optimization.
 
-3. **System Security**
-   - Run under non-root user
-   - Update system regularly
-   - Monitor resource usage
+## Security
 
-## Next Steps
+- Binaries include no hardcoded credentials
+- API keys provided via environment variables
+- Run as non-root user recommended
+- Verify binary integrity: checksums provided in releases
 
-1. **Testing**: Validate functionality in target environment
-2. **Monitoring**: Set up log rotation and monitoring
-3. **Backup**: Regularly backup configurations and binaries
-4. **Documentation**: Update deployment and maintenance documentation
+## Support
 
-## Support Contact
-
-If you encounter issues, please check:
-
-1. System logs: `journalctl -u claude-proxy`
-2. Application logs: Check stdout/stderr output
-3. Network connectivity: Test API endpoint connectivity
-4. Dependency integrity: Verify binary file integrity
+For issues or questions:
+- [GitHub Issues](https://github.com/elifarley/vandamme-proxy/issues)
+- [Documentation](https://github.com/elifarley/vandamme-proxy/blob/main/README.md)
 
 ---
 
-_Last updated: August 22, 2024_
-_PyInstaller version: 6.15.0_
+_Updated for Nuitka 2.0+ | Last updated: 2025-12-26_

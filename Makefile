@@ -17,7 +17,8 @@ MAKEFLAGS += --no-builtin-rules
         ci coverage pre-commit all watch deps-check security-check validate \
         quick-check init-dev check-install version version-set version-bump \
         tag-release release-check release-build release-publish release \
-        release-full release-patch release-minor release-major info
+        release-full release-patch release-minor release-major info \
+        build-cli clean-binaries
 
 # ============================================================================
 # Configuration
@@ -36,6 +37,10 @@ PYTHON_FILES := $(SRC_DIR) $(TEST_DIR) start_proxy.py test_cancellation.py
 HOST ?= 0.0.0.0
 PORT ?= 8082
 LOG_LEVEL ?= INFO
+
+# Nuitka Configuration
+NUITKA := uv run python -m nuitka
+BUILD_DIR := dist/nuitka
 
 # Auto-detect available tools
 HAS_UV := $(shell command -v uv 2> /dev/null)
@@ -80,11 +85,17 @@ help: ## Show this help message
 	@echo "$(BOLD)Docker:$(RESET)"
 	@grep -E '^docker-.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(BOLD)Binary Builds:$(RESET)"
+	@grep -E '^(build-.*|clean-binaries):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(BOLD)CI/CD:$(RESET)"
 	@grep -E '^(ci|build|all):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(BOLD)Release Management:$(RESET)"
+	@grep -E '^(version|tag-|release-).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(BOLD)Utilities:$(RESET)"
-	@grep -E '^(version|info|env-template):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(info|env-template):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 
 # ============================================================================
@@ -183,6 +194,7 @@ clean: ## Clean temporary files and caches
 	@find . -type f -name "*.pyo" -delete 2>/dev/null || true
 	@find . -type f -name ".coverage" -delete 2>/dev/null || true
 	@rm -rf build/ dist/ 2>/dev/null || true
+	@$(MAKE) clean-binaries
 	@echo "$(GREEN)✓ Cleaned successfully$(RESET)"
 
 # ============================================================================
@@ -319,6 +331,54 @@ coverage: ## Run tests with coverage report
 		$(UV) run $(PYTEST) $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=html --cov-report=term-missing -m unit; \
 	fi
 	@echo "$(GREEN)✓ Coverage report generated in htmlcov/$(RESET)"
+
+# ============================================================================
+# Binary Builds (Nuitka)
+# ============================================================================
+
+build-cli: ## Build CLI binary for current platform
+	@echo "$(BOLD)$(GREEN)Building CLI binary...$(RESET)"
+	@# Ensure _version.py exists from hatch-vcs
+	@$(UV) build --wheel 2>/dev/null || true
+	@# Detect platform
+	@UNAME_S="$$(uname -s)"; \
+	UNAME_M="$$(uname -m)"; \
+	if [ "$${UNAME_S}" = "Darwin" ]; then \
+		PLATFORM="darwin"; \
+	elif [ "$${UNAME_S}" = "Linux" ]; then \
+		PLATFORM="linux"; \
+	else \
+		PLATFORM="unknown"; \
+	fi; \
+	BINARY_EXT=""; \
+	if [ "$${UNAME_S}" = "Darwin" ] && [ "$${UNAME_M}" = "arm64" ]; then \
+		BINARY_NAME="vdm-$${PLATFORM}-aarch64$${BINARY_EXT}"; \
+	elif [ "$${UNAME_S}" = "Darwin" ] && [ "$${UNAME_M}" = "x86_64" ]; then \
+		BINARY_NAME="vdm-$${PLATFORM}-x86_64$${BINARY_EXT}"; \
+	elif [ "$${UNAME_S}" = "Linux" ]; then \
+		BINARY_NAME="vdm-$${PLATFORM}-$${UNAME_M}$${BINARY_EXT}"; \
+	else \
+		BINARY_NAME="vdm$${BINARY_EXT}"; \
+	fi; \
+	echo "$(CYAN)Platform: $${PLATFORM} $${UNAME_M}$(RESET)"; \
+	$(NUITKA) --onefile --standalone \
+		--enable-plugin=anti-bloat \
+		--nofollow-import-to=tests \
+		--nofollow-import-to=src.dashboard \
+		--assume-yes-for-downloads \
+		--output-dir=$(BUILD_DIR) \
+		--output-filename=$${BINARY_NAME} \
+		--include-data-files=src/config/*.toml=src/config/ \
+		src/cli/main.py
+	@echo "$(GREEN)✓ CLI binary built: $(BUILD_DIR)/$$(ls $(BUILD_DIR)/vdm*)$(RESET)"
+
+clean-binaries: ## Clean Nuitka build artifacts
+	@echo "$(BOLD)$(YELLOW)Cleaning Nuitka artifacts...$(RESET)"
+	@rm -rf $(BUILD_DIR) 2>/dev/null || true
+	@find . -type d -name "*.build" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name "*.dist" -exec rm -rf {} + 2>/dev/null || true
+	@find . -name "*.onefile-build" -exec rm -rf {} + 2>/dev/null || true
+	@echo "$(GREEN)✓ Binary artifacts cleaned$(RESET)"
 
 # ============================================================================
 # Docker
