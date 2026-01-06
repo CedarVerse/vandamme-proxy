@@ -234,11 +234,12 @@ class AliasManager:
             # Normalize for lookup (aliases are stored lowercase)
             model_part_lower = model_part.lower()
 
-            # Check for cycle
-            if model_part_lower in seen:
+            # Check for cycle (provider-scoped to avoid false positives)
+            provider_scoped_alias = f"{potential_provider}:{model_part_lower}"
+            if provider_scoped_alias in seen:
                 logger.warning(
                     "[AliasManager] Cycle detected in alias resolution: "
-                    f"{' -> '.join(seen)} -> {model_part}. "
+                    f"{' -> '.join(sorted(seen))} -> {provider_scoped_alias}. "
                     f"Stopping at current resolved model: '{resolved_model}'"
                 )
                 break
@@ -248,8 +249,8 @@ class AliasManager:
                 # Not an alias key - must be a concrete model name
                 break
 
-            # It's an alias! Resolve it and continue
-            seen.add(model_part_lower)
+            # It's an alias! Resolve it and continue (track provider-scoped)
+            seen.add(provider_scoped_alias)
             target = aliases_for_provider[model_part_lower]
 
             logger.debug(
