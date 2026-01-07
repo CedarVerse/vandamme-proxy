@@ -11,7 +11,7 @@ SHELL := /bin/bash
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
-.PHONY: help dev-env-init dev-env-setup dev-deps-sync run dev health clean watch doctor check-install sanitize format lint type-check quick-check security-check validate test test-unit test-integration test-e2e test-all test-quick coverage ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
+.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint type-check quick-check security-check validate test test-unit test-integration test-e2e test-all test-quick coverage ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
 
 # ============================================================================
 # Configuration
@@ -71,7 +71,7 @@ help: ## Show this help message
 	@printf "\n"
 	@printf "$(BOLD)Quick Start:$(RESET)\n"
 	@printf "  $(GREEN)make dev-env-init$(RESET)  - Initialize development environment\n"
-	@printf "  $(GREEN)make dev-env-setup$(RESET) - Setup development environment\n"
+	@printf "  $(GREEN)make dev-deps-sync$(RESET) - Install dependencies and CLI\n"
 	@printf "  $(GREEN)make dev$(RESET)            - Start development server\n"
 	@printf "  $(GREEN)make validate$(RESET)       - Quick check + tests (fast)\n"
 	@printf "  $(GREEN)make doctor$(RESET)         - Environment health check\n"
@@ -109,36 +109,25 @@ help: ## Show this help message
 # Environment Setup (dev-* prefix = mutations)
 # ============================================================================
 
-dev-env-init: ## Initialize development environment (create .venv, install CLI)
+dev-env-init: ## Initialize development environment (create .venv only)
 	@printf "$(BOLD)$(BLUE)🚀 Initializing development environment...$(RESET)\n"
 	@printf "$(CYAN)→ Creating virtual environment...$(RESET)\n"
 	@test -d .venv || $(UV) venv
-	@printf "$(CYAN)→ Installing CLI in editable mode...$(RESET)\n"
-	$(UV) sync --extra cli --editable
-	@printf "$(CYAN)→ Verifying installation...$(RESET)\n"
-	$(MAKE) check-install
-	@printf "\n"
-	@printf "$(BOLD)$(GREEN)✅ Development environment initialized!$(RESET)\n"
+	@printf "$(BOLD)$(GREEN)✅ .venv created$(RESET)\n"
 	@printf "\n"
 	@printf "$(BOLD)$(CYAN)Next steps:$(RESET)\n"
-	@printf "  $(CYAN)• The 'vdm' command is now available$(RESET)\n"
-	@printf "  $(CYAN)• Start server: make dev$(RESET)\n"
-	@printf "  $(CYAN)• Run tests: make test$(RESET)\n"
-	@printf "  $(CYAN)• Health check: make doctor$(RESET)\n"
+	@printf "  $(CYAN)• Run: make dev-deps-sync$(RESET)\n"
 
 dev-deps-sync: ## Reconcile dependencies (uv sync with dev tools)
 	@printf "$(BOLD)$(GREEN)Syncing dependencies...$(RESET)\n"
+	@test -d .venv || (printf "$(RED)❌ .venv not found$(RESET)\n" && printf "$(CYAN)ℹ️ Run: make dev-env-init$(RESET)\n" && exit 1)
 ifndef HAS_UV
 	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
 endif
-	$(UV) sync
-	@printf "$(BOLD)$(CYAN)✅ Dependencies synced$(RESET)\n"
-
-dev-env-setup: dev-deps-sync ## Setup development environment (sync deps + install CLI)
-	@printf "$(BOLD)$(GREEN)Installing CLI in editable mode...$(RESET)\n"
 	$(UV) sync --extra cli --editable
-	@printf "$(BOLD)$(CYAN)✅ Development environment ready$(RESET)\n"
-	@printf "$(BOLD)$(YELLOW)💡 The 'vdm' command is now available$(RESET)\n"
+	@printf "$(CYAN)→ Verifying installation...$(RESET)\n"
+	$(MAKE) check-install
+	@printf "$(BOLD)$(CYAN)✅ Dependencies synced, CLI installed$(RESET)\n"
 
 # ============================================================================
 # Development
@@ -148,7 +137,7 @@ run: ## Run the proxy server
 	@printf "$(BOLD)$(BLUE)Starting Vandamme Proxy...$(RESET)\n"
 	$(PYTHON) start_proxy.py
 
-dev: dev-env-setup ## Setup dev environment and run server with hot reload
+dev: dev-deps-sync ## Sync deps and run server with hot reload
 	@printf "$(BOLD)$(BLUE)Starting development server with auto-reload...$(RESET)\n"
 	$(UV) run uvicorn src.main:app --host $(HOST) --port $(PORT) --reload --log-level $(shell echo $(LOG_LEVEL) | tr '[:upper:]' '[:lower:]')
 
@@ -479,12 +468,12 @@ build: clean ## Build distribution packages
 # CI/CD
 # ============================================================================
 
-ci: dev-env-setup sanitize test ## Run full CI pipeline (setup, sanitize, test)
+ci: dev-deps-sync sanitize test ## Run full CI pipeline (setup, sanitize, test)
 	@printf "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)\n"
 	@printf "$(BOLD)$(GREEN)✓ CI Pipeline Complete$(RESET)\n"
 	@printf "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)\n"
 
-all: clean dev-env-setup sanitize test build ## Run everything (clean, setup, sanitize, test, build)
+all: clean dev-deps-sync sanitize test build ## Run everything (clean, setup, sanitize, test, build)
 	@printf "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)\n"
 	@printf "$(BOLD)$(GREEN)✓ All Tasks Complete$(RESET)\n"
 	@printf "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)\n"
