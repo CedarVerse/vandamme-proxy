@@ -58,8 +58,8 @@ The binary supports all CLI commands:
 ### Installation
 
 ```bash
-# Install development dependencies (includes Nuitka)
-make install-dev
+# Setup development environment (includes Nuitka)
+make dev-env-setup
 ```
 
 ### Build for Current Platform

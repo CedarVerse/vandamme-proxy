@@ -495,10 +495,10 @@ git clone https://github.com/CedarVerse/vandamme-proxy.git
 cd vandamme-proxy
 
 # Initialize development environment (recommended)
-make init-dev
+make dev-env-init
 
-# Or install dependencies manually
-make install-dev
+# Or setup dependencies manually
+make dev-env-setup
 make check-install
 ```
 
@@ -511,8 +511,8 @@ make dev
 # Run tests (excluding e2e by default)
 make test
 
-# Run code quality checks
-make check
+# Run all static checks (format + lint + typecheck, NO tests)
+make sanitize
 
 # Format code
 make format

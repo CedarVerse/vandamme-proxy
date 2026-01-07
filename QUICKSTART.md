@@ -24,8 +24,8 @@ vdm version
 git clone https://github.com/stellar-amenities/vandamme-proxy.git
 cd vandamme-proxy
 
-# Install with development dependencies
-make install-dev
+# Setup development environment
+make dev-env-setup
 source .venv/bin/activate
 
 # Verify installation

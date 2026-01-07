@@ -14,10 +14,10 @@ Vandamme Proxy is a FastAPI-based proxy server that converts Claude API requests
 
 ```bash
 # Quick start (recommended) - sets up everything
-make init-dev
+make dev-env-init
 
-# Or install in development mode only
-make install-dev
+# Or setup development environment only
+make dev-env-setup
 
 # Verify installation succeeded
 make check-install
@@ -126,8 +126,8 @@ make lint
 # Type checking
 make type-check
 
-# Run all code quality checks (lint + type-check)
-make check
+# Run all static checks (format + lint + typecheck, NO tests)
+make sanitize
 
 # Quick check (format + lint only, skip type-check)
 make quick-check
@@ -145,11 +145,11 @@ make security-check
 ### Common Development Tasks
 
 ```bash
-# Install in development mode (editable, includes CLI)
-make install-dev
+# Setup development environment (editable, includes CLI)
+make dev-env-setup
 
 # Initialize complete development environment (recommended for first-time setup)
-make init-dev
+make dev-env-init
 
 # Verify that vdm CLI is installed correctly
 make check-install

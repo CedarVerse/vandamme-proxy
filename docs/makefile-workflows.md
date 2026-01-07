@@ -19,13 +19,13 @@ Welcome to the Vandamme Proxy development workflows guide! This document explain
 ### First-time Setup
 ```bash
 # Initialize complete development environment (recommended)
-make init-dev
+make dev-env-init
 
 # Or install in development mode only
-make install-dev
+make dev-env-setup
 
 # Verify installation
-make check-install
+make sanitize-install
 
 # Start the development server
 make dev
@@ -35,7 +35,7 @@ make dev
 ```bash
 make help              # Show all available commands
 make test-quick        # Run tests fast
-make check            # Run code quality checks
+make sanitize            # Run code quality checks
 make make              # Show project information
 make version          # Show current version
 ```
@@ -48,7 +48,7 @@ make version          # Show current version
 
 #### 1. Initialize Development Environment
 ```bash
-make init-dev
+make dev-env-init
 ```
 This command:
 - Installs all dependencies including CLI tools
@@ -61,10 +61,10 @@ This command:
 make install
 
 # Install all dependencies (including dev tools)
-make install-deps
+make dev-deps-sync
 
 # Install in development mode with CLI
-make install-dev
+make dev-env-setup
 
 # Install using pip (fallback)
 make install-pip
@@ -107,7 +107,7 @@ curl -s http://localhost:8082/health | python -m json.tool
 git pull
 
 # Install/update dependencies
-make install-dev
+make dev-env-setup
 
 # Check everything is working
 make validate
@@ -247,7 +247,7 @@ make lint
 make type-check
 
 # Run both linting and type checking
-make check
+make sanitize
 ```
 
 #### Quick Checks
@@ -270,7 +270,7 @@ make pre-commit
 
 This is equivalent to:
 ```bash
-make format && make check
+make format && make sanitize
 ```
 
 ### Understanding Ruff Configuration
@@ -508,7 +508,7 @@ This removes:
 make deps-check
 
 # Validate installation
-make check-install
+make sanitize-install
 ```
 
 ---
@@ -524,7 +524,7 @@ warning: `VIRTUAL_ENV=/path/to/env` does not match the project environment path 
 **Solution**: Deactivate any active virtual environment before using make commands:
 ```bash
 deactivate  # If in a venv
-make install-dev
+make dev-env-setup
 ```
 
 #### 2. Test Failures
@@ -564,7 +564,7 @@ make release
 ```bash
 # Reinstall dependencies
 make clean
-make install-dev
+make dev-env-setup
 
 # Or
 uv sync
@@ -668,7 +668,7 @@ vdm version
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-make install-dev
+make dev-env-setup
 ```
 
 ### Git Workflow Best Practices
@@ -693,7 +693,7 @@ git push origin feature/new-feature
 - `chore:` for maintenance
 
 3. **Pull requests**:
-   - All PRs should pass `make check`
+   - All PRs should pass `make sanitize`
    - Include tests for new features
    - Update documentation as needed
 
@@ -742,7 +742,7 @@ This guide covers the essential workflows for developing, testing, and releasing
 Remember to:
 1. **Run tests early and often**
 2. **Keep code clean with `make format`**
-3. **Validate before releasing with `make check`**
+3. **Validate before releasing with `make sanitize`**
 4. **Use the help commands when unsure**
 
 Happy coding! 🚀

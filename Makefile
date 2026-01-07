@@ -11,14 +11,7 @@ SHELL := /bin/bash
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
-.PHONY: help install install-deps install-dev install-pip clean \
-        test test-unit test-integration test-e2e test-all format lint type-check check build \
-        run dev docker-build docker-up docker-down docker-logs health \
-        ci coverage pre-commit all watch deps-check security-check validate \
-        quick-check init-dev check-install version version-set version-bump \
-        tag-release release-check release-build release-publish release \
-        release-full release-patch release-minor release-major info \
-        build-cli clean-binaries
+.PHONY: help dev-env-init dev-env-setup dev-deps-sync run dev health clean watch doctor check-install sanitize format lint type-check quick-check security-check validate test test-unit test-integration test-e2e test-all test-quick coverage ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
 
 # ============================================================================
 # Configuration
@@ -77,23 +70,24 @@ help: ## Show this help message
 	@printf "$(BOLD)$(CYAN)Vandamme Proxy - Makefile Commands$(RESET)\n"
 	@printf "\n"
 	@printf "$(BOLD)Quick Start:$(RESET)\n"
-	@printf "  $(GREEN)make init-dev$(RESET)       - Initialize development environment\n"
-	@printf "  $(GREEN)make install-dev$(RESET)    - Install in development mode\n"
+	@printf "  $(GREEN)make dev-env-init$(RESET)  - Initialize development environment\n"
+	@printf "  $(GREEN)make dev-env-setup$(RESET) - Setup development environment\n"
 	@printf "  $(GREEN)make dev$(RESET)            - Start development server\n"
 	@printf "  $(GREEN)make validate$(RESET)       - Quick check + tests (fast)\n"
+	@printf "  $(GREEN)make doctor$(RESET)         - Environment health check\n"
 	@printf "\n"
-	@printf "$(BOLD)Setup & Installation:$(RESET)\n"
-	@grep -E '^(install|install-|deps-check|init-dev|check-install).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@printf "$(BOLD)Environment Setup (dev-* prefix = mutations):$(RESET)\n"
+	@grep -E '^(dev-|check-install).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
-	@printf "$(BOLD)Development:$(RESET)\n"
-	@grep -E '^(run|dev|health|clean|watch):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
-	@printf "\n"
-	@printf "$(BOLD)Code Quality:$(RESET)\n"
-	@grep -E '^(format|lint|type-check|check|quick-check|security-check|validate|pre-commit):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(RESET) %s\n", $$1, $$2}'
+	@printf "$(BOLD)Code Quality (sanitize = static checks only):$(RESET)\n"
+	@grep -E '^(sanitize|format|lint|type-check|quick-check|security-check|validate|pre-commit).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Testing:$(RESET)\n"
 	@grep -E '^test.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@grep -E '^coverage.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@printf "\n"
+	@printf "$(BOLD)Development:$(RESET)\n"
+	@grep -E '^(run|dev|health|clean|watch|doctor):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Docker:$(RESET)\n"
 	@grep -E '^docker-.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -102,66 +96,49 @@ help: ## Show this help message
 	@grep -E '^(build-.*|clean-binaries):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)CI/CD:$(RESET)\n"
-	@grep -E '^(ci|build|all):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(ci|build|all|pre-commit):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Release Management:$(RESET)\n"
 	@grep -E '^(version|tag-|release-).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Utilities:$(RESET)\n"
-	@grep -E '^(info|env-template):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(info|env-template|deps-check):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 
 # ============================================================================
-# Setup & Installation
+# Environment Setup (dev-* prefix = mutations)
 # ============================================================================
 
-install: ## Install production dependencies (UV)
-	@echo "$(BOLD)$(GREEN)Installing production dependencies...$(RESET)"
-ifndef HAS_UV
-	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
-endif
-	$(UV) sync --no-dev
-
-install-deps: ## Install all dependencies including dev tools (UV)
-	@echo "$(BOLD)$(GREEN)Installing all dependencies (including dev)...$(RESET)"
-ifndef HAS_UV
-	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
-endif
-	$(UV) sync
-
-install-dev: ## Install in development/editable mode (enables hot reload)
-	@echo "$(BOLD)$(GREEN)Installing in development mode...$(RESET)"
-ifndef HAS_UV
-	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
-endif
-	$(UV) sync --extra cli --editable
-	@echo "$(BOLD)$(CYAN)✅ Package installed in development mode$(RESET)"
-	@echo "$(BOLD)$(YELLOW)💡 The 'vdm' command is now available$(RESET)"
-
-install-pip: ## Install dependencies using pip (fallback)
-	@echo "$(BOLD)$(GREEN)Installing dependencies with pip...$(RESET)"
-	$(PYTHON) -m pip install -r requirements.txt
-
-deps-check: ## Check for outdated dependencies
-	@echo "$(BOLD)$(YELLOW)Checking dependencies...$(RESET)"
-ifdef HAS_UV
-	@$(UV) pip list --outdated || echo "$(GREEN)✓ All dependencies up to date$(RESET)"
-else
-	@$(PYTHON) -m pip list --outdated || echo "$(GREEN)✓ All dependencies up to date$(RESET)"
-endif
-
-init-dev: ## Initialize development environment
+dev-env-init: ## Initialize development environment (create .venv, install CLI)
 	@echo "$(BOLD)$(BLUE)🚀 Initializing development environment...$(RESET)"
-	$(MAKE) install-dev
+	@echo "$(CYAN)→ Creating virtual environment...$(RESET)"
+	@test -d .venv || $(UV) venv
+	@echo "$(CYAN)→ Installing CLI in editable mode...$(RESET)"
+	$(UV) sync --extra cli --editable
+	@echo "$(CYAN)→ Verifying installation...$(RESET)"
 	$(MAKE) check-install
 	@echo ""
-	@echo "$(BOLD)$(GREEN)✅ Development environment ready!$(RESET)"
+	@echo "$(BOLD)$(GREEN)✅ Development environment initialized!$(RESET)"
 	@echo ""
 	@echo "$(BOLD)$(CYAN)Next steps:$(RESET)"
 	@echo "  $(CYAN)• The 'vdm' command is now available$(RESET)"
 	@echo "  $(CYAN)• Start server: make dev$(RESET)"
 	@echo "  $(CYAN)• Run tests: make test$(RESET)"
-	@echo "  $(CYAN)• See all commands: make help$(RESET)"
+	@echo "  $(CYAN)• Health check: make doctor$(RESET)"
+
+dev-deps-sync: ## Reconcile dependencies (uv sync with dev tools)
+	@echo "$(BOLD)$(GREEN)Syncing dependencies...$(RESET)"
+ifndef HAS_UV
+	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
+endif
+	$(UV) sync
+	@echo "$(BOLD)$(CYAN)✅ Dependencies synced$(RESET)"
+
+dev-env-setup: dev-deps-sync ## Setup development environment (sync deps + install CLI)
+	@echo "$(BOLD)$(GREEN)Installing CLI in editable mode...$(RESET)"
+	$(UV) sync --extra cli --editable
+	@echo "$(BOLD)$(CYAN)✅ Development environment ready$(RESET)"
+	@echo "$(BOLD)$(YELLOW)💡 The 'vdm' command is now available$(RESET)"
 
 # ============================================================================
 # Development
@@ -171,7 +148,7 @@ run: ## Run the proxy server
 	@echo "$(BOLD)$(BLUE)Starting Vandamme Proxy...$(RESET)"
 	$(PYTHON) start_proxy.py
 
-dev: install-dev ## Setup dev environment and run server with hot reload
+dev: dev-env-setup ## Setup dev environment and run server with hot reload
 	@echo "$(BOLD)$(BLUE)Starting development server with auto-reload...$(RESET)"
 	$(UV) run uvicorn src.main:app --host $(HOST) --port $(PORT) --reload --log-level $(shell echo $(LOG_LEVEL) | tr '[:upper:]' '[:lower:]')
 
@@ -187,7 +164,7 @@ check-install: ## Verify that installation was successful
 		.venv/bin/vdm version; \
 	else \
 		echo "$(RED)❌ vdm command not found$(RESET)"; \
-		echo "$(YELLOW)💡 Run 'make install-dev' to install CLI$(RESET)"; \
+		echo "$(YELLOW)💡 Run 'make dev-env-init' to install CLI$(RESET)"; \
 		exit 1; \
 	fi
 	@echo "$(CYAN)Checking Python imports...$(RESET)"
@@ -196,6 +173,61 @@ ifndef HAS_UV
 endif
 	@$(UV) run python -c "import src.cli.main; print('$(GREEN)✅ CLI module imports successfully$(RESET)')" || exit 1
 	@echo "$(BOLD)$(GREEN)✅ Installation verified successfully$(RESET)"
+
+doctor: ## Run comprehensive environment health check (read-only)
+	@echo "$(BOLD)$(CYAN)🩺 Doctor - Environment Health Check$(RESET)"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)System Information:$(RESET)"
+	@echo "  OS:           $$(uname -s)"
+	@echo "  Architecture: $$(uname -m)"
+	@echo "  Kernel:       $$(uname -r)"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)Tool Availability:$(RESET)"
+	@command -v uv >/dev/null 2>&1 && echo "  UV:           $(GREEN)✓ installed$(RESET)" || echo "  UV:           $(RED)✗ not found$(RESET)"
+	@command -v python3 >/dev/null 2>&1 && echo "  Python 3:     $(GREEN)✓ installed$$($(PYTHON) --version 2>&1)$(RESET)" || echo "  Python 3:     $(RED)✗ not found$(RESET)"
+	@command -v docker >/dev/null 2>&1 && echo "  Docker:       $(GREEN)✓ installed$(RESET)" || echo "  Docker:       $(YELLOW)⚠ not found$(RESET)"
+	@command -v git >/dev/null 2>&1 && echo "  Git:          $(GREEN)✓ installed$$($(git) --version 2>&1)$(RESET)" || echo "  Git:          $(RED)✗ not found$(RESET)"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)Project State:$(RESET)"
+	@if [ -d ".venv" ]; then \
+		echo "  Virtual Env:  $(GREEN)✓ exists$(RESET)"; \
+	else \
+		echo "  Virtual Env:  $(RED)✗ not found (run make dev-env-init)$(RESET)"; \
+	fi
+	@if [ -f "uv.lock" ]; then \
+		echo "  UV Lock:      $(GREEN)✓ present$(RESET)"; \
+	else \
+		echo "  UV Lock:      $(YELLOW)⚠ not found (run make dev-deps-sync)$(RESET)"; \
+	fi
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)CLI Verification:$(RESET)"
+	@if [ -f ".venv/bin/vdm" ]; then \
+		echo "  vdm command:  $(GREEN)✓ installed$$($(shell pwd)/.venv/bin/vdm --version 2>&1 | head -1)$(RESET)"; \
+	else \
+		echo "  vdm command:  $(RED)✗ not found (run make dev-env-init)$(RESET)"; \
+	fi
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)Dependency Status:$(RESET)"
+	@$(UV) pip check 2>/dev/null && echo "  Dependencies:  $(GREEN)✓ satisfied$(RESET)" || echo "  Dependencies:  $(RED)✗ conflicts detected$(RESET)"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)Git Status:$(RESET)"
+	@if [ -d ".git" ]; then \
+		BRANCH=$$(git branch --show-current 2>/dev/null); \
+		if [ -n "$$BRANCH" ]; then \
+			echo "  Branch:       $$(git branch --show-current)"; \
+			if git diff-index --quiet HEAD -- 2>/dev/null; then \
+				echo "  Status:       $(GREEN)✓ clean$(RESET)"; \
+			else \
+				echo "  Status:       $(YELLOW)⚠ uncommitted changes$(RESET)"; \
+			fi \
+		else \
+			echo "  Git:          $(YELLOW)⚠ no commits yet$(RESET)"; \
+		fi \
+	else \
+		echo "  Git:          $(YELLOW)⚠ not a git repository$(RESET)"; \
+	fi
+	@echo ""
+	@echo "$(BOLD)$(GREEN)✓ Health check complete$(RESET)"
 
 clean: ## Clean temporary files and caches
 	@echo "$(BOLD)$(YELLOW)Cleaning temporary files...$(RESET)"
@@ -242,8 +274,8 @@ type-check: ## Run type checking with mypy
 	@$(UV) run $(MYPY) $(SRC_DIR) || (echo "$(YELLOW)⚠ Type checking found issues$(RESET)" && exit 1)
 	@echo "$(GREEN)✓ Type checking passed$(RESET)"
 
-check: lint type-check ## Run all code quality checks (lint + type-check)
-	@echo "$(BOLD)$(GREEN)✓ All quality checks passed$(RESET)"
+sanitize: format lint type-check ## Run all static checks (format + lint + typecheck, NO tests)
+	@echo "$(BOLD)$(GREEN)✓ Sanitize complete - all static checks passed$(RESET)"
 
 quick-check: ## Fast check (format + lint only, skip type-check)
 	@echo "$(BOLD)$(YELLOW)Running quick checks (format + lint)...$(RESET)"
@@ -259,7 +291,7 @@ security-check: ## Run security vulnerability checks
 validate: quick-check test-quick ## Fast validation (quick-check + quick tests)
 	@echo "$(BOLD)$(GREEN)✓ Validation complete$(RESET)"
 
-pre-commit: format check ## Format code and run all checks (run before commit)
+pre-commit: sanitize test-quick ## Run pre-commit checks (sanitize + quick tests)
 	@echo "$(BOLD)$(GREEN)✓ Pre-commit checks complete$(RESET)"
 
 # ============================================================================
@@ -447,12 +479,12 @@ build: clean ## Build distribution packages
 # CI/CD
 # ============================================================================
 
-ci: install-dev check test ## Run full CI pipeline (install, check, test)
+ci: dev-env-setup sanitize test ## Run full CI pipeline (setup, sanitize, test)
 	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
 	@echo "$(BOLD)$(GREEN)✓ CI Pipeline Complete$(RESET)"
 	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
 
-all: clean install-dev check test build ## Run everything (clean, install, check, test, build)
+all: clean dev-env-setup sanitize test build ## Run everything (clean, setup, sanitize, test, build)
 	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
 	@echo "$(BOLD)$(GREEN)✓ All Tasks Complete$(RESET)"
 	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
@@ -561,3 +593,11 @@ env-template: ## Generate .env template file
 	@echo "#PORT=8082" >> .env.template
 	@echo "#LOG_LEVEL=INFO" >> .env.template
 	@echo "$(GREEN)✓ Generated .env.template$(RESET)"
+
+deps-check: ## Check for outdated dependencies
+	@echo "$(BOLD)$(YELLOW)Checking dependencies...$(RESET)"
+ifdef HAS_UV
+	@$(UV) pip list --outdated || echo "$(GREEN)✓ All dependencies up to date$(RESET)"
+else
+	@$(PYTHON) -m pip list --outdated || echo "$(GREEN)✓ All dependencies up to date$(RESET)"
+endif

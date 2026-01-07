@@ -39,10 +39,10 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: make install-dev
+        run: make dev-env-setup
 
       - name: Run code quality checks
-        run: make check
+        run: make sanitize
 
       - name: Run security checks
         run: make security-check
@@ -76,7 +76,7 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: make install-dev
+        run: make dev-env-setup
 
       - name: Run unit tests
         run: make test-unit
@@ -130,7 +130,7 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: make install-dev
+        run: make dev-env-setup
 
       - name: Build package
         run: make build
