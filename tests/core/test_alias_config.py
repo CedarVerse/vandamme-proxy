@@ -175,16 +175,6 @@ opus = "default-opus"
         config3 = loader.load_config(force_reload=True)
         assert config1 is not config3  # Should be a new object
 
-    @patch("src.core.alias_config.tomli", None)
-    @pytest.mark.xfail(reason="Test infrastructure conflict with module reloading and patching")
-    def test_missing_toml_library(self):
-        """Test graceful degradation when tomli is not available."""
-        loader = AliasConfigLoader()
-        config = loader.load_config(force_reload=True)
-
-        # Should return empty provider and defaults configs when tomli is not available
-        assert config == {"providers": {}, "defaults": {}}
-
     def test_invalid_toml_file(self):
         """Test handling of invalid TOML files."""
         with tempfile.TemporaryDirectory() as tmpdir:

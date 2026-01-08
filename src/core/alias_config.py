@@ -5,6 +5,7 @@ and provider settings from TOML files, allowing for both package defaults and lo
 """
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -53,11 +54,23 @@ class AliasConfigLoader:
         if _config_cache is not None and not force_reload:
             return _config_cache
 
-        # Check for tomli at runtime to allow proper patching in tests
+        # Check for tomli at runtime - fail fast if missing
         if globals().get("tomli") is None:
-            logger.warning("tomli/tomllib not available, configuration disabled")
-            _config_cache = {"providers": {}, "defaults": {}}
-            return _config_cache
+            print(
+                "\n"
+                "=X= CRITICAL: Missing required dependency 'tomli'\n"
+                "=\n"
+                "= This dependency is required for Vandamme Proxy to function.\n"
+                "=\n"
+                "= FIX: Install the missing dependency:\n"
+                "=     uv sync --extra cli   # or: pip install tomli>=2.0.0\n"
+                "=\n"
+                "= If you're seeing this error after installation, try:\n"
+                "=     make dev-env-init    # Recommended: Complete dev environment\n"
+                "=   or make dev-env-setup   # Alternative: Setup only\n"
+                "=\n"
+            )
+            sys.exit(1)
 
         merged_config: dict[str, Any] = {"providers": {}, "defaults": {}}
 
