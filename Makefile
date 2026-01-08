@@ -11,7 +11,7 @@ SHELL := /bin/bash
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
-.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck quick-check security-check validate test test-unit test-integration test-e2e test-all test-quick coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
+.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-e2e test-all test-quick coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
 
 # ============================================================================
 # Configuration
@@ -80,7 +80,7 @@ help: ## Show this help message
 	@grep -E '^(dev-|check-install).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Code Quality (sanitize = static checks only):$(RESET)\n"
-	@grep -E '^(sanitize|format|lint|typecheck|quick-check|security-check).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(sanitize|format|lint|typecheck|security-check).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Merge Gates:$(RESET)\n"
 	@grep -E '^(check-?|validate|pre-commit).*:.*##' $(MAKEFILE_LIST) | grep -v 'check-install' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -245,12 +245,6 @@ check-quick: ## Fast local validation (sanitize + test-quick)
 	@$(MAKE) sanitize
 	@$(MAKE) test-quick
 	@printf "$(BOLD)$(GREEN)✓ Quick validation passed$(RESET)\n"
-
-quick-check: ## Fast check (format + lint only, skip typecheck)
-	@printf "$(BOLD)$(YELLOW)Running quick checks (format + lint)...$(RESET)\n"
-	@$(UV) run $(RUFF) format --check $(PYTHON_FILES) || (printf "$(YELLOW)⚠ Run 'make format' to fix formatting$(RESET)\n" && exit 1)
-	@$(UV) run $(RUFF) check $(PYTHON_FILES) || (printf "$(YELLOW)⚠ Run 'make format' to fix issues$(RESET)\n" && exit 1)
-	@printf "$(GREEN)✓ Quick checks passed$(RESET)\n"
 
 security-check: ## Run security vulnerability checks
 	@printf "$(BOLD)$(YELLOW)Running security checks...$(RESET)\n"
