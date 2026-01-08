@@ -11,7 +11,7 @@ SHELL := /bin/bash
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
-.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint type-check quick-check security-check validate test test-unit test-integration test-e2e test-all test-quick coverage ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
+.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck quick-check security-check validate test test-unit test-integration test-e2e test-all test-quick coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
 
 # ============================================================================
 # Configuration
@@ -73,14 +73,17 @@ help: ## Show this help message
 	@printf "  $(GREEN)make dev-env-init$(RESET)  - Initialize development environment\n"
 	@printf "  $(GREEN)make dev-deps-sync$(RESET) - Install dependencies and CLI\n"
 	@printf "  $(GREEN)make dev$(RESET)            - Start development server\n"
-	@printf "  $(GREEN)make validate$(RESET)       - Quick check + tests (fast)\n"
+	@printf "  $(GREEN)make check-quick$(RESET)    - Fast validation (static + unit tests)\n"
 	@printf "  $(GREEN)make doctor$(RESET)         - Environment health check\n"
 	@printf "\n"
 	@printf "$(BOLD)Environment Setup (dev-* prefix = mutations):$(RESET)\n"
 	@grep -E '^(dev-|check-install).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Code Quality (sanitize = static checks only):$(RESET)\n"
-	@grep -E '^(sanitize|format|lint|type-check|quick-check|security-check|validate|pre-commit).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(sanitize|format|lint|typecheck|quick-check|security-check).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-20s$(RESET) %s\n", $$1, $$2}'
+	@printf "\n"
+	@printf "$(BOLD)Merge Gates:$(RESET)\n"
+	@grep -E '^(check-?|validate|pre-commit).*:.*##' $(MAKEFILE_LIST) | grep -v 'check-install' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Testing:$(RESET)\n"
 	@grep -E '^test.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -96,7 +99,7 @@ help: ## Show this help message
 	@grep -E '^(build-.*|clean-binaries):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)CI/CD:$(RESET)\n"
-	@grep -E '^(ci|build|all|pre-commit):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(ci|build|all).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Release Management:$(RESET)\n"
 	@grep -E '^(version|tag-|release-).*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -163,7 +166,7 @@ endif
 	@$(UV) run python -c "import src.cli.main; print('$(GREEN)✅ CLI module imports successfully$(RESET)')" || exit 1
 	@printf "$(BOLD)$(GREEN)✅ Installation verified successfully$(RESET)\n"
 
-doctor: ## Run comprehensive environment health check (read-only)
+doctor: ## Run environment health check (read-only, fast)
 	@printf "$(BOLD)$(CYAN)🩺 Doctor - Environment Health Check$(RESET)\n"
 	@printf "\n"
 	@printf "$(BOLD)$(YELLOW)System Information:$(RESET)\n"
@@ -175,48 +178,9 @@ doctor: ## Run comprehensive environment health check (read-only)
 	@command -v uv >/dev/null 2>&1 && printf "  UV:           $(GREEN)✓ installed$(RESET)\n" || printf "  UV:           $(RED)✗ not found$(RESET)\n"
 	@command -v python3 >/dev/null 2>&1 && printf "  Python 3:     $(GREEN)✓ installed$$($(PYTHON) --version 2>&1)$(RESET)\n" || printf "  Python 3:     $(RED)✗ not found$(RESET)\n"
 	@command -v docker >/dev/null 2>&1 && printf "  Docker:       $(GREEN)✓ installed$(RESET)\n" || printf "  Docker:       $(YELLOW)⚠ not found$(RESET)\n"
-	@command -v git >/dev/null 2>&1 && printf "  Git:          $(GREEN)✓ installed$$($(git) --version 2>&1)$(RESET)\n" || printf "  Git:          $(RED)✗ not found$(RESET)\n"
+	@command -v git >/dev/null 2>&1 && printf "  Git:          $(GREEN)✓ installed$$(git --version 2>&1)$(RESET)\n" || printf "  Git:          $(RED)✗ not found$(RESET)\n"
 	@printf "\n"
-	@printf "$(BOLD)$(YELLOW)Project State:$(RESET)\n"
-	@if [ -d ".venv" ]; then \
-		printf "  Virtual Env:  $(GREEN)✓ exists$(RESET)\n"; \
-	else \
-		printf "  Virtual Env:  $(RED)✗ not found (run make dev-env-init)$(RESET)\n"; \
-	fi
-	@if [ -f "uv.lock" ]; then \
-		printf "  UV Lock:      $(GREEN)✓ present$(RESET)\n"; \
-	else \
-		printf "  UV Lock:      $(YELLOW)⚠ not found (run make dev-deps-sync)$(RESET)\n"; \
-	fi
-	@printf "\n"
-	@printf "$(BOLD)$(YELLOW)CLI Verification:$(RESET)\n"
-	@if [ -f ".venv/bin/vdm" ]; then \
-		printf "  vdm command:  $(GREEN)✓ installed$$($(shell pwd)/.venv/bin/vdm --version 2>&1 | head -1)$(RESET)\n"; \
-	else \
-		printf "  vdm command:  $(RED)✗ not found (run make dev-env-init)$(RESET)\n"; \
-	fi
-	@printf "\n"
-	@printf "$(BOLD)$(YELLOW)Dependency Status:$(RESET)\n"
-	@$(UV) pip check 2>/dev/null && printf "  Dependencies:  $(GREEN)✓ satisfied$(RESET)\n" || printf "  Dependencies:  $(RED)✗ conflicts detected$(RESET)\n"
-	@printf "\n"
-	@printf "$(BOLD)$(YELLOW)Git Status:$(RESET)\n"
-	@if [ -d ".git" ]; then \
-		BRANCH=$$(git branch --show-current 2>/dev/null); \
-		if [ -n "$$BRANCH" ]; then \
-			printf "  Branch:       $$(git branch --show-current)\n"; \
-			if git diff-index --quiet HEAD -- 2>/dev/null; then \
-				printf "  Status:       $(GREEN)✓ clean$(RESET)\n"; \
-			else \
-				printf "  Status:       $(YELLOW)⚠ uncommitted changes$(RESET)\n"; \
-			fi \
-		else \
-			printf "  Git:          $(YELLOW)⚠ no commits yet$(RESET)\n"; \
-		fi \
-	else \
-		printf "  Git:          $(YELLOW)⚠ not a git repository$(RESET)\n"; \
-	fi
-	@printf "\n"
-	@printf "$(BOLD)$(GREEN)✓ Health check complete$(RESET)\n"
+	@printf "$(BOLD)$(GREEN)✓ Environment check complete$(RESET)\n"
 
 clean: ## Clean temporary files and caches
 	@printf "$(BOLD)$(YELLOW)Cleaning temporary files...$(RESET)\n"
@@ -258,15 +222,31 @@ lint: ## Run code linting checks (ruff - check only)
 	@$(UV) run $(RUFF) check $(PYTHON_FILES) || (printf "$(YELLOW)⚠ Run 'make format' to fix issues$(RESET)\n" && exit 1)
 	@printf "$(GREEN)✓ Linting passed$(RESET)\n"
 
-type-check: ## Run type checking with mypy
+typecheck: ## Run type checking with mypy
 	@printf "$(BOLD)$(YELLOW)Running type checker...$(RESET)\n"
 	@$(UV) run $(MYPY) $(SRC_DIR) || (printf "$(YELLOW)⚠ Type checking found issues$(RESET)\n" && exit 1)
 	@printf "$(GREEN)✓ Type checking passed$(RESET)\n"
 
-sanitize: format lint type-check ## Run all static checks (format + lint + typecheck, NO tests)
+sanitize: ## Run all static checks (format + lint + typecheck, NO tests)
+	@printf "$(BOLD)$(YELLOW)Running sanitize...$(RESET)\n"
+	@$(MAKE) format
+	@$(MAKE) lint
+	@$(MAKE) typecheck
 	@printf "$(BOLD)$(GREEN)✓ Sanitize complete - all static checks passed$(RESET)\n"
 
-quick-check: ## Fast check (format + lint only, skip type-check)
+check: ## Merge safety gate (sanitize + test-unit)
+	@printf "$(BOLD)$(CYAN)Running merge gate...$(RESET)\n"
+	@$(MAKE) sanitize
+	@$(MAKE) test-unit
+	@printf "$(BOLD)$(GREEN)✓ Merge gate passed$(RESET)\n"
+
+check-quick: ## Fast local validation (sanitize + test-quick)
+	@printf "$(BOLD)$(CYAN)Running quick validation...$(RESET)\n"
+	@$(MAKE) sanitize
+	@$(MAKE) test-quick
+	@printf "$(BOLD)$(GREEN)✓ Quick validation passed$(RESET)\n"
+
+quick-check: ## Fast check (format + lint only, skip typecheck)
 	@printf "$(BOLD)$(YELLOW)Running quick checks (format + lint)...$(RESET)\n"
 	@$(UV) run $(RUFF) format --check $(PYTHON_FILES) || (printf "$(YELLOW)⚠ Run 'make format' to fix formatting$(RESET)\n" && exit 1)
 	@$(UV) run $(RUFF) check $(PYTHON_FILES) || (printf "$(YELLOW)⚠ Run 'make format' to fix issues$(RESET)\n" && exit 1)
@@ -277,10 +257,13 @@ security-check: ## Run security vulnerability checks
 	@command -v bandit >/dev/null 2>&1 || { printf "$(YELLOW)Installing bandit...$(RESET)\n"; $(UV) pip install bandit; }
 	@$(UV) run bandit -r $(SRC_DIR) -ll || printf "$(GREEN)✓ No security issues found$(RESET)\n"
 
-validate: quick-check test-quick ## Fast validation (quick-check + quick tests)
-	@printf "$(BOLD)$(GREEN)✓ Validation complete$(RESET)\n"
+validate: sanitize test coverage ## Full release validation (static + tests + coverage)
+	@printf "$(BOLD)$(GREEN)✓ Validation complete - ready to ship$(RESET)\n"
 
-pre-commit: sanitize test-quick ## Run pre-commit checks (sanitize + quick tests)
+# Pre-commit hook target - customize as needed for your project
+# Default: runs fast checks (sanitize + quick tests)
+# Alternatives: use 'sanitize' (faster), 'check' (slower), or add custom steps
+pre-commit: sanitize test-quick ## Run pre-commit hooks (customizable)
 	@printf "$(BOLD)$(GREEN)✓ Pre-commit checks complete$(RESET)\n"
 
 # ============================================================================
