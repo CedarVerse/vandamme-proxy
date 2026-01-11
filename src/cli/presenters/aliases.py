@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.table import Table
 
 from src.api.services.alias_service import AliasSummary, ProviderAliasInfo
+from src.core.constants import Constants
 
 # Rich color codes for providers (moved from service layer)
 PROVIDER_COLORS = {
@@ -96,7 +97,11 @@ class AliasSummaryPresenter:
                 model_display = model_display[:35] + "..."
 
             # Dim fallback types
-            type_display = f"[dim]{alias_type}[/dim]" if alias_type == "fallback" else alias_type
+            type_display = (
+                f"[dim]{alias_type}[/dim]"
+                if alias_type == Constants.ALIAS_TYPE_FALLBACK
+                else alias_type
+            )
 
             table.add_row(f"   {alias}", f"   {model_display}", f"   {type_display}")
 
@@ -127,7 +132,7 @@ class AliasSummaryPresenter:
 
             if provider_info.aliases:
                 first_alias, first_target, first_type = provider_info.aliases[0]
-                is_fallback = first_type == "fallback"
+                is_fallback = first_type == Constants.ALIAS_TYPE_FALLBACK
 
                 self.console.print(
                     f"      Example: model='{first_alias}' → resolves to "
@@ -165,7 +170,9 @@ class AliasSummaryPresenter:
 
             for alias, target, alias_type in provider_info.aliases:
                 type_display = (
-                    f"[dim]{alias_type}[/dim]" if alias_type == "fallback" else alias_type
+                    f"[dim]{alias_type}[/dim]"
+                    if alias_type == Constants.ALIAS_TYPE_FALLBACK
+                    else alias_type
                 )
                 table.add_row(
                     f"{color}{provider_info.provider}{reset}", alias, target, type_display

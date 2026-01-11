@@ -7,6 +7,7 @@ from rich.console import Console
 
 from src.api.services.alias_service import AliasSummary, ProviderAliasInfo
 from src.cli.presenters.aliases import AliasSummaryPresenter
+from src.core.constants import Constants
 
 
 @pytest.mark.unit
@@ -43,8 +44,8 @@ def test_presenter_with_aliases(capsys):
                 alias_count=2,
                 fallback_count=1,
                 aliases=[
-                    ("haiku", "gpt-4o-mini", "fallback"),
-                    ("fast", "gpt-4o", "explicit"),
+                    ("haiku", "gpt-4o-mini", Constants.ALIAS_TYPE_FALLBACK),
+                    ("fast", "gpt-4o", Constants.ALIAS_TYPE_EXPLICIT),
                 ],
             )
         ],
@@ -76,15 +77,15 @@ def test_presenter_with_multiple_providers(capsys):
                 alias_count=2,
                 fallback_count=0,
                 aliases=[
-                    ("fast", "gpt-4o", "explicit"),
-                    ("haiku", "gpt-4o-mini", "explicit"),
+                    ("fast", "gpt-4o", Constants.ALIAS_TYPE_EXPLICIT),
+                    ("haiku", "gpt-4o-mini", Constants.ALIAS_TYPE_EXPLICIT),
                 ],
             ),
             ProviderAliasInfo(
                 provider="anthropic",
                 alias_count=1,
                 fallback_count=0,
-                aliases=[("chat", "claude-3-5-sonnet", "explicit")],
+                aliases=[("chat", "claude-3-5-sonnet", Constants.ALIAS_TYPE_EXPLICIT)],
             ),
         ],
         default_provider="openai",
@@ -113,8 +114,8 @@ def test_presenter_table_format():
                 alias_count=2,
                 fallback_count=1,
                 aliases=[
-                    ("haiku", "gpt-4o-mini", "fallback"),
-                    ("fast", "gpt-4o", "explicit"),
+                    ("haiku", "gpt-4o-mini", Constants.ALIAS_TYPE_FALLBACK),
+                    ("fast", "gpt-4o", Constants.ALIAS_TYPE_EXPLICIT),
                 ],
             )
         ],

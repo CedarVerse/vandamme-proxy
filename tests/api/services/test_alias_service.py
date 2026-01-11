@@ -7,6 +7,7 @@ import pytest
 from src.api.services.alias_service import (
     AliasService,
 )
+from src.core.constants import Constants
 
 
 @pytest.mark.unit
@@ -182,7 +183,7 @@ def test_get_alias_summary_with_aliases(mock_alias_manager, mock_provider_manage
     haiku_entry = next((a for a in provider_info.aliases if a[0] == "haiku"), None)
     assert haiku_entry is not None
     assert haiku_entry[1] == "gpt-4o-mini"
-    assert haiku_entry[2] == "fallback"
+    assert haiku_entry[2] == Constants.ALIAS_TYPE_FALLBACK
 
 
 @pytest.mark.unit
@@ -216,3 +217,28 @@ def mock_alias_manager():
 def mock_provider_manager():
     """Mock ProviderManager."""
     return MagicMock()
+
+
+@pytest.mark.unit
+def test_get_active_aliases_result_propagates_exceptions(mock_alias_manager, mock_provider_manager):
+    """Test get_active_aliases_result propagates unexpected exceptions."""
+    mock_alias_manager.get_all_aliases.side_effect = RuntimeError("Database error")
+    mock_provider_manager.list_providers.return_value = {"openai": MagicMock()}
+
+    service = AliasService(mock_alias_manager, mock_provider_manager)
+
+    with pytest.raises(RuntimeError, match="Database error"):
+        service.get_active_aliases_result()
+
+
+@pytest.mark.unit
+def test_get_active_aliases_result_attribute_error(mock_alias_manager, mock_provider_manager):
+    """Test get_active_aliases_result handles AttributeError gracefully."""
+    mock_provider_manager.list_providers.side_effect = AttributeError("Not initialized")
+
+    service = AliasService(mock_alias_manager, mock_provider_manager)
+    result = service.get_active_aliases_result()
+
+    assert result.is_success is False
+    assert result.error_message == "No active providers found"
+    assert result.aliases == {}

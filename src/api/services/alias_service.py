@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+from src.core.constants import Constants
+
 if TYPE_CHECKING:
     from src.core.alias_manager import AliasManager
     from src.core.provider_manager import ProviderManager
@@ -16,16 +18,37 @@ if TYPE_CHECKING:
 logger = getLogger(__name__)
 
 
+# NOTE: Frozen Dataclasses with Mutable Fields
+#
+# This module uses @dataclass(frozen=True) to prevent field reassignment,
+# but some dataclasses contain mutable dict/list fields. This is a pragmatic
+# design choice that balances immutability benefits with Python's idiomatic
+# patterns.
+#
+# Our approach:
+# 1. Dataclass is frozen (fields cannot be reassigned)
+# 2. Dict/list contents are defensively copied on return
+# 3. Callers treat returned structures as immutable by convention
+
+
 @dataclass(frozen=True)
 class ActiveAliasesResult:
     """Result of get_active_aliases with status information.
 
     Attributes:
-        aliases: Dict mapping provider name to their aliases
+        aliases: Dict mapping provider name to their aliases.
+                 NOTE: This is a defensive copy - callers should not mutate.
+                 The dataclass is frozen (fields cannot be reassigned).
         is_success: True if the operation succeeded
         error_message: Optional error message if is_success is False
         provider_count: Number of active providers
         alias_count: Total number of aliases across all providers
+
+    Note:
+        This dataclass is frozen to prevent field reassignment, but the
+        dict contents are mutable by Python's design. We defensively
+        copy these structures on return, and callers should treat them
+        as immutable by convention.
     """
 
     aliases: dict[str, dict[str, str]]
@@ -43,7 +66,13 @@ class ProviderAliasInfo:
         provider: Provider name
         alias_count: Total number of aliases for this provider
         fallback_count: Number of aliases from fallback configuration
-        aliases: List of (alias_name, target_model, type) tuples
+        aliases: List of (alias_name, target_model, type) tuples.
+                 NOTE: This is a defensive copy - callers should not mutate.
+
+    Note:
+        This dataclass is frozen to prevent field reassignment. The list
+        container is mutable by design, but we defensively copy on return.
+        Callers should treat the contents as immutable by convention.
     """
 
     provider: str
@@ -60,8 +89,14 @@ class AliasSummary:
         total_aliases: Total number of aliases across all providers
         total_providers: Number of active providers
         total_fallbacks: Total number of fallback aliases
-        providers: List of provider-specific alias information
+        providers: List of provider-specific alias information.
+                   NOTE: This is a defensive copy - callers should not mutate.
         default_provider: Default provider name if set
+
+    Note:
+        This dataclass is frozen to prevent field reassignment. The list
+        container is mutable by design, but we defensively copy on return.
+        Callers should treat the contents as immutable by convention.
     """
 
     total_aliases: int
@@ -155,47 +190,42 @@ class AliasService:
             ActiveAliasesResult containing aliases and status information.
             Unlike get_active_aliases(), this distinguishes between "no active
             providers" and "error occurred" scenarios.
+
+        Note:
+            Fail-fast behavior: unexpected exceptions (except AttributeError
+            during early initialization) propagate to the caller. Only
+            AttributeError from provider initialization is handled gracefully.
         """
-        try:
-            active_providers = self._get_active_provider_names()
+        active_providers = self._get_active_provider_names()
 
-            if not active_providers:
-                return ActiveAliasesResult(
-                    aliases={},
-                    is_success=False,
-                    error_message="No active providers found",
-                    provider_count=0,
-                    alias_count=0,
-                )
-
-            all_aliases = self.alias_manager.get_all_aliases()
-
-            filtered_aliases = {
-                provider: aliases.copy()
-                for provider, aliases in all_aliases.items()
-                if provider in active_providers
-            }
-
-            provider_count = len(filtered_aliases)
-            alias_count = sum(len(aliases) for aliases in filtered_aliases.values())
-
-            return ActiveAliasesResult(
-                aliases=filtered_aliases,
-                is_success=True,
-                error_message=None,
-                provider_count=provider_count,
-                alias_count=alias_count,
-            )
-
-        except Exception as e:
-            logger.error("Failed to get active aliases: %s", e)
+        if not active_providers:
             return ActiveAliasesResult(
                 aliases={},
                 is_success=False,
-                error_message=str(e),
+                error_message="No active providers found",
                 provider_count=0,
                 alias_count=0,
             )
+
+        all_aliases = self.alias_manager.get_all_aliases()
+
+        filtered_aliases = {
+            provider: aliases.copy()
+            for provider, aliases in all_aliases.items()
+            if provider in active_providers
+        }
+
+        provider_count = len(filtered_aliases)
+        alias_count = sum(len(aliases) for aliases in filtered_aliases.values())
+
+        return ActiveAliasesResult(
+            aliases=filtered_aliases,
+            is_success=True,
+            error_message=None,
+            provider_count=provider_count,
+            alias_count=alias_count,
+        )
+        # Note: All exceptions (except AttributeError from helper) propagate
 
     def get_alias_summary(self, default_provider: str | None = None) -> AliasSummary:
         """Get structured alias summary for presentation.
@@ -240,7 +270,9 @@ class AliasService:
 
             for alias, target in sorted(provider_aliases.items(), key=lambda x: x[0].lower()):
                 is_fallback = alias in provider_fallbacks
-                alias_type = "fallback" if is_fallback else "explicit"
+                alias_type = (
+                    Constants.ALIAS_TYPE_FALLBACK if is_fallback else Constants.ALIAS_TYPE_EXPLICIT
+                )
                 alias_list.append((alias, target, alias_type))
                 if is_fallback:
                     fallback_count += 1

@@ -27,3 +27,7 @@ class Constants:
 
     DELTA_TEXT = "text_delta"
     DELTA_INPUT_JSON = "input_json_delta"
+
+    # Alias type classifications
+    ALIAS_TYPE_FALLBACK = "fallback"
+    ALIAS_TYPE_EXPLICIT = "explicit"
