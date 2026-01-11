@@ -12,8 +12,13 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
-from src.api.services.key_rotation import make_next_provider_key_fn
+from src.api.services.error_handling import (
+    build_streaming_error_response,
+    finalize_metrics_on_streaming_error,
+)
+from src.api.services.key_rotation import build_api_key_params
 from src.api.services.provider_context import resolve_provider_context
+from src.api.services.request_builder import build_anthropic_passthrough_request
 from src.api.services.streaming import (
     sse_headers,
     streaming_response,
@@ -260,10 +265,6 @@ async def chat_completions(
         openai_client = config.provider_manager.get_client(provider_name, client_api_key)
 
         provider_api_key = provider_ctx.provider_api_key
-        _next_provider_key = make_next_provider_key_fn(
-            provider_name=provider_name,
-            api_keys=provider_config.get_api_keys(),
-        )
 
         if provider_config.is_anthropic_format:
             # Translate OpenAI Chat Completions -> Anthropic Messages request.
@@ -273,13 +274,16 @@ async def chat_completions(
             )
 
             if request.stream:
+                api_key_params = build_api_key_params(
+                    provider_config=provider_config,
+                    provider_name=provider_name,
+                    client_api_key=client_api_key,
+                    provider_api_key=provider_api_key,
+                )
                 anthropic_stream = openai_client.create_chat_completion_stream(
                     anthropic_request,
                     request_id,
-                    api_key=(
-                        client_api_key if provider_config.uses_passthrough else provider_api_key
-                    ),
-                    next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+                    **api_key_params,
                 )
 
                 async def anthropic_stream_as_openai() -> AsyncGenerator[str, None]:
@@ -304,13 +308,16 @@ async def chat_completions(
             # Non-streaming path: ensure metrics are finalized.
             # Streaming finalization is handled by with_streaming_error_handling.
             try:
+                api_key_params = build_api_key_params(
+                    provider_config=provider_config,
+                    provider_name=provider_name,
+                    client_api_key=client_api_key,
+                    provider_api_key=provider_api_key,
+                )
                 anthropic_response = await openai_client.create_chat_completion(
                     anthropic_request,
                     request_id,
-                    api_key=(
-                        client_api_key if provider_config.uses_passthrough else provider_api_key
-                    ),
-                    next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+                    **api_key_params,
                 )
             except Exception as e:
                 if LOG_REQUEST_METRICS and metrics:
@@ -333,11 +340,16 @@ async def chat_completions(
         # OpenAI-format providers: passthrough request/response.
 
         if request.stream:
+            api_key_params = build_api_key_params(
+                provider_config=provider_config,
+                provider_name=provider_name,
+                client_api_key=client_api_key,
+                provider_api_key=provider_api_key,
+            )
             openai_stream = openai_client.create_chat_completion_stream(
                 openai_request,
                 request_id,
-                api_key=(client_api_key if provider_config.uses_passthrough else provider_api_key),
-                next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+                **api_key_params,
             )
 
             async def openai_stream_as_sse_lines() -> AsyncGenerator[str, None]:
@@ -357,11 +369,16 @@ async def chat_completions(
             )
 
         try:
+            api_key_params = build_api_key_params(
+                provider_config=provider_config,
+                provider_name=provider_name,
+                client_api_key=client_api_key,
+                provider_api_key=provider_api_key,
+            )
             openai_response = await openai_client.create_chat_completion(
                 openai_request,
                 request_id,
-                api_key=(client_api_key if provider_config.uses_passthrough else provider_api_key),
-                next_api_key=(None if provider_config.uses_passthrough else _next_provider_key),
+                **api_key_params,
             )
         except Exception as e:
             if LOG_REQUEST_METRICS and metrics:
@@ -547,38 +564,23 @@ async def create_message(
                 if provider_config and provider_config.is_anthropic_format:
                     # Passthrough streaming for Anthropic-compatible APIs
                     # Convert request to dict directly (no format conversion)
-                    # Get the actual model name without provider prefix
-                    provider_name_for_model, resolved_model = get_model_manager().resolve_model(
-                        request.model
+                    resolved_model, claude_request_dict = build_anthropic_passthrough_request(
+                        request=request,
+                        provider_name=provider_name,
                     )
-                    claude_request_dict = request.model_dump(exclude_none=True)
-
-                    # Add provider tracking
-                    claude_request_dict["_provider"] = provider_name
-                    claude_request_dict["model"] = resolved_model  # Use stripped model name
 
                     try:
                         # Direct streaming with passthrough
+                        api_key_params = build_api_key_params(
+                            provider_config=provider_config,
+                            provider_name=provider_name,
+                            client_api_key=client_api_key,
+                            provider_api_key=provider_api_key,
+                        )
                         anthropic_stream = openai_client.create_chat_completion_stream(
                             claude_request_dict,
                             request_id,
-                            api_key=(
-                                client_api_key
-                                if provider_config and provider_config.uses_passthrough
-                                else provider_api_key
-                            ),
-                            next_api_key=(
-                                None
-                                if provider_config and provider_config.uses_passthrough
-                                else (
-                                    make_next_provider_key_fn(
-                                        provider_name=provider_name,
-                                        api_keys=provider_config.get_api_keys(),
-                                    )
-                                    if provider_config
-                                    else None
-                                )
-                            ),
+                            **api_key_params,
                         )
 
                         return streaming_response(
@@ -593,44 +595,32 @@ async def create_message(
                         )
                     except HTTPException as e:
                         # Convert to proper error response for streaming
-                        if LOG_REQUEST_METRICS and metrics:
-                            metrics.error = e.detail
-                            metrics.error_type = "api_error"
-                            metrics.end_time = time.time()
-                            await tracker.end_request(request_id)
-
-                        logger.error(f"Streaming error: {e.detail}")
-                        _log_traceback()
-
-                        error_message = openai_client.classify_openai_error(e.detail)
-                        error_response = {
-                            "type": "error",
-                            "error": {"type": "api_error", "message": error_message},
-                        }
-                        return JSONResponse(status_code=e.status_code, content=error_response)
+                        await finalize_metrics_on_streaming_error(
+                            metrics=metrics,
+                            error=e.detail,
+                            tracker=tracker,
+                            request_id=request_id,
+                        )
+                        return build_streaming_error_response(
+                            exception=e,
+                            openai_client=openai_client,
+                            metrics=metrics,
+                            tracker=tracker,
+                            request_id=request_id,
+                        )
                 else:
                     # OpenAI format streaming (existing logic)
                     try:
+                        api_key_params = build_api_key_params(
+                            provider_config=provider_config,
+                            provider_name=provider_name,
+                            client_api_key=client_api_key,
+                            provider_api_key=provider_api_key,
+                        )
                         openai_stream = openai_client.create_chat_completion_stream(
                             openai_request,
                             request_id,
-                            api_key=(
-                                client_api_key
-                                if provider_config and provider_config.uses_passthrough
-                                else provider_api_key
-                            ),
-                            next_api_key=(
-                                None
-                                if provider_config and provider_config.uses_passthrough
-                                else (
-                                    make_next_provider_key_fn(
-                                        provider_name=provider_name,
-                                        api_keys=provider_config.get_api_keys(),
-                                    )
-                                    if provider_config
-                                    else None
-                                )
-                            ),
+                            **api_key_params,
                         )
 
                         converted_stream = convert_openai_streaming_to_claude_with_cancellation(
@@ -681,21 +671,19 @@ async def create_message(
                         )
                     except HTTPException as e:
                         # Convert to proper error response for streaming
-                        if LOG_REQUEST_METRICS and metrics:
-                            metrics.error = e.detail
-                            metrics.error_type = "api_error"
-                            metrics.end_time = time.time()
-                            await tracker.end_request(request_id)
-
-                        logger.error(f"Streaming error: {e.detail}")
-                        _log_traceback()
-
-                        error_message = openai_client.classify_openai_error(e.detail)
-                        error_response = {
-                            "type": "error",
-                            "error": {"type": "api_error", "message": error_message},
-                        }
-                        return JSONResponse(status_code=e.status_code, content=error_response)
+                        await finalize_metrics_on_streaming_error(
+                            metrics=metrics,
+                            error=e.detail,
+                            tracker=tracker,
+                            request_id=request_id,
+                        )
+                        return build_streaming_error_response(
+                            exception=e,
+                            openai_client=openai_client,
+                            metrics=metrics,
+                            tracker=tracker,
+                            request_id=request_id,
+                        )
             else:
                 # Non-streaming response
                 # Check if provider uses Anthropic format
@@ -704,37 +692,22 @@ async def create_message(
                 if provider_config and provider_config.is_anthropic_format:
                     # Passthrough mode for Anthropic-compatible APIs
                     # Convert request to dict directly (no format conversion)
-                    # Get the actual model name without provider prefix
-                    provider_name_for_model, resolved_model = get_model_manager().resolve_model(
-                        request.model
+                    resolved_model, claude_request_dict = build_anthropic_passthrough_request(
+                        request=request,
+                        provider_name=provider_name,
                     )
-                    claude_request_dict = request.model_dump(exclude_none=True)
-
-                    # Add provider tracking
-                    claude_request_dict["_provider"] = provider_name
-                    claude_request_dict["model"] = resolved_model  # Use stripped model name
 
                     # Make API call
+                    api_key_params = build_api_key_params(
+                        provider_config=provider_config,
+                        provider_name=provider_name,
+                        client_api_key=client_api_key,
+                        provider_api_key=provider_api_key,
+                    )
                     anthropic_response = await openai_client.create_chat_completion(
                         claude_request_dict,
                         request_id,
-                        api_key=(
-                            client_api_key
-                            if provider_config and provider_config.uses_passthrough
-                            else provider_api_key
-                        ),
-                        next_api_key=(
-                            None
-                            if provider_config and provider_config.uses_passthrough
-                            else (
-                                make_next_provider_key_fn(
-                                    provider_name=provider_name,
-                                    api_keys=provider_config.get_api_keys(),
-                                )
-                                if provider_config
-                                else None
-                            )
-                        ),
+                        **api_key_params,
                     )
 
                     # Apply middleware to response (e.g., extract thought signatures)
@@ -774,26 +747,16 @@ async def create_message(
                     return JSONResponse(status_code=200, content=anthropic_response)
                 else:
                     # OpenAI format path (existing logic)
+                    api_key_params = build_api_key_params(
+                        provider_config=provider_config,
+                        provider_name=provider_name,
+                        client_api_key=client_api_key,
+                        provider_api_key=provider_api_key,
+                    )
                     openai_response = await openai_client.create_chat_completion(
                         openai_request,
                         request_id,
-                        api_key=(
-                            client_api_key
-                            if provider_config and provider_config.uses_passthrough
-                            else provider_api_key
-                        ),
-                        next_api_key=(
-                            None
-                            if provider_config and provider_config.uses_passthrough
-                            else (
-                                make_next_provider_key_fn(
-                                    provider_name=provider_name,
-                                    api_keys=provider_config.get_api_keys(),
-                                )
-                                if provider_config
-                                else None
-                            )
-                        ),
+                        **api_key_params,
                     )
 
                     # Apply middleware to response (e.g., extract thought signatures)
