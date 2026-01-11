@@ -11,6 +11,7 @@ from src.core.alias.resolver import (
     AliasResolverChain,
     ChainedAliasResolver,
     LiteralPrefixResolver,
+    Match,
     MatchRanker,
     ResolutionContext,
     SubstringMatcher,
@@ -338,13 +339,13 @@ class TestSubstringMatcher:
         result = resolver.resolve(context)
         assert result is not None
         assert result.matches == (
-            {
-                "provider": "poe",
-                "alias": "haiku",
-                "target": "grok-4.1-fast",
-                "length": 5,
-                "is_exact": True,
-            },
+            Match(
+                provider="poe",
+                alias="haiku",
+                target="grok-4.1-fast",
+                length=5,
+                is_exact=True,
+            ),
         )
 
     def test_substring_match(
@@ -356,7 +357,7 @@ class TestSubstringMatcher:
         assert result is not None
         matches = list(result.matches)
         assert len(matches) == 1
-        assert matches[0]["alias"] == "haiku"
+        assert matches[0].alias == "haiku"
 
     def test_hyphen_underscore_variations(self, resolver: SubstringMatcher) -> None:
         """Test that hyphen/underscore variations work."""
@@ -385,7 +386,7 @@ class TestSubstringMatcher:
         assert result is not None
         matches = list(result.matches)
         assert len(matches) == 1
-        assert matches[0]["provider"] == "poe"
+        assert matches[0].provider == "poe"
 
     def test_no_match_returns_none(self, resolver: SubstringMatcher) -> None:
         """Test that no match returns None."""
@@ -407,32 +408,32 @@ class TestMatchRanker:
         return MatchRanker()
 
     @pytest.fixture
-    def sample_matches(self) -> list[dict]:
+    def sample_matches(self) -> list[Match]:
         return [
-            {
-                "provider": "poe",
-                "alias": "haiku",
-                "target": "grok-4.1-fast",
-                "length": 5,
-                "is_exact": True,
-            },
-            {
-                "provider": "poe",
-                "alias": "hau",
-                "target": "other-model",
-                "length": 3,
-                "is_exact": False,
-            },
-            {
-                "provider": "openai",
-                "alias": "haiku",
-                "target": "gpt-4o-mini",
-                "length": 5,
-                "is_exact": True,
-            },
+            Match(
+                provider="poe",
+                alias="haiku",
+                target="grok-4.1-fast",
+                length=5,
+                is_exact=True,
+            ),
+            Match(
+                provider="poe",
+                alias="hau",
+                target="other-model",
+                length=3,
+                is_exact=False,
+            ),
+            Match(
+                provider="openai",
+                alias="haiku",
+                target="gpt-4o-mini",
+                length=5,
+                is_exact=True,
+            ),
         ]
 
-    def test_rank_by_exact_first(self, resolver: MatchRanker, sample_matches: list[dict]) -> None:
+    def test_rank_by_exact_first(self, resolver: MatchRanker, sample_matches: list[Match]) -> None:
         """Test that exact matches are ranked first."""
         context = ResolutionContext(
             model="haiku",
@@ -452,20 +453,20 @@ class TestMatchRanker:
     def test_rank_by_length(self, resolver: MatchRanker) -> None:
         """Test that longer matches are ranked first."""
         matches = [
-            {
-                "provider": "poe",
-                "alias": "short",
-                "target": "target1",
-                "length": 5,
-                "is_exact": False,
-            },
-            {
-                "provider": "poe",
-                "alias": "longer_alias",
-                "target": "target2",
-                "length": 11,
-                "is_exact": False,
-            },
+            Match(
+                provider="poe",
+                alias="short",
+                target="target1",
+                length=5,
+                is_exact=False,
+            ),
+            Match(
+                provider="poe",
+                alias="longer_alias",
+                target="target2",
+                length=11,
+                is_exact=False,
+            ),
         ]
         context = ResolutionContext(
             model="test",
@@ -481,20 +482,20 @@ class TestMatchRanker:
     def test_rank_by_default_provider(self, resolver: MatchRanker) -> None:
         """Test that default provider is preferred."""
         matches = [
-            {
-                "provider": "other",
-                "alias": "haiku",
-                "target": "other-target",
-                "length": 5,
-                "is_exact": True,
-            },
-            {
-                "provider": "openai",
-                "alias": "haiku",
-                "target": "default-target",
-                "length": 5,
-                "is_exact": True,
-            },
+            Match(
+                provider="other",
+                alias="haiku",
+                target="other-target",
+                length=5,
+                is_exact=True,
+            ),
+            Match(
+                provider="openai",
+                alias="haiku",
+                target="default-target",
+                length=5,
+                is_exact=True,
+            ),
         ]
         context = ResolutionContext(
             model="haiku",
@@ -510,13 +511,13 @@ class TestMatchRanker:
     def test_cross_provider_alias(self, resolver: MatchRanker) -> None:
         """Test handling of cross-provider aliases."""
         matches = [
-            {
-                "provider": "poe",
-                "alias": "fast",
-                "target": "openai:sonnet",
-                "length": 4,
-                "is_exact": True,
-            },
+            Match(
+                provider="poe",
+                alias="fast",
+                target="openai:sonnet",
+                length=4,
+                is_exact=True,
+            ),
         ]
         context = ResolutionContext(
             model="fast",
@@ -532,13 +533,13 @@ class TestMatchRanker:
     def test_bare_model_gets_provider_prefix(self, resolver: MatchRanker) -> None:
         """Test that bare model names get provider prefix."""
         matches = [
-            {
-                "provider": "poe",
-                "alias": "haiku",
-                "target": "grok-4.1-fast",
-                "length": 5,
-                "is_exact": True,
-            },
+            Match(
+                provider="poe",
+                alias="haiku",
+                target="grok-4.1-fast",
+                length=5,
+                is_exact=True,
+            ),
         ]
         context = ResolutionContext(
             model="haiku",

@@ -66,7 +66,26 @@ class ResolutionResult:
     provider: str | None
     was_resolved: bool
     resolution_path: tuple[str, ...] = ()
-    matches: tuple[dict[str, Any], ...] = ()
+    matches: tuple["Match", ...] = ()
+
+
+@dataclass(frozen=True)
+class Match:
+    """A single alias match found by SubstringMatcher.
+
+    Attributes:
+        provider: Provider name where alias was found
+        alias: The alias name that matched
+        target: The target model the alias points to
+        length: Length of the alias (for ranking)
+        is_exact: True if exact match, False if substring
+    """
+
+    provider: str
+    alias: str
+    target: str
+    length: int
+    is_exact: bool
 
 
 class AliasResolver(ABC):
@@ -143,7 +162,7 @@ class LiteralPrefixResolver(AliasResolver):
             provider = context.provider or context.default_provider
             resolved = f"{provider}:{literal_part}" if provider else literal_part
 
-        logger.info(f"[{self.name}] Literal: '{context.model}' -> '{resolved}'")
+        logger.debug(f"[{self.name}] Literal: '{context.model}' -> '{resolved}'")
 
         return ResolutionResult(
             resolved_model=resolved,
@@ -233,6 +252,16 @@ class ChainedAliasResolver(AliasResolver):
             return None  # No resolution occurred
 
         provider = resolved_model.split(":", 1)[0] if ":" in resolved_model else context.provider
+
+        # Check if we exhausted max iterations without full resolution
+        # This happens when a chain is longer than _max_chain_length
+        if iteration == self._max_chain_length - 1 and ":" in resolved_model:
+            logger.warning(
+                f"[{self.name}] Alias resolution exceeded max chain length "
+                f"{self._max_chain_length}. Chain may be incomplete. "
+                f"Stopped at: '{resolved_model}'"
+            )
+
         return ResolutionResult(
             resolved_model=resolved_model,
             provider=provider,
@@ -275,7 +304,7 @@ class SubstringMatcher(AliasResolver):
         )
 
         # Find matches
-        matches: list[dict[str, Any]] = []
+        matches: list[Match] = []
         for provider_name, provider_aliases in context.aliases.items():
             if search_provider and provider_name != search_provider:
                 continue
@@ -287,13 +316,13 @@ class SubstringMatcher(AliasResolver):
                         match_length = len(alias_lower)
                         is_exact = alias_lower == variation
                         matches.append(
-                            {
-                                "provider": provider_name,
-                                "alias": alias,
-                                "target": target,
-                                "length": match_length,
-                                "is_exact": is_exact,
-                            }
+                            Match(
+                                provider=provider_name,
+                                alias=alias,
+                                target=target,
+                                length=match_length,
+                                is_exact=is_exact,
+                            )
                         )
                         break
 
@@ -329,7 +358,7 @@ class MatchRanker(AliasResolver):
         return False  # MatchRanker is called directly by the chain
 
     def resolve(
-        self, context: ResolutionContext, matches: list[dict[str, Any]] | None = None
+        self, context: ResolutionContext, matches: list[Match] | None = None
     ) -> ResolutionResult | None:
         """Rank and select the best match.
 
@@ -346,16 +375,16 @@ class MatchRanker(AliasResolver):
         # Sort matches
         matches.sort(
             key=lambda m: (
-                0 if m["is_exact"] else 1,  # Exact first
-                -m["length"],  # Longer first
-                0 if m["provider"] == context.default_provider else 1,  # Default provider
-                m["provider"],  # Provider alphabetical
-                m["alias"],  # Alias alphabetical
+                0 if m.is_exact else 1,  # Exact first
+                -m.length,  # Longer first
+                0 if m.provider == context.default_provider else 1,  # Default provider
+                m.provider,  # Provider alphabetical
+                m.alias,  # Alias alphabetical
             )
         )
 
         best = matches[0]
-        target = best["target"]
+        target = best.target
 
         # Handle cross-provider aliases
         if ":" in target:
@@ -365,23 +394,23 @@ class MatchRanker(AliasResolver):
                 resolved = target
             else:
                 # Model name with ':', add provider prefix
-                provider = best["provider"]
+                provider = best.provider
                 resolved = f"{provider}:{target}"
         else:
-            provider = best["provider"]
+            provider = best.provider
             resolved = f"{provider}:{target}"
 
-        match_type = "exact" if best["is_exact"] else "substring"
+        match_type = "exact" if best.is_exact else "substring"
         logger.info(
             f"[{self.name}] ({match_type} match for '{context.model}') "
-            f"'{best['provider']}:{best['alias']}' -> '{resolved}'"
+            f"'{best.provider}:{best.alias}' -> '{resolved}'"
         )
 
         return ResolutionResult(
             resolved_model=resolved,
-            provider=best["provider"],
+            provider=best.provider,
             was_resolved=True,
-            resolution_path=(best["alias"],),
+            resolution_path=(best.alias,),
         )
 
 

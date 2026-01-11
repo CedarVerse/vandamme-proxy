@@ -21,7 +21,7 @@ class TestAliasResolverCache:
 
         # Put a value
         cache.put("test-key", "resolved-model")
-        assert cache.get_stats()["size"] == 1
+        assert cache.get_stats().size == 1
 
         # Get the value
         result = cache.get("test-key")
@@ -126,7 +126,7 @@ class TestAliasResolverCache:
         cache.get("key1")
         cache.get("nonexistent")
 
-        assert cache.get_stats()["size"] == 2
+        assert cache.get_stats().size == 2
         assert cache._hits == 1
         assert cache._misses == 1
 
@@ -134,7 +134,7 @@ class TestAliasResolverCache:
         cache.clear()
 
         # Everything should be reset
-        assert cache.get_stats()["size"] == 0
+        assert cache.get_stats().size == 0
         assert cache._hits == 0
         assert cache._misses == 0
         assert cache._generation == 0
@@ -148,12 +148,12 @@ class TestAliasResolverCache:
         cache.put("key2", "value2")
         cache.put("key3", "value3")
 
-        assert cache.get_stats()["size"] == 3
+        assert cache.get_stats().size == 3
 
         # Add one more - should evict oldest
         cache.put("key4", "value4")
 
-        assert cache.get_stats()["size"] == 3
+        assert cache.get_stats().size == 3
         assert cache.get("key1") is None  # Oldest evicted
         assert cache.get("key2") == "value2"
         assert cache.get("key3") == "value3"
@@ -191,12 +191,12 @@ class TestAliasResolverCache:
 
         stats = cache.get_stats()
 
-        assert stats["size"] == 2
-        assert stats["max_size"] == 100
-        assert stats["hits"] == 2
-        assert stats["misses"] == 1
-        assert stats["hit_rate"] == "66.67%"
-        assert stats["generation"] == 0
+        assert stats.size == 2
+        assert stats.max_size == 100
+        assert stats.hits == 2
+        assert stats.misses == 1
+        assert stats.hit_rate == "66.67%"
+        assert stats.generation == 0
 
     def test_put_overwrites_existing(self) -> None:
         """Test that put overwrites existing entry."""
@@ -209,7 +209,7 @@ class TestAliasResolverCache:
         assert cache.get("key") == "value2"
 
         # Size should still be 1
-        assert cache.get_stats()["size"] == 1
+        assert cache.get_stats().size == 1
 
     def test_multiple_invalidations(self) -> None:
         """Test multiple cache invalidations."""
@@ -278,5 +278,5 @@ class TestAliasResolverCache:
         cache.get("miss")  # miss
 
         stats = cache.get_stats()
-        assert "%" in stats["hit_rate"]
-        assert stats["hit_rate"] == "50.00%"
+        assert "%" in stats.hit_rate
+        assert stats.hit_rate == "50.00%"

@@ -133,6 +133,9 @@ class Config:
             os.environ.get("ALIAS_CACHE_TTL_SECONDS", "300")
         )  # 5 minutes
         self.alias_cache_max_size = int(os.environ.get("ALIAS_CACHE_MAX_SIZE", "1000"))
+        self.alias_max_chain_length = int(
+            os.environ.get("ALIAS_MAX_CHAIN_LENGTH", "10")
+        )  # Maximum alias chain steps
 
         # Active Requests SSE settings
         self.active_requests_sse_enabled = (

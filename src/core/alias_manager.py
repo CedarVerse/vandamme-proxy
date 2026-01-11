@@ -10,7 +10,10 @@ import os
 import re
 from dataclasses import dataclass, field
 from time import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.core.alias.resolver import AliasResolverChain
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,27 @@ class CacheEntry:
 
     resolved_model: str
     timestamp: float
+    generation: int
+
+
+@dataclass(frozen=True)
+class CacheStats:
+    """Statistics for alias resolution cache.
+
+    Attributes:
+        size: Current number of entries
+        max_size: Maximum capacity
+        hits: Number of cache hits
+        misses: Number of cache misses
+        hit_rate: Hit rate as formatted string (e.g., "85.50%")
+        generation: Current cache generation
+    """
+
+    size: int
+    max_size: int
+    hits: int
+    misses: int
+    hit_rate: str
     generation: int
 
 
@@ -124,20 +148,20 @@ class AliasResolverCache:
         total = self._hits + self._misses
         return self._hits / total if total > 0 else 0.0
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> CacheStats:
         """Get cache statistics for monitoring.
 
         Returns:
-            Dict with cache metrics: size, max_size, hits, misses, hit_rate, generation
+            CacheStats with cache metrics: size, max_size, hits, misses, hit_rate, generation
         """
-        return {
-            "size": len(self._cache),
-            "max_size": self.max_size,
-            "hits": self._hits,
-            "misses": self._misses,
-            "hit_rate": f"{self.hit_rate:.2%}",
-            "generation": self._generation,
-        }
+        return CacheStats(
+            size=len(self._cache),
+            max_size=self.max_size,
+            hits=self._hits,
+            misses=self._misses,
+            hit_rate=f"{self.hit_rate:.2%}",
+            generation=self._generation,
+        )
 
 
 class AliasManager:
@@ -299,8 +323,17 @@ class AliasManager:
             logger.debug(f"Could not import AliasConfigLoader: {e}")
             self._fallback_aliases = {}
         except Exception as e:
-            logger.warning(f"Failed to load fallback aliases: {e}")
-            self._fallback_aliases = {}
+            # Check if this is a TOML decode error (tomli raises Exception subclass)
+            error_type = type(e).__name__
+            if "TOMLDecodeError" in error_type or "DecodeError" in error_type:
+                logger.error(f"Invalid TOML in fallback config: {e}")
+                raise  # Fail fast for config errors - this is a critical error
+            elif "FileNotFoundError" in error_type or "NotFoundError" in error_type:
+                logger.debug("No fallback config file found, using empty fallbacks")
+                self._fallback_aliases = {}
+            else:
+                logger.warning(f"Failed to load fallback aliases: {e}")
+                self._fallback_aliases = {}
 
     def _merge_fallback_aliases(self) -> None:
         """Merge fallback aliases for any missing configurations.
@@ -568,15 +601,15 @@ class AliasManager:
         """
         self._cache.invalidate()
 
-    def get_cache_stats(self) -> dict[str, Any]:
+    def get_cache_stats(self) -> CacheStats:
         """Get cache statistics for monitoring.
 
         Returns:
-            Dict with cache stats: size, max_size, hits, misses, hit_rate, generation
+            CacheStats with cache metrics: size, max_size, hits, misses, hit_rate, generation
         """
         return self._cache.get_stats()
 
-    def _create_default_resolver_chain(self) -> Any:
+    def _create_default_resolver_chain(self) -> "AliasResolverChain":
         """Create the default resolver chain for alias resolution.
 
         Imports are done here to avoid circular dependencies.
