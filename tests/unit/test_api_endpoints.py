@@ -16,7 +16,7 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_empty_request(self):
         """Test counting tool calls in a request with no tools."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
 
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
@@ -33,7 +33,7 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_with_string_content(self):
         """Test counting tool calls in a request with string content."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
 
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
@@ -50,7 +50,7 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_with_tool_uses(self):
         """Test counting tool calls in a request with tool_use blocks."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
 
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
@@ -83,7 +83,7 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_with_tool_results(self):
         """Test counting tool calls in a request with tool_result blocks."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
 
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
@@ -113,7 +113,7 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_mixed_content(self):
         """Test counting tool calls in a request with mixed content."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
 
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",
@@ -151,7 +151,7 @@ class TestCountToolCalls:
 
     def test_count_tool_calls_across_multiple_messages(self):
         """Test counting tool calls across multiple messages."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
 
         request = ClaudeMessagesRequest(
             model="claude-3-5-sonnet-20241022",

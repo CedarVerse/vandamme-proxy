@@ -24,6 +24,51 @@ conversation_logger = ConversationLogger.get_logger()
 logger = logging.getLogger(__name__)
 
 
+def _is_tool_result_message(msg: ClaudeMessage) -> bool:
+    """Check if a message contains tool result content blocks.
+
+    A tool result message is a user message containing one or more
+    CONTENT_TOOL_RESULT blocks, which contain the results of tool
+    executions that should be paired with preceding tool_use blocks.
+
+    Args:
+        msg: The Claude message to check.
+
+    Returns:
+        True if the message is a user message containing tool results,
+        False otherwise.
+    """
+    if msg.role != Constants.ROLE_USER:
+        return False
+    if not isinstance(msg.content, list):
+        return False
+    return any(
+        hasattr(block, "type") and block.type == Constants.CONTENT_TOOL_RESULT
+        for block in msg.content
+    )
+
+
+def _should_consume_tool_results(messages: list[ClaudeMessage], index: int) -> bool:
+    """Check if we should consume tool results following an assistant message.
+
+    In Claude's API, tool results are sent as a separate user message that
+    immediately follows an assistant message containing tool_use blocks.
+    This function checks if the next message is such a tool result message.
+
+    Args:
+        messages: The list of Claude messages.
+        index: The current index in the message list (typically an assistant
+            message position).
+
+    Returns:
+        True if the next message exists and contains tool results that
+        should be consumed, False otherwise.
+    """
+    if index + 1 >= len(messages):
+        return False
+    return _is_tool_result_message(messages[index + 1])
+
+
 def convert_claude_to_openai(
     claude_request: ClaudeMessagesRequest, model_manager: Any
 ) -> dict[str, Any]:
@@ -90,20 +135,10 @@ def _convert_claude_to_openai_impl(
             openai_messages.append(convert_claude_user_message(msg))
         elif msg.role == Constants.ROLE_ASSISTANT:
             openai_messages.append(convert_claude_assistant_message(msg, tool_name_map))
-
-            if i + 1 < len(claude_request.messages):
-                next_msg = claude_request.messages[i + 1]
-                if (
-                    next_msg.role == Constants.ROLE_USER
-                    and isinstance(next_msg.content, list)
-                    and any(
-                        block.type == Constants.CONTENT_TOOL_RESULT
-                        for block in next_msg.content
-                        if hasattr(block, "type")
-                    )
-                ):
-                    i += 1
-                    openai_messages.extend(convert_claude_tool_results(next_msg))
+            # Consume tool results if present (lookahead pattern)
+            if _should_consume_tool_results(claude_request.messages, i):
+                i += 1
+                openai_messages.extend(convert_claude_tool_results(claude_request.messages[i]))
 
         i += 1
 

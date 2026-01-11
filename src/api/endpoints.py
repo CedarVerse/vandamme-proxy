@@ -17,6 +17,7 @@ from src.api.services.error_handling import (
     finalize_metrics_on_streaming_error,
 )
 from src.api.services.key_rotation import build_api_key_params
+from src.api.services.metrics_helper import populate_request_metrics
 from src.api.services.provider_context import resolve_provider_context
 from src.api.services.request_builder import build_anthropic_passthrough_request
 from src.api.services.streaming import (
@@ -34,7 +35,6 @@ from src.conversion.response_converter import (
     convert_openai_to_claude_response,
 )
 from src.core.config import config
-from src.core.constants import Constants
 from src.core.logging import ConversationLogger
 from src.core.metrics.runtime import get_request_tracker
 from src.core.model_manager import get_model_manager
@@ -106,23 +106,7 @@ if config.models_cache_enabled and not os.environ.get("PYTEST_CURRENT_TEST"):
     )
 
 # Custom headers are now handled per provider
-
-
-def count_tool_calls(request: ClaudeMessagesRequest) -> tuple[int, int]:
-    """Count tool_use and tool_result blocks in a Claude request"""
-    tool_use_count = 0
-    tool_result_count = 0
-
-    for message in request.messages:
-        if isinstance(message.content, list):
-            for block in message.content:
-                if hasattr(block, "type"):
-                    if block.type == Constants.CONTENT_TOOL_USE:
-                        tool_use_count += 1
-                    elif block.type == Constants.CONTENT_TOOL_RESULT:
-                        tool_result_count += 1
-
-    return tool_use_count, tool_result_count
+# count_tool_calls has been moved to src.api.services.metrics_helper
 
 
 async def validate_api_key(
@@ -433,28 +417,20 @@ async def create_message(
             timestamp=metrics.start_time_iso,
         )
 
-        # Calculate request size
-        request_size = len(json.dumps(request.model_dump(exclude_none=True)))
-        metrics.request_size = request_size
-
-        # Count messages including system message
-        message_count = len(request.messages)
-        if request.system:
-            if isinstance(request.system, str):
-                message_count += 1
-            elif isinstance(request.system, list):
-                message_count += len(request.system)
-        metrics.message_count = message_count
-
-        # Count tool uses and tool results
-        tool_use_count, tool_result_count = count_tool_calls(request)
-        metrics.tool_use_count = tool_use_count
-        metrics.tool_result_count = tool_result_count
+        # Populate metrics with request details (message count, size, tool counts)
+        message_count, request_size, tool_use_count = populate_request_metrics(
+            metrics=metrics,
+            request=request,
+        )
+        tool_result_count = metrics.tool_result_count
     else:
         metrics = None
-        request_size = 0
-        message_count = len(request.messages) + (1 if request.system else 0)
-        tool_use_count, tool_result_count = count_tool_calls(request)
+        # Populate metrics even when disabled to get counts for logging
+        message_count, request_size, tool_use_count = populate_request_metrics(
+            metrics=None,
+            request=request,
+        )
+        tool_result_count = 0  # Not needed for logging when metrics disabled
 
     # Use correlation context for all logs within this request
     with ConversationLogger.correlation_context(request_id):

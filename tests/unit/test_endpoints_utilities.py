@@ -217,7 +217,7 @@ class TestCountToolCalls:
 
     def test_counts_tool_use_blocks(self):
         """Should count tool_use content blocks."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
         from src.models.claude import ClaudeContentBlockToolUse, ClaudeMessage
 
         request = type(
@@ -253,7 +253,7 @@ class TestCountToolCalls:
 
     def test_counts_tool_result_blocks(self):
         """Should count tool_result content blocks."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
         from src.models.claude import ClaudeContentBlockToolResult, ClaudeMessage
 
         request = type(
@@ -292,7 +292,7 @@ class TestCountToolCalls:
 
     def test_counts_mixed_blocks(self):
         """Should count both tool_use and tool_result blocks."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
         from src.models.claude import (
             ClaudeContentBlockToolResult,
             ClaudeContentBlockToolUse,
@@ -347,7 +347,7 @@ class TestCountToolCalls:
 
     def test_ignores_text_blocks(self):
         """Should ignore non-tool content blocks."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
         from src.models.claude import ClaudeContentBlockText, ClaudeMessage
 
         request = type(
@@ -373,7 +373,7 @@ class TestCountToolCalls:
 
     def test_handles_empty_messages(self):
         """Should handle messages list with no content blocks."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
         from src.models.claude import ClaudeMessage
 
         request = type(
@@ -394,7 +394,7 @@ class TestCountToolCalls:
 
     def test_uses_constants_for_block_types(self):
         """Should use Constants.CONTENT_TOOL_USE and CONTENT_TOOL_RESULT."""
-        from src.api.endpoints import count_tool_calls
+        from src.api.services.metrics_helper import count_tool_calls
         from src.models.claude import (
             ClaudeContentBlockToolResult,
             ClaudeContentBlockToolUse,
