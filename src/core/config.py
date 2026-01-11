@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.core.alias_manager import AliasManager
+    from src.core.alias_service import AliasService
     from src.core.provider_manager import ProviderManager
 
 
@@ -144,6 +145,9 @@ class Config:
         # Alias manager will be initialized lazily
         self._alias_manager: AliasManager | None = None
 
+        # Alias service will be initialized lazily
+        self._alias_service: AliasService | None = None
+
     @classmethod
     def reset_singleton(cls) -> None:
         """Reset the global config singleton for test isolation.
@@ -190,6 +194,22 @@ class Config:
 
             self._alias_manager = AliasManager()
         return self._alias_manager
+
+    @property
+    def alias_service(self) -> "AliasService":
+        """Lazy initialization of alias service.
+
+        The service coordinates AliasManager and ProviderManager to provide
+        aliases filtered to active providers only.
+        """
+        if self._alias_service is None:
+            from src.core.alias_service import AliasService
+
+            self._alias_service = AliasService(
+                alias_manager=self.alias_manager,
+                provider_manager=self.provider_manager,
+            )
+        return self._alias_service
 
     def validate_api_key(self) -> bool:
         """Basic API key validation"""

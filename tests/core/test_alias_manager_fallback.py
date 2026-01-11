@@ -225,15 +225,22 @@ class TestAliasManagerFallback:
 
     def test_fallback_summary_display(self):
         """Test that fallback aliases are shown in summary display."""
+        from unittest.mock import MagicMock
+
+        from src.core.alias_service import AliasService
+
         with patch("src.core.provider_manager.ProviderManager") as mock_provider_manager:
             mock_pm = mock_provider_manager.return_value
             mock_pm._configs = {"poe": {}}
+            mock_pm.list_providers.return_value = {"poe": MagicMock()}
+
+            alias_manager = AliasManager()
+            alias_service = AliasService(alias_manager, mock_pm)
 
             # Capture print output
             with patch("builtins.print") as mock_print:
-                alias_manager = AliasManager()
-                # Call _print_alias_summary to test output
-                alias_manager._print_alias_summary()
+                # Call print_alias_summary to test output
+                alias_service.print_alias_summary()
 
                 # Check that fallbacks are mentioned in output
                 print_calls = [str(call) for call in mock_print.call_args_list]

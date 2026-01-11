@@ -38,10 +38,6 @@ class AliasManager:
         # Merge fallback aliases for any missing configurations
         self._merge_fallback_aliases()
 
-        # Print summary of all loaded aliases (ENV + TOML)
-        # Uses default_provider from _load_aliases() since this is called during init
-        self._print_alias_summary(self._default_provider)
-
     def _load_aliases(self) -> None:
         """
         Load provider-specific <PROVIDER>_ALIAS_* environment variables.
@@ -502,33 +498,14 @@ class AliasManager:
 
         return resolved_model
 
-    def get_all_aliases(self, active_only: bool = False) -> dict[str, dict[str, str]]:
+    def get_all_aliases(self) -> dict[str, dict[str, str]]:
         """
         Get all configured aliases grouped by provider.
-
-        Args:
-            active_only: If True, only return aliases for providers with API keys configured
 
         Returns:
             Dictionary of {provider: {alias_name: target_model}}
         """
-        if not active_only:
-            return {provider: aliases.copy() for provider, aliases in self.aliases.items()}
-
-        # Filter to only providers with API keys
-        from src.core.config import config
-
-        try:
-            active_providers = set(config.provider_manager.list_providers().keys())
-        except Exception:
-            # If provider_manager not initialized or fails, show all
-            active_providers = set(self.aliases.keys())
-
-        return {
-            provider: aliases.copy()
-            for provider, aliases in self.aliases.items()
-            if provider in active_providers
-        }
+        return {provider: aliases.copy() for provider, aliases in self.aliases.items()}
 
     def get_explicit_aliases(self) -> dict[str, dict[str, str]]:
         """
@@ -615,115 +592,3 @@ class AliasManager:
 
         for mapping in mappings:
             print(f"   {mapping:<65}")
-
-    def _print_alias_summary(self, default_provider: str | None = None) -> None:
-        """Print an elegant summary of loaded model aliases grouped by provider.
-
-        Args:
-            default_provider: The default provider name to use for usage examples.
-        """
-        if not self.aliases:
-            return
-
-        # Get active providers for filtering
-        from src.core.config import config
-
-        try:
-            active_providers = set(config.provider_manager.list_providers().keys())
-        except Exception:
-            # If provider_manager not initialized, show all
-            active_providers = set(self.aliases.keys())
-
-        # Filter aliases to only active providers
-        active_aliases = {
-            provider: aliases
-            for provider, aliases in self.aliases.items()
-            if provider in active_providers
-        }
-
-        if not active_aliases:
-            return
-
-        total_aliases = sum(len(aliases) for aliases in active_aliases.values())
-
-        # Count fallback aliases
-        total_fallbacks = sum(
-            sum(1 for alias in aliases if alias in self._fallback_aliases.get(provider, {}))
-            for provider, aliases in active_aliases.items()
-        )
-
-        print(
-            f"\n✨ Model Aliases ({total_aliases} configured across "
-            f"{len(active_aliases)} providers):"
-        )
-
-        if total_fallbacks > 0:
-            print(f"   📦 Includes {total_fallbacks} fallback defaults from configuration")
-
-        # Color code providers
-        provider_colors = {
-            "openai": "\033[94m",  # Blue
-            "anthropic": "\033[92m",  # Green
-            "azure": "\033[93m",  # Yellow
-            "poe": "\033[95m",  # Magenta
-            "bedrock": "\033[96m",  # Cyan
-            "vertex": "\033[97m",  # White
-            "gemini": "\033[91m",  # Red
-        }
-
-        # Sort providers by name for consistent display
-        for provider in sorted(active_aliases.keys()):
-            provider_aliases = active_aliases[provider]
-            color = provider_colors.get(provider.lower(), "")
-            reset = "\033[0m" if color else ""
-            provider_display = f"{color}{provider}{reset}"
-
-            fallback_aliases = self._fallback_aliases.get(provider, {})
-            num_fallback = sum(1 for alias in provider_aliases if alias in fallback_aliases)
-            len(provider_aliases) - num_fallback
-
-            provider_info = f"{provider_display} ({len(provider_aliases)} aliases"
-            if num_fallback > 0:
-                provider_info += f", {num_fallback} fallbacks"
-            provider_info += "):"
-
-            print(f"\n   {provider_info}")
-            print(f"   {'Alias':<20} {'Target Model':<40} {'Type'}")
-            print(f"   {'-' * 20} {'-' * 40} {'-' * 10}")
-
-            # Sort aliases within each provider
-            for alias, target in sorted(provider_aliases.items(), key=lambda x: x[0].lower()):
-                # Determine if this is a fallback alias
-                alias_type = "fallback" if alias in fallback_aliases else "explicit"
-                type_display = (
-                    f"\033[90m{alias_type}\033[0m" if alias_type == "fallback" else alias_type
-                )
-
-                # Truncate long model names
-                model_display = target
-                if len(model_display) > 38:
-                    model_display = model_display[:35] + "..."
-                print(f"   {alias:<20} {model_display:<40} {type_display}")
-
-        # Add usage examples
-        print("\n   💡 Use aliases in your requests:")
-        if active_aliases:
-            # Try to use the default provider for the example
-            example_provider = default_provider if default_provider in active_aliases else None
-            if not example_provider:
-                # Fall back to the first provider with aliases (alphabetically)
-                example_provider = sorted(active_aliases.keys())[0]
-
-            first_alias = sorted(active_aliases[example_provider].keys())[0]
-            first_target = active_aliases[example_provider][first_alias]
-            is_fallback = first_alias in self._fallback_aliases.get(example_provider, {})
-
-            print(
-                f"      Example: model='{first_alias}' → resolves to "
-                f"'{example_provider}:{first_target}'"
-            )
-            if is_fallback:
-                print("                (from configuration defaults)")
-        print("      Substring matching: 'my-{alias}-model' matches alias '{alias}'")
-        print("      Configure <PROVIDER>_ALIAS_<NAME> environment variables to create aliases")
-        print("      Or override defaults in vandamme-config.toml")

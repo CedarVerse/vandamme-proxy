@@ -56,8 +56,8 @@ def start(
         config.provider_manager.print_provider_summary()
 
         # Show common model mappings
-        if config.alias_manager:
-            config.alias_manager.print_common_model_mappings(config.default_provider)
+        if config.alias_service:
+            config.alias_service.print_alias_summary(config.default_provider)
 
     if daemon:
         _start_daemon(server_host, server_port, pid_file)

@@ -1391,7 +1391,7 @@ async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
     """
     try:
         # Only show aliases for active providers (with API keys)
-        aliases = config.alias_manager.get_all_aliases(active_only=True)
+        aliases = config.alias_service.get_active_aliases()
 
         # Return aliases grouped by provider
         total_aliases = sum(len(provider_aliases) for provider_aliases in aliases.values())

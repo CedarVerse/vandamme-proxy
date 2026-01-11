@@ -360,14 +360,14 @@ class TestListAliases:
         import src.api.endpoints as endpoints_module
         from src.api.endpoints import list_aliases
 
-        mock_alias_manager = MagicMock()
-        mock_alias_manager.get_all_aliases.return_value = {
+        mock_alias_service = MagicMock()
+        mock_alias_service.get_active_aliases.return_value = {
             "poe": {"haiku": "gpt-4o-mini", "sonnet": "gpt-4o"},
             "openai": {"fast": "gpt-4o-mini"},
         }
 
         # Patch the config in the endpoints module directly
-        with patch.object(endpoints_module.config, "_alias_manager", mock_alias_manager):
+        with patch.object(endpoints_module.config, "_alias_service", mock_alias_service):
             response = await list_aliases(_=None)
 
             assert response.status_code == 200
@@ -389,11 +389,11 @@ class TestListAliases:
         import src.api.endpoints as endpoints_module
         from src.api.endpoints import list_aliases
 
-        mock_alias_manager = MagicMock()
-        mock_alias_manager.get_all_aliases.return_value = {}
+        mock_alias_service = MagicMock()
+        mock_alias_service.get_active_aliases.return_value = {}
 
         # Patch the config in the endpoints module directly
-        with patch.object(endpoints_module.config, "_alias_manager", mock_alias_manager):
+        with patch.object(endpoints_module.config, "_alias_service", mock_alias_service):
             response = await list_aliases(_=None)
 
             assert response.status_code == 200
@@ -410,11 +410,11 @@ class TestListAliases:
         import src.api.endpoints as endpoints_module
         from src.api.endpoints import list_aliases
 
-        mock_alias_manager = MagicMock()
-        mock_alias_manager.get_all_aliases.side_effect = Exception("Test error")
+        mock_alias_service = MagicMock()
+        mock_alias_service.get_active_aliases.side_effect = Exception("Test error")
 
         # Patch the config in the endpoints module directly
-        with patch.object(endpoints_module.config, "_alias_manager", mock_alias_manager):
+        with patch.object(endpoints_module.config, "_alias_service", mock_alias_service):
             response = await list_aliases(_=None)
 
             assert response.status_code == 500
