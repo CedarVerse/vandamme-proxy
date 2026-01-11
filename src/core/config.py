@@ -128,6 +128,12 @@ class Config:
             os.environ.get("THOUGHT_SIGNATURE_CLEANUP_INTERVAL", "300")
         )  # 5 minutes
 
+        # Alias resolution cache settings
+        self.alias_cache_ttl_seconds = float(
+            os.environ.get("ALIAS_CACHE_TTL_SECONDS", "300")
+        )  # 5 minutes
+        self.alias_cache_max_size = int(os.environ.get("ALIAS_CACHE_MAX_SIZE", "1000"))
+
         # Active Requests SSE settings
         self.active_requests_sse_enabled = (
             os.environ.get("VDM_ACTIVE_REQUESTS_SSE_ENABLED", "true").lower() == "true"
@@ -188,11 +194,14 @@ class Config:
 
     @property
     def alias_manager(self) -> "AliasManager":
-        """Lazy initialization of alias manager to avoid circular imports"""
+        """Lazy initialization of alias manager with cache configuration."""
         if self._alias_manager is None:
             from src.core.alias_manager import AliasManager
 
-            self._alias_manager = AliasManager()
+            self._alias_manager = AliasManager(
+                cache_ttl_seconds=self.alias_cache_ttl_seconds,
+                cache_max_size=self.alias_cache_max_size,
+            )
         return self._alias_manager
 
     @property

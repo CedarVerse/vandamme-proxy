@@ -8,8 +8,136 @@ substring matching, where aliases are scoped to specific providers.
 import logging
 import os
 import re
+from dataclasses import dataclass, field
+from time import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CacheEntry:
+    """Immutable cache entry for alias resolution results.
+
+    Attributes:
+        resolved_model: The resolved model name
+        timestamp: Unix timestamp when cached
+        generation: Cache generation for invalidation
+    """
+
+    resolved_model: str
+    timestamp: float
+    generation: int
+
+
+@dataclass
+class AliasResolverCache:
+    """TTL cache for alias resolution with generation-based invalidation.
+
+    Cache entries are invalidated when:
+    - TTL expires (default: 5 minutes)
+    - Generation counter increments (aliases are reloaded)
+
+    Attributes:
+        ttl_seconds: Time-to-live for cache entries in seconds
+        max_size: Maximum number of entries in the cache
+        _cache: Internal cache storage mapping keys to entries
+        _generation: Current generation for cache invalidation
+        _hits: Number of cache hits
+        _misses: Number of cache misses
+    """
+
+    ttl_seconds: float = 300.0  # 5 minutes default
+    max_size: int = 1000
+    _cache: dict[str, CacheEntry] = field(default_factory=dict)
+    _generation: int = 0
+    _hits: int = 0
+    _misses: int = 0
+
+    def get(self, key: str) -> str | None:
+        """Get cached value if valid.
+
+        Args:
+            key: Cache key (typically "provider:model" or "model")
+
+        Returns:
+            Cached resolved model name, or None if not cached/expired/invalidated
+        """
+        entry = self._cache.get(key)
+        if entry is None:
+            self._misses += 1
+            return None
+
+        # Check generation (cache invalidation on reload)
+        if entry.generation != self._generation:
+            self._cache.pop(key, None)
+            self._misses += 1
+            return None
+
+        # Check TTL
+        if time() - entry.timestamp > self.ttl_seconds:
+            self._cache.pop(key, None)
+            self._misses += 1
+            return None
+
+        self._hits += 1
+        return entry.resolved_model
+
+    def put(self, key: str, value: str) -> None:
+        """Cache a value with current timestamp and generation.
+
+        Args:
+            key: Cache key
+            value: Resolved model name to cache
+        """
+        # Evict oldest if at capacity
+        if len(self._cache) >= self.max_size:
+            oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k].timestamp)
+            self._cache.pop(oldest_key, None)
+
+        self._cache[key] = CacheEntry(
+            resolved_model=value, timestamp=time(), generation=self._generation
+        )
+
+    def invalidate(self) -> None:
+        """Increment generation to invalidate all cache entries.
+
+        Call this when aliases are reloaded at runtime.
+        """
+        self._generation += 1
+        logger.info(f"[AliasCache] Invalidated all entries (generation={self._generation})")
+
+    def clear(self) -> None:
+        """Clear all cache entries and reset stats."""
+        self._cache.clear()
+        self._hits = 0
+        self._misses = 0
+        self._generation = 0
+
+    @property
+    def hit_rate(self) -> float:
+        """Calculate cache hit rate.
+
+        Returns:
+            Hit rate as a float between 0.0 and 1.0
+        """
+        total = self._hits + self._misses
+        return self._hits / total if total > 0 else 0.0
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get cache statistics for monitoring.
+
+        Returns:
+            Dict with cache metrics: size, max_size, hits, misses, hit_rate, generation
+        """
+        return {
+            "size": len(self._cache),
+            "max_size": self.max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": f"{self.hit_rate:.2%}",
+            "generation": self._generation,
+        }
 
 
 class AliasManager:
@@ -22,12 +150,29 @@ class AliasManager:
     - ANTHROPIC_ALIAS_CHAT=claude-3-5-sonnet-20241022
     """
 
-    def __init__(self) -> None:
-        """Initialize AliasManager and load aliases from environment and fallback config."""
+    def __init__(
+        self,
+        cache_ttl_seconds: float = 300.0,
+        cache_max_size: int = 1000,
+        _resolver_chain: Any = None,
+    ) -> None:
+        """Initialize AliasManager with caching support.
+
+        Args:
+            cache_ttl_seconds: Cache TTL in seconds (default: 300 = 5 minutes)
+            cache_max_size: Maximum number of cached entries (default: 1000)
+            _resolver_chain: Optional custom resolver chain (for testing/internal use)
+        """
         self.aliases: dict[str, dict[str, str]] = {}  # {provider: {alias_name: target_model}}
         self._fallback_aliases: dict[str, dict[str, str]] = {}  # Cached fallback config
         self._default_provider: str | None = None  # Lazily loaded
         self._loaded: bool = False  # Track whether loading has occurred
+
+        # Initialize cache
+        self._cache = AliasResolverCache(ttl_seconds=cache_ttl_seconds, max_size=cache_max_size)
+
+        # Store resolver chain (will be initialized after aliases are loaded)
+        self._resolver_chain = _resolver_chain
 
         # Load fallback aliases first
         self._load_fallback_aliases()
@@ -37,6 +182,10 @@ class AliasManager:
 
         # Merge fallback aliases for any missing configurations
         self._merge_fallback_aliases()
+
+        # Initialize default resolver chain if not provided
+        if self._resolver_chain is None:
+            self._resolver_chain = self._create_default_resolver_chain()
 
     def _load_aliases(self) -> None:
         """
@@ -277,15 +426,12 @@ class AliasManager:
 
     def resolve_alias(self, model: str, provider: str | None = None) -> str | None:
         """
-        Resolve model name to alias value with case-insensitive substring matching.
+        Resolve model name to alias value using the resolver chain with caching.
 
         Resolution algorithm:
-        1. Convert model name to lowercase
-        2. Create variations of model name (with underscores and hyphens)
-        3. Find aliases within provider scope where alias name matches any variation
-        4. If exact match exists, return it immediately
-        5. Otherwise, select longest matching substring
-        6. If tie, select alphabetically first
+        1. Check cache for cached result
+        2. If cache miss, use resolver chain for full resolution
+        3. Cache the result for future lookups
 
         Args:
             model: The requested model name
@@ -296,204 +442,62 @@ class AliasManager:
             The resolved alias target with provider prefix (e.g., "poe:grok-4.1-fast")
             or None if no match found
         """
-        logger.debug(f"Attempting to resolve model alias for: '{model}'")
-
         if not model:
             logger.debug("No model name provided, cannot resolve alias")
             return None
 
-        # Check for literal name prefix (!) - handle at the very beginning
-        if model.startswith("!"):
-            logger.debug(f"Literal model name detected, stripping '!' prefix: '{model}'")
-            literal_part = model[1:]  # Remove the first character '!' (preserve original case)
+        # Build cache key
+        cache_key = f"{provider or ''}:{model}" if provider else model
 
-            # Edge case: empty after stripping '!'
-            if not literal_part:
-                logger.debug("Empty model name after stripping '!', returning None")
-                return None
+        # Check cache first (skip for literal prefix which bypasses resolution)
+        if not model.startswith("!"):
+            cached_result = self._cache.get(cache_key)
+            if cached_result is not None:
+                logger.debug(f"[AliasCache] HIT for '{model}' -> '{cached_result}'")
+                return cached_result
+            logger.debug(f"[AliasCache] MISS for '{model}', performing resolution")
+        else:
+            logger.debug(f"[AliasCache] SKIP for literal '{model}', bypassing cache")
 
-            # Check if the literal part contains a provider prefix
-            if ":" in literal_part:
-                # Format: !provider:model
-                literal_provider, literal_model = literal_part.split(":", 1)
-                # Normalize provider to lowercase but preserve model case
-                result = f"{literal_provider.lower()}:{literal_model}"
-            else:
-                # Format: !model (no provider specified)
-                # If provider parameter is given, include it so downstream
-                # parsing resolves consistently.
-                result = f"{provider}:{literal_part}" if provider else literal_part
-
-            logger.info(f"[AliasManager] literal: '{model}' -> '{result}'")
-            return result
-
+        # Early return if no aliases configured
         if not self.aliases:
             logger.debug("No aliases configured, returning None")
             return None
 
-        model_lower = model.lower()
-        logger.debug(f"Model name (lowercase): '{model_lower}'")
+        # Import here to avoid circular dependency
+        from src.core.alias.resolver import ResolutionContext
 
-        # If the caller already provided an explicit provider prefix (e.g. "kimi:sonnet"),
-        # treat the portion after ":" as the alias search space. This prevents cross-provider
-        # alias matches from hijacking an explicitly prefixed request.
-        model_for_alias_match = model_lower.split(":", 1)[1] if ":" in model_lower else model_lower
+        # Build resolution context
+        context = ResolutionContext(
+            model=model,
+            provider=provider,
+            default_provider=self._default_provider or "openai",
+            aliases=self.aliases,
+        )
 
-        logger.debug(f"Model name for alias matching: '{model_for_alias_match}'")
-        if provider:
-            logger.debug(f"Provider scope: '{provider}'")
+        # Resolve through the resolver chain
+        result = self._resolver_chain.resolve(context)
 
-        # Create variations of the model name for matching
-        # This allows "my_model" to match both "my-model" and "my_model" in the model name
-        model_variations = {
-            model_for_alias_match,  # Original (provider prefix stripped)
-            model_for_alias_match.replace("_", "-"),  # Underscores to hyphens
-            model_for_alias_match.replace("-", "_"),  # Hyphens to underscores
-        }
-        logger.debug(f"Model variations for matching: {model_variations}")
-
-        # Determine if model has explicit provider prefix that overrides the provider parameter
-        explicit_provider: str | None = model_lower.split(":", 1)[0] if ":" in model_lower else None
-
-        # Normalize provider parameter to lowercase for consistent comparison
-        normalized_provider = provider.lower() if provider else None
-
-        # Use explicit provider if present, otherwise use the provider parameter
-        search_provider = explicit_provider or normalized_provider
-
-        # Find all matching aliases within the specified provider scope
-        matches: list[tuple[str, str, str, int]] = []  # (provider, alias, target, match_length)
-
-        # Log search scope for debugging
-        if search_provider:
-            provider_aliases = self.aliases.get(search_provider, {})
-            total_aliases = len(provider_aliases)
-            logger.debug(
-                f"Checking {total_aliases} aliases for provider '{search_provider}' for matches"
-            )
-        else:
-            total_aliases = sum(len(aliases) for aliases in self.aliases.values())
-            logger.debug(
-                f"Checking {total_aliases} configured aliases across {len(self.aliases)} providers "
-                f"for matches"
-            )
-
-        for provider_name, provider_aliases in self.aliases.items():
-            # Skip if we're scoping to a specific provider
-            if search_provider and provider_name != search_provider:
-                logger.debug(f"  Skipping provider '{provider_name}' (not in search scope)")
-                continue
-            logger.debug(
-                f"  Checking provider '{provider_name}' with {len(provider_aliases)} aliases"
-            )
-
-            for alias, target in provider_aliases.items():
-                alias_lower = alias.lower()
-                logger.debug(f"    Testing alias: '{alias}' -> '{target}'")
-
-                # Check if alias matches any variation of the model name
-                for variation in model_variations:
-                    if alias_lower in variation:
-                        # Use the actual matched length from the variation
-                        match_length = len(alias_lower)
-                        matches.append((provider_name, alias, target, match_length))
-                        logger.debug(
-                            f"      ✓ Match found! Alias '{alias}' found in variation "
-                            f"'{variation}' (length: {match_length})"
-                        )
-                        break  # Found a match, no need to check other variations
-                else:
-                    logger.debug(f"      ✗ No match found for alias '{alias}'")
-
-        if not matches:
-            logger.debug(f"No aliases matched model name '{model}'")
+        # If no alias was found, return None
+        if not result.was_resolved:
+            logger.debug(f"No alias matched model name '{model}'")
             return None
 
-        logger.debug(
-            f"Found {len(matches)} matching aliases: {[(m[0], m[1], m[2], m[3]) for m in matches]}"
-        )
+        resolved_model: str = result.resolved_model
 
-        # Sort matches: exact match first, then by length, then alphabetically
-        # For exact match, check against all variations
-        matches.sort(
-            key=lambda x: (
-                (
-                    0 if any(x[1].lower() == variation for variation in model_variations) else 1
-                ),  # Exact match first
-                -x[3],  # Longer match first
-                0 if x[0] == self._default_provider else 1,  # Prefer default provider
-                x[0],  # Provider name alphabetically
-                x[1],  # Alias name alphabetically
-            )
-        )
-
-        best_match = matches[0]
-        best_provider, best_alias, best_target, _ = best_match
-        is_exact = any(best_alias.lower() == variation for variation in model_variations)
-        match_type = "exact" if is_exact else "substring"
-
-        # Return with provider prefix, but only if target doesn't already have one
-        # Cross-provider aliases have targets like "zai:haiku" which should be returned as-is
-        if ":" in best_target:
-            # Check if this is a cross-provider alias (provider:model) or just a model name with ':'
-            potential_provider, _ = best_target.split(":", 1)
-            # Only treat as cross-provider if the potential provider is actually known
-            if potential_provider in self.aliases:
-                # Valid cross-provider alias - return as-is
-                resolved_model = best_target
-                logger.info(
-                    "[AliasManager] (cross-provider %s match for '%s') '%s:%s' -> '%s'",
-                    match_type,
-                    model,
-                    best_provider,
-                    best_alias,
-                    resolved_model,
-                )
-            else:
-                # Model name contains ':' but it's not a provider prefix
-                # (e.g., "openrouter/model:free")
-                # Add source provider prefix
-                result_provider = explicit_provider if explicit_provider else best_provider.lower()
-                resolved_model = f"{result_provider}:{best_target}"
-                logger.info(
-                    "[AliasManager] (%s match for '%s') '%s:%s' -> '%s'",
-                    match_type,
-                    model,
-                    best_provider,
-                    best_alias,
-                    resolved_model,
-                )
-        else:
-            # Target is bare model name, add provider prefix
-            result_provider = explicit_provider if explicit_provider else best_provider.lower()
-            resolved_model = f"{result_provider}:{best_target}"
+        # Log chain resolution if applicable
+        if result.resolution_path:
             logger.info(
-                "[AliasManager] (%s match for '%s') '%s:%s' -> '%s'",
-                match_type,
-                model,
-                best_provider,
-                best_alias,
-                resolved_model,
+                f"[AliasManager] Resolved '{model}' through chain: "
+                f"{' -> '.join(result.resolution_path)} -> '{resolved_model}'"
             )
-        match_details = [
-            (
-                m[0],
-                m[1],
-                m[3],
-                "exact" if any(m[1].lower() == v for v in model_variations) else "substring",
-            )
-            for m in matches[:3]
-        ]
-        logger.debug(f"  All matches sorted by priority: {match_details}")
 
-        # Recursive alias resolution: check if resolved_model is itself an alias
-        # This handles chained aliases like: fast -> sonnet -> gpt-4o-mini
-        resolved_model, steps = self._recursively_resolve(resolved_model)
-
-        if steps:
-            logger.info(
-                f"[AliasManager] Fully resolved '{model}' through "
-                f"{steps} step(s) -> '{resolved_model}'"
+        # Cache the result before returning (only for non-literal resolutions)
+        if not model.startswith("!"):
+            self._cache.put(cache_key, resolved_model)
+            logger.debug(
+                f"[AliasCache] Cached result for '{model}' -> '{resolved_model}', "
+                f"stats: {self._cache.get_stats()}"
             )
 
         return resolved_model
@@ -556,3 +560,41 @@ class AliasManager:
             Maps provider name to their fallback alias definitions.
         """
         return {p: aliases.copy() for p, aliases in self._fallback_aliases.items()}
+
+    def invalidate_cache(self) -> None:
+        """Invalidate the alias resolution cache.
+
+        Call this when aliases are reloaded at runtime.
+        """
+        self._cache.invalidate()
+
+    def get_cache_stats(self) -> dict[str, Any]:
+        """Get cache statistics for monitoring.
+
+        Returns:
+            Dict with cache stats: size, max_size, hits, misses, hit_rate, generation
+        """
+        return self._cache.get_stats()
+
+    def _create_default_resolver_chain(self) -> Any:
+        """Create the default resolver chain for alias resolution.
+
+        Imports are done here to avoid circular dependencies.
+        The chain order is: LiteralPrefix -> ChainedAlias -> SubstringMatcher -> MatchRanker
+        """
+        from src.core.alias.resolver import (
+            AliasResolverChain,
+            ChainedAliasResolver,
+            LiteralPrefixResolver,
+            MatchRanker,
+            SubstringMatcher,
+        )
+
+        return AliasResolverChain(
+            [
+                LiteralPrefixResolver(),
+                ChainedAliasResolver(),
+                SubstringMatcher(),
+                MatchRanker(),
+            ]
+        )

@@ -19,30 +19,6 @@ logger = getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class ActiveAliasesResult:
-    """Result of get_active_aliases with status information.
-
-    Attributes:
-        aliases: Nested tuple of (provider_name, ((alias, target), ...))
-            for true immutability. The outer structure is ((provider, items), ...).
-        is_success: True if the operation succeeded
-        error_message: Optional error message if is_success is False
-        provider_count: Number of active providers
-        alias_count: Total number of aliases across all providers
-
-    Note:
-        This dataclass is frozen and uses tuples for all collections,
-        ensuring true runtime immutability.
-    """
-
-    aliases: tuple[tuple[str, tuple[tuple[str, str], ...]], ...]
-    is_success: bool
-    error_message: str | None = None
-    provider_count: int = 0
-    alias_count: int = 0
-
-
-@dataclass(frozen=True)
 class ProviderAliasInfo:
     """Information about a single provider's aliases.
 
@@ -163,64 +139,6 @@ class AliasService:
             for provider, aliases in all_aliases.items()
             if provider in active_providers
         }
-
-    def get_active_aliases_result(self) -> ActiveAliasesResult:
-        """Get aliases with unambiguous status information.
-
-        .. deprecated::
-            This method has no production callers. Use `get_active_aliases()`
-            instead. Will be removed in a future version.
-
-        Returns:
-            ActiveAliasesResult containing aliases and status information.
-            Unlike get_active_aliases(), this distinguishes between "no active
-            providers" and "error occurred" scenarios.
-
-        Note:
-            Fail-fast behavior: unexpected exceptions (except AttributeError
-            during early initialization) propagate to the caller. Only
-            AttributeError from provider initialization is handled gracefully.
-        """
-        import warnings
-
-        warnings.warn(
-            "get_active_aliases_result() is deprecated and will be removed. "
-            "Use get_active_aliases() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        active_providers = self._get_active_provider_names()
-
-        if not active_providers:
-            return ActiveAliasesResult(
-                aliases=(),
-                is_success=False,
-                error_message="No active providers found",
-                provider_count=0,
-                alias_count=0,
-            )
-
-        all_aliases = self.alias_manager.get_all_aliases()
-
-        filtered_aliases = {
-            provider: aliases.copy()
-            for provider, aliases in all_aliases.items()
-            if provider in active_providers
-        }
-
-        provider_count = len(filtered_aliases)
-        alias_count = sum(len(aliases) for aliases in filtered_aliases.values())
-
-        return ActiveAliasesResult(
-            aliases=tuple(
-                (provider, tuple(sorted(aliases.items())))
-                for provider, aliases in filtered_aliases.items()
-            ),
-            is_success=True,
-            error_message=None,
-            provider_count=provider_count,
-            alias_count=alias_count,
-        )
 
     def get_alias_summary(self, default_provider: str | None = None) -> AliasSummary:
         """Get structured alias summary for presentation.
