@@ -24,6 +24,9 @@ LOG_REQUEST_METRICS = config.log_request_metrics
 conversation_logger = ConversationLogger.get_logger()
 logger = logging.getLogger(__name__)
 
+# Progress logging configuration
+PROGRESS_LOG_INTERVAL_CHUNKS = 50
+
 
 # =============================================================================
 # Optional Feature Helpers (extracted for testability)
@@ -68,8 +71,8 @@ class _UsageTracker:
         }
 
     def log_progress(self) -> None:
-        """Log streaming progress every 50 chunks."""
-        if self.chunk_count % 50 == 0:
+        """Log streaming progress periodically."""
+        if self.chunk_count % PROGRESS_LOG_INTERVAL_CHUNKS == 0:
             conversation_logger.debug(
                 f"🌊 STREAMING | Chunks: {self.chunk_count} | "
                 f"Tokens so far: {self.input_tokens:,}→{self.output_tokens:,}"
@@ -277,11 +280,10 @@ async def convert_openai_streaming_to_claude(
     tool_name_map_inverse = tool_name_map_inverse or {}
 
     # Determine if usage tracking should be enabled
-    # Priority: explicit param > global config > implicit when metrics provided
+    # Priority: explicit param > global config
+    # Note: metrics param only affects whether metrics are updated, not tracker creation
     should_track_usage = (
-        enable_usage_tracking
-        if enable_usage_tracking is not None
-        else (LOG_REQUEST_METRICS or metrics is not None)
+        enable_usage_tracking if enable_usage_tracking is not None else LOG_REQUEST_METRICS
     )
 
     # Initialize optional feature helpers
@@ -358,7 +360,11 @@ async def convert_openai_streaming_to_claude(
                     raise
                 except Exception:
                     # Don't let usage parsing kill the stream
-                    logger.exception("Streaming usage accounting error")
+                    logger.exception(
+                        "Streaming usage accounting error at chunk %d. Usage field: %s",
+                        usage_tracker.chunk_count if usage_tracker else 0,
+                        chunk.get("usage") if chunk else None,
+                    )
 
             # Convert and yield Claude-formatted events
             for out in ingest_openai_chunk(state, chunk):
