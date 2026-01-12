@@ -52,7 +52,10 @@ class NonStreamingHandler(ABC):
         request_size: int,
         start_time: float,
     ) -> JSONResponse:
-        """Handle a non-streaming request and return the response.
+        """Handle a non-streaming request and return the response (LEGACY).
+
+        This method is maintained for backward compatibility during migration.
+        New code should use handle_with_context instead.
 
         Args:
             request: The Claude request object.
@@ -76,6 +79,40 @@ class NonStreamingHandler(ABC):
             A JSONResponse with the Claude API format response.
         """
         pass
+
+    async def handle_with_context(
+        self,
+        context: Any,  # ApiRequestContext - use Any to avoid circular import
+    ) -> JSONResponse:
+        """Handle a non-streaming request with RequestContext.
+
+        Default implementation calls the legacy method for compatibility.
+        Subclasses should override this method directly.
+
+        Args:
+            context: The ApiRequestContext containing all request data.
+
+        Returns:
+            A JSONResponse with the Claude API format response.
+        """
+        return await self.handle_non_streaming_request(
+            request=context.request,
+            openai_request=context.openai_request,
+            provider_name=context.provider_name,
+            client_api_key=context.client_api_key,
+            provider_api_key=context.provider_api_key,
+            tool_name_map_inverse=context.tool_name_map_inverse,
+            openai_client=context.openai_client,
+            http_request=context.http_request,
+            request_id=context.request_id,
+            metrics=context.metrics,
+            tracker=context.tracker,
+            config=context.config,
+            tool_use_count=context.tool_use_count,
+            tool_result_count=context.tool_result_count,
+            request_size=context.request_size,
+            start_time=context.start_time,
+        )
 
 
 class AnthropicNonStreamingHandler(NonStreamingHandler):

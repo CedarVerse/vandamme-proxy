@@ -53,7 +53,10 @@ class StreamingHandler(ABC):
         tracker: Any,
         config: Any,
     ) -> StreamingResponse | JSONResponse:
-        """Handle a streaming request and return the response.
+        """Handle a streaming request and return the response (LEGACY).
+
+        This method is maintained for backward compatibility during migration.
+        New code should use handle_with_context instead.
 
         Args:
             request: The Claude request object.
@@ -73,6 +76,36 @@ class StreamingHandler(ABC):
             A StreamingResponse with the appropriate stream.
         """
         pass
+
+    async def handle_with_context(
+        self,
+        context: Any,  # ApiRequestContext - use Any to avoid circular import
+    ) -> StreamingResponse | JSONResponse:
+        """Handle a streaming request with RequestContext.
+
+        Default implementation calls the legacy method for compatibility.
+        Subclasses should override this method directly.
+
+        Args:
+            context: The ApiRequestContext containing all request data.
+
+        Returns:
+            A StreamingResponse with the appropriate stream.
+        """
+        return await self.handle_streaming_request(
+            request=context.request,
+            openai_request=context.openai_request,
+            provider_name=context.provider_name,
+            client_api_key=context.client_api_key,
+            provider_api_key=context.provider_api_key,
+            tool_name_map_inverse=context.tool_name_map_inverse,
+            openai_client=context.openai_client,
+            http_request=context.http_request,
+            request_id=context.request_id,
+            metrics=context.metrics,
+            tracker=context.tracker,
+            config=context.config,
+        )
 
 
 class AnthropicStreamingHandler(StreamingHandler):
