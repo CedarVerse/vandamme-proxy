@@ -30,62 +30,33 @@ class TestIsTimeoutError:
         exc = httpx.ReadTimeout("Read timed out")
         assert _is_timeout_error(exc) is True
 
-    def test_detects_timeout_in_string_message(self):
-        """Should detect timeout from exception string message."""
+    def test_returns_false_for_asyncio_timeout(self):
+        """Should return False for asyncio.TimeoutError (different base class)."""
+        import asyncio
+
         from src.api.endpoints import _is_timeout_error
 
+        # asyncio.TimeoutError is NOT an httpx.TimeoutException
+        # so it should return False
+        exc = asyncio.TimeoutError("Async operation timed out")
+        assert _is_timeout_error(exc) is False
+
+    def test_returns_false_for_non_timeout_errors(self):
+        """Should return False for exceptions that are not httpx.TimeoutException."""
+        from src.api.endpoints import _is_timeout_error
+
+        # Custom exceptions without timeout keywords should return False
+        # String-based detection was removed as it was brittle
+        exc = ValueError("Some other error")
+        assert _is_timeout_error(exc) is False
+
+        # Even custom exceptions with "timeout" in message are not detected
+        # because we rely on proper exception types, not string matching
         class CustomError(Exception):
             pass
 
         exc = CustomError("Operation timed out")
-        assert _is_timeout_error(exc) is True
-
-    def test_detects_timed_out_in_string_message(self):
-        """Should detect 'timed out' phrase in exception message."""
-        from src.api.endpoints import _is_timeout_error
-
-        class CustomError(Exception):
-            pass
-
-        exc = CustomError("Connection timed out waiting for response")
-        assert _is_timeout_error(exc) is True
-
-    def test_detects_read_timeout_in_string_message(self):
-        """Should detect 'read timeout' phrase in exception message."""
-        from src.api.endpoints import _is_timeout_error
-
-        class CustomError(Exception):
-            pass
-
-        exc = CustomError("Server read timeout error")
-        assert _is_timeout_error(exc) is True
-
-    def test_detects_connect_timeout_in_string_message(self):
-        """Should detect 'connect timeout' phrase in exception message."""
-        from src.api.endpoints import _is_timeout_error
-
-        class CustomError(Exception):
-            pass
-
-        exc = CustomError("Failed to connect: connect timeout")
-        assert _is_timeout_error(exc) is True
-
-    def test_returns_false_for_non_timeout_errors(self):
-        """Should return False for exceptions without timeout indicators."""
-        from src.api.endpoints import _is_timeout_error
-
-        exc = ValueError("Some other error")
         assert _is_timeout_error(exc) is False
-
-    def test_case_insensitive_timeout_detection(self):
-        """Should detect timeout regardless of case."""
-        from src.api.endpoints import _is_timeout_error
-
-        class CustomError(Exception):
-            pass
-
-        exc = CustomError("TIMEOUT occurred")
-        assert _is_timeout_error(exc) is True
 
 
 @pytest.mark.unit

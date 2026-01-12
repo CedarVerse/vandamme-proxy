@@ -45,22 +45,16 @@ router = APIRouter()
 def _is_timeout_error(exc: Exception) -> bool:
     """Check if an exception is a timeout-related error.
 
+    Uses proper exception hierarchy instead of string matching.
+    httpx.TimeoutException is the base class for all timeout errors.
+
     Args:
         exc: The exception to check.
 
     Returns:
         True if the exception is a timeout error, False otherwise.
     """
-    # Check for httpx timeout errors
-    if isinstance(exc, httpx.TimeoutException):
-        return True
-    # Check for httpx ReadTimeout specifically
-    if isinstance(exc, httpx.ReadTimeout):
-        return True
-    # Check OpenAI SDK timeout errors
-    error_str = str(exc).lower()
-    timeout_keywords = ("timeout", "timed out", "read timeout", "connect timeout")
-    return any(keyword in error_str for keyword in timeout_keywords)
+    return isinstance(exc, httpx.TimeoutException)
 
 
 def _map_timeout_to_504() -> HTTPException:
@@ -429,7 +423,7 @@ async def create_message(
         # Log request start
         if LOG_REQUEST_METRICS:
             conversation_logger.info(
-                f"🚀 START | Model: {request.model} | "
+                f"🚀 START | Model: {request.model} (resolved: {provider_name}:{resolved_model}) | "
                 f"Stream: {request.stream} | "
                 f"Messages: {message_count} | "
                 f"Max Tokens: {request.max_tokens} | "

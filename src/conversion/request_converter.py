@@ -97,11 +97,6 @@ def _convert_claude_to_openai_impl(
 
     provider_name, openai_model = model_manager.resolve_model(claude_request.model)
 
-    if LOG_REQUEST_METRICS:
-        # Keep a single implementation of request metrics to avoid drift.
-        metrics = collect_request_metrics(claude_request, provider_name=provider_name)
-        log_request_metrics(conversation_logger, metrics)
-
     provider_config = config.provider_manager.get_provider_config(provider_name)
 
     tool_name_map, tool_name_map_inverse = build_tool_name_maps_if_enabled(
