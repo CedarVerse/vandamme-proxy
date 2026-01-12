@@ -23,7 +23,7 @@ from src.api.services.streaming import (
     streaming_response,
     with_streaming_error_handling,
 )
-from src.conversion.response_converter import convert_openai_streaming_to_claude_with_cancellation
+from src.conversion.response_converter import convert_openai_streaming_to_claude
 from src.middleware import RequestContext
 
 logger = logging.getLogger(__name__)
@@ -184,14 +184,14 @@ class OpenAIStreamingHandler(StreamingHandler):
             )
 
             # Convert OpenAI SSE to Claude format
-            converted_stream = convert_openai_streaming_to_claude_with_cancellation(
+            converted_stream = convert_openai_streaming_to_claude(
                 openai_stream,
                 request,
                 logger,
-                http_request,
-                openai_client,
-                request_id,
                 tool_name_map_inverse=tool_name_map_inverse,
+                http_request=http_request,
+                openai_client=openai_client,
+                request_id=request_id,
             )
 
             stream_with_error_handling = with_streaming_error_handling(

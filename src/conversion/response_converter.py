@@ -25,6 +25,106 @@ conversation_logger = ConversationLogger.get_logger()
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Optional Feature Helpers (extracted for testability)
+# =============================================================================
+
+
+class _UsageTracker:
+    """Tracks token usage during streaming.
+
+    Orthogonal to conversion - can be enabled/disabled independently.
+    """
+
+    def __init__(self) -> None:
+        self.input_tokens: int = 0
+        self.output_tokens: int = 0
+        self.cache_read_tokens: int = 0
+        self.chunk_count: int = 0
+
+    def update(self, chunk: dict[str, Any]) -> dict[str, int]:
+        """Extract and return usage data from chunk."""
+        self.chunk_count += 1
+        usage = chunk.get("usage")
+        if not usage:
+            return {"input_tokens": 0, "output_tokens": 0}
+
+        prompt_details = usage.get("prompt_tokens_details", {})
+        cached_tokens = prompt_details.get("cached_tokens", 0) if prompt_details else 0
+
+        self.input_tokens = usage.get("prompt_tokens", 0)
+        self.output_tokens = usage.get("completion_tokens", 0)
+        self.cache_read_tokens = cached_tokens
+
+        return {
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "cache_read_input_tokens": cached_tokens,
+        }
+
+    def log_progress(self) -> None:
+        """Log streaming progress every 50 chunks."""
+        if self.chunk_count % 50 == 0:
+            conversation_logger.debug(
+                f"🌊 STREAMING | Chunks: {self.chunk_count} | "
+                f"Tokens so far: {self.input_tokens:,}→{self.output_tokens:,}"
+            )
+
+    def log_completion(self) -> None:
+        """Log stream completion with final stats."""
+        if hasattr(self, "_duration_ms"):
+            conversation_logger.info(
+                f"✅ STREAM COMPLETE | Duration: {self._duration_ms:.0f}ms | "
+                f"Chunks: {self.chunk_count} | "
+                f"Tokens: {self.input_tokens:,}→{self.output_tokens:,} | "
+                f"Cache: {self.cache_read_tokens:,}"
+            )
+
+
+class _CancellationChecker:
+    """Handles client disconnection detection and cancellation.
+
+    Orthogonal to conversion - only needed when http_request is available.
+    """
+
+    def __init__(self, http_request: Request, openai_client: Any, request_id: str, log: Any):
+        self._http_request = http_request
+        self._openai_client = openai_client
+        self._request_id = request_id
+        self._log = log
+        self._should_cancel = False
+
+    async def check(self) -> bool:
+        """Check if client disconnected. Returns True if cancellation occurred."""
+        if await self._http_request.is_disconnected():
+            self._log.info(f"Client disconnected, cancelling request {self._request_id}")
+            self._openai_client.cancel_request(self._request_id)
+            self._should_cancel = True
+            return True
+        return False
+
+    @property
+    def is_cancelled(self) -> bool:
+        return self._should_cancel
+
+
+def _build_sse_error(error_type: str, message: str) -> str:
+    """Build a Server-Sent Event error payload.
+
+    Centralized error formatting ensures consistent client experience.
+    """
+    error_event = {
+        "type": "error",
+        "error": {"type": error_type, "message": message},
+    }
+    return f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+
+
+# =============================================================================
+# Non-streaming converter (unchanged - no duplication here)
+# =============================================================================
+
+
 def convert_openai_to_claude_response(
     openai_response: dict,
     original_request: ClaudeMessagesRequest,
@@ -110,91 +210,89 @@ def convert_openai_to_claude_response(
     return claude_response
 
 
+# =============================================================================
+# Unified streaming converter (single function with optional features)
+# =============================================================================
+
+
 async def convert_openai_streaming_to_claude(
     openai_stream: Any,
     original_request: ClaudeMessagesRequest,
     logger: Any,
     tool_name_map_inverse: dict[str, str] | None = None,
+    *,
+    # Optional features via keyword-only parameters
+    http_request: Request | None = None,
+    openai_client: Any = None,
+    request_id: str | None = None,
+    metrics: Any = None,
 ) -> AsyncGenerator[str, None]:
-    """Convert OpenAI streaming response to Claude streaming format."""
+    """Convert OpenAI streaming response to Claude streaming format.
 
+    This unified function supports both simple and cancellation-aware streaming
+    through optional keyword-only parameters. The simple case (used in tests)
+    requires only the first three positional arguments.
+
+    Features enabled by optional parameters:
+    - http_request + openai_client + request_id: Enables cancellation detection
+    - metrics + request_id: Enables metrics tracking and logging
+
+    Args:
+        openai_stream: The OpenAI streaming response to convert.
+        original_request: The original Claude request (for model name, etc.).
+        logger: Logger instance for error reporting.
+        tool_name_map_inverse: Inverse mapping for tool name sanitization.
+
+    Keyword-only optional features:
+        http_request: FastAPI Request object - enables cancellation detection.
+        openai_client: OpenAI client - used to cancel requests on disconnect.
+        request_id: Unique request identifier for logging and cancellation.
+        metrics: Metrics object from request tracker (populated if provided).
+
+    Yields:
+        Server-Sent Event (SSE) formatted strings in Claude API format.
+
+    Example:
+        # Simple case (tests, no cancellation/metrics)
+        stream = convert_openai_streaming_to_claude(openai_stream, request, logger)
+
+        # Full-featured case (production)
+        stream = convert_openai_streaming_to_claude(
+            openai_stream,
+            request,
+            logger,
+            tool_name_map_inverse=tool_map,
+            http_request=http_req,
+            openai_client=client,
+            request_id=req_id,
+            metrics=metrics,
+        )
+    """
+
+    # -------------------------------------------------------------------------
+    # Initialization (shared)
+    # -------------------------------------------------------------------------
     message_id = f"msg_{uuid.uuid4().hex[:24]}"
     tool_name_map_inverse = tool_name_map_inverse or {}
 
-    for ev in initial_events(message_id=message_id, model=original_request.model):
-        yield ev
-
-    state = OpenAIToClaudeStreamState(
-        message_id=message_id,
-        tool_name_map_inverse=tool_name_map_inverse,
+    # Initialize optional feature helpers
+    usage_tracker = _UsageTracker() if metrics or LOG_REQUEST_METRICS else None
+    cancellation_checker = (
+        _CancellationChecker(http_request, openai_client, request_id, logger)
+        if http_request and openai_client and request_id
+        else None
     )
 
-    try:
-        async for line in openai_stream:
-            chunk = parse_openai_sse_line(line)
-            if chunk is None:
-                continue
-            if chunk.get("_done"):
-                break
-
-            for out in ingest_openai_chunk(state, chunk):
-                yield out
-
-            # If the upstream signals a finish_reason we stop consuming further chunks.
-            choices = chunk.get("choices", [])
-            if choices and choices[0].get("finish_reason"):
-                break
-
-    except ConversionError as e:
-        logger.error("Streaming conversion error: %s", e)
-        error_event = {"type": "error", "error": {"type": e.error_type, "message": e.message}}
-        yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
-        return
-
-    except Exception as e:
-        # Unexpected streaming errors: keep client-visible shape stable.
-        logger.exception("Streaming error")
-        error_event = {
-            "type": "error",
-            "error": {"type": "api_error", "message": f"Streaming error: {str(e)}"},
-        }
-        yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
-        return
-
-    for ev in final_events(state, usage={"input_tokens": 0, "output_tokens": 0}):
-        yield ev
-
-
-async def convert_openai_streaming_to_claude_with_cancellation(
-    openai_stream: Any,
-    original_request: ClaudeMessagesRequest,
-    logger: Any,
-    http_request: Request,
-    openai_client: Any,
-    request_id: str,
-    tool_name_map_inverse: dict[str, str] | None = None,
-) -> AsyncGenerator[str, None]:
-    """Convert OpenAI streaming response to Claude streaming format with cancellation support."""
-
-    message_id = f"msg_{uuid.uuid4().hex[:24]}"
-
-    # Get request metrics for updating
-    metrics = None
-    if LOG_REQUEST_METRICS:
+    # Get request metrics for updating (if enabled)
+    if metrics is None and LOG_REQUEST_METRICS and http_request and request_id:
         tracker = get_request_tracker(http_request)
         metrics = await tracker.get_request(request_id)
 
-    # Initialize tracking variables
-    input_tokens = 0
-    output_tokens = 0
-    cache_read_tokens = 0
-    chunk_count = 0
-
-    tool_name_map_inverse = tool_name_map_inverse or {}
-
+    # Send initial events
     for ev in initial_events(message_id=message_id, model=original_request.model):
         yield ev
 
+    # Initialize conversion state machine
     state = OpenAIToClaudeStreamState(
         message_id=message_id,
         tool_name_map_inverse=tool_name_map_inverse,
@@ -202,131 +300,93 @@ async def convert_openai_streaming_to_claude_with_cancellation(
 
     usage_data = {"input_tokens": 0, "output_tokens": 0}
 
-    # The cancellation path historically used local counters and allocators. After refactoring,
-    # the conversion state lives on `state`. Keep locals only where the cancellation path still
-    # needs them (e.g., usage accounting).
-
+    # -------------------------------------------------------------------------
+    # Stream processing loop (with optional features)
+    # -------------------------------------------------------------------------
     try:
         async for line in openai_stream:
-            # Check if client disconnected
-            if await http_request.is_disconnected():
-                logger.info(f"Client disconnected, cancelling request {request_id}")
-                openai_client.cancel_request(request_id)
+            # Optional: Check for client disconnection
+            if cancellation_checker and await cancellation_checker.check():
                 break
 
+            # Parse SSE line
             chunk = parse_openai_sse_line(line)
             if chunk is None:
                 continue
             if chunk.get("_done"):
                 break
 
-            try:
-                chunk_count += 1
-
-                # Usage accounting is orthogonal to conversion; keep it here.
-                usage = chunk.get("usage", None)
-                if usage:
-                    cache_read_input_tokens = 0
-                    prompt_tokens_details = usage.get("prompt_tokens_details", {})
-                    if prompt_tokens_details:
-                        cache_read_input_tokens = prompt_tokens_details.get("cached_tokens", 0)
-
-                    input_tokens = usage.get("prompt_tokens", 0)
-                    output_tokens = usage.get("completion_tokens", 0)
-                    cache_read_tokens = cache_read_input_tokens
-
-                    usage_data = {
-                        "input_tokens": input_tokens,
-                        "output_tokens": output_tokens,
-                        "cache_read_input_tokens": cache_read_input_tokens,
-                    }
+            # Optional: Track usage and metrics
+            if usage_tracker:
+                try:
+                    usage_data = usage_tracker.update(chunk)
 
                     # Update metrics if available
-                    if LOG_REQUEST_METRICS and metrics:
-                        metrics.input_tokens = input_tokens
-                        metrics.output_tokens = output_tokens
-                        metrics.cache_read_tokens = cache_read_tokens
+                    if metrics:
+                        metrics.input_tokens = usage_data.get("input_tokens", 0)
+                        metrics.output_tokens = usage_data.get("output_tokens", 0)
+                        metrics.cache_read_tokens = usage_data.get("cache_read_input_tokens", 0)
 
-                choices = chunk.get("choices", [])
-                if not choices:
-                    continue
+                    # Log progress periodically
+                    if LOG_REQUEST_METRICS:
+                        usage_tracker.log_progress()
 
-                # Log streaming progress every 50 chunks
-                if LOG_REQUEST_METRICS and chunk_count % 50 == 0:
-                    conversation_logger.debug(
-                        f"🌊 STREAMING | Chunks: {chunk_count} | "
-                        f"Tokens so far: {input_tokens:,}→{output_tokens:,}"
-                    )
+                except ConversionError:
+                    raise
+                except Exception:
+                    # Don't let usage parsing kill the stream
+                    logger.exception("Streaming usage accounting error")
 
-            except ConversionError:
-                raise
-            except Exception:
-                # We keep conversion errors typed, but don't let usage parsing kill the stream.
-                # This path is for unexpected shapes in usage fields.
-                logger.exception("Streaming usage accounting error")
-
+            # Convert and yield Claude-formatted events
             for out in ingest_openai_chunk(state, chunk):
                 yield out
 
-            finish_reason = choices[0].get("finish_reason") if choices else None
-            if finish_reason:
+            # Check for stream completion
+            choices = chunk.get("choices", [])
+            if choices and choices[0].get("finish_reason"):
                 break
 
-            # Continue streaming
-            continue
-
+    # -------------------------------------------------------------------------
+    # Error handling (with optional metrics updates)
+    # -------------------------------------------------------------------------
     except HTTPException as e:
-        # Preserve existing cancellation behavior.
-        if e.status_code == 499:
-            if LOG_REQUEST_METRICS and metrics:
-                metrics.error = "Request cancelled by client"
-                metrics.error_type = "cancelled"
+        # Special handling for cancellation status code
+        if e.status_code == 499 and metrics:
+            metrics.error = "Request cancelled by client"
+            metrics.error_type = "cancelled"
             logger.info(f"Request {request_id} was cancelled")
-            error_event = {
-                "type": "error",
-                "error": {"type": "cancelled", "message": "Request was cancelled by client"},
-            }
-            yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+            yield _build_sse_error("cancelled", "Request was cancelled by client")
             return
 
-        if LOG_REQUEST_METRICS and metrics:
+        if metrics:
             metrics.error = f"HTTP exception: {e.detail}"
             metrics.error_type = "http_error"
         raise
 
     except ConversionError as e:
-        if LOG_REQUEST_METRICS and metrics:
+        if metrics:
             metrics.error = e.message
             metrics.error_type = e.error_type
         logger.error("Streaming conversion error: %s", e)
-        error_event = {"type": "error", "error": {"type": e.error_type, "message": e.message}}
-        yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        yield _build_sse_error(e.error_type, e.message)
         return
 
     except Exception as e:
-        # Unexpected streaming errors: keep client-visible shape stable.
-        if LOG_REQUEST_METRICS and metrics:
+        if metrics:
             metrics.error = f"Streaming error: {str(e)}"
             metrics.error_type = "streaming_error"
         logger.exception("Streaming error")
-        error_event = {
-            "type": "error",
-            "error": {"type": "api_error", "message": f"Streaming error: {str(e)}"},
-        }
-        yield f"event: error\ndata: {json.dumps(error_event, ensure_ascii=False)}\n\n"
+        yield _build_sse_error("api_error", f"Streaming error: {str(e)}")
         return
 
-    # Send final SSE events (reuse the shared state machine implementation).
-    # In the cancellation-aware path we include usage in message_delta.
+    # -------------------------------------------------------------------------
+    # Final events and logging (with optional metrics)
+    # -------------------------------------------------------------------------
     for ev in final_events(state, usage=usage_data):
         yield ev
 
-    # Log streaming completion
-    if LOG_REQUEST_METRICS and metrics:
+    # Optional: Log stream completion
+    if metrics and usage_tracker:
         duration_ms = metrics.duration_ms
-        conversation_logger.info(
-            f"✅ STREAM COMPLETE | Duration: {duration_ms:.0f}ms | "
-            f"Chunks: {chunk_count} | "
-            f"Tokens: {input_tokens:,}→{output_tokens:,} | "
-            f"Cache: {cache_read_tokens:,}"
-        )
+        usage_tracker._duration_ms = duration_ms  # type: ignore[attr-defined]
+        usage_tracker.log_completion()
