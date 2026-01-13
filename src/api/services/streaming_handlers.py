@@ -7,7 +7,7 @@ This eliminates deep nesting in the endpoint by using a strategy pattern.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -26,6 +26,9 @@ from src.api.services.streaming import (
 from src.conversion.response_converter import convert_openai_streaming_to_claude
 from src.middleware import RequestContext
 
+if TYPE_CHECKING:
+    from src.api.context.request_context import RequestContext as ApiRequestContext
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,7 +42,7 @@ class StreamingHandler(ABC):
     @abstractmethod
     async def handle_with_context(
         self,
-        context: Any,  # ApiRequestContext - use Any to avoid circular import
+        context: "ApiRequestContext",
     ) -> StreamingResponse | JSONResponse:
         """Handle a streaming request with RequestContext.
 
@@ -61,10 +64,10 @@ class AnthropicStreamingHandler(StreamingHandler):
 
     async def handle_with_context(
         self,
-        context: Any,
+        context: "ApiRequestContext",
     ) -> StreamingResponse | JSONResponse:
         """Handle Anthropic-format streaming with direct passthrough."""
-        resolved_model, claude_request_dict = build_anthropic_passthrough_request(
+        _resolved_model, claude_request_dict = build_anthropic_passthrough_request(
             request=context.request,
             provider_name=context.provider_name,
         )
@@ -92,10 +95,11 @@ class AnthropicStreamingHandler(StreamingHandler):
                 ),
                 headers=sse_headers(),
             )
-        except HTTPException as e:
+        except (HTTPException, ConnectionError, TimeoutError) as e:
+            error_msg = str(e.detail) if isinstance(e, HTTPException) else str(e)
             await finalize_metrics_on_streaming_error(
                 metrics=context.metrics,
-                error=e.detail,
+                error=error_msg,
                 tracker=context.tracker,
                 request_id=context.request_id,
             )
@@ -117,7 +121,7 @@ class OpenAIStreamingHandler(StreamingHandler):
 
     async def handle_with_context(
         self,
-        context: Any,
+        context: "ApiRequestContext",
     ) -> StreamingResponse | JSONResponse:
         """Handle OpenAI-format streaming with conversion to Claude format."""
         try:
@@ -155,14 +159,15 @@ class OpenAIStreamingHandler(StreamingHandler):
             )
 
             # Apply middleware to streaming deltas if configured
-            if hasattr(context.config.provider_manager, "middleware_chain"):
+            middleware_chain = getattr(context.config.provider_manager, "middleware_chain", None)
+            if middleware_chain:
                 from src.api.middleware_integration import (
                     MiddlewareAwareRequestProcessor,
                     MiddlewareStreamingWrapper,
                 )
 
                 processor = MiddlewareAwareRequestProcessor()
-                processor.middleware_chain = context.config.provider_manager.middleware_chain
+                processor.middleware_chain = middleware_chain
 
                 wrapped_stream = MiddlewareStreamingWrapper(
                     original_stream=stream_with_error_handling,
@@ -180,10 +185,11 @@ class OpenAIStreamingHandler(StreamingHandler):
                 return streaming_response(stream=wrapped_stream, headers=sse_headers())
 
             return streaming_response(stream=stream_with_error_handling, headers=sse_headers())
-        except HTTPException as e:
+        except (HTTPException, ConnectionError, TimeoutError) as e:
+            error_msg = str(e.detail) if isinstance(e, HTTPException) else str(e)
             await finalize_metrics_on_streaming_error(
                 metrics=context.metrics,
-                error=e.detail,
+                error=error_msg,
                 tracker=context.tracker,
                 request_id=context.request_id,
             )

@@ -16,9 +16,26 @@ class RequestContext:
     a single, well-structured object that handlers can access.
 
     Design decisions:
-    - frozen=True: Ensures immutability for thread safety
+    - frozen=True: Ensures immutability for thread safety (shallow immutability)
     - No builder pattern: Simpler, Pythonic construction is sufficient
     - Computed properties: For derived values (avoids redundancy)
+
+    Field Availability:
+    - metrics: May be None if metrics tracking is disabled (check with is_metrics_enabled)
+    - tracker: May be None if metrics tracking is disabled
+    - client_api_key: May be None for passthrough providers
+    - provider_api_key: May be None for passthrough providers
+    - tool_name_map_inverse: May be None if no tool mapping needed
+
+    Mutability Contract:
+    - The context object itself is immutable (frozen=True)
+    - Nested objects (metrics, dictionaries) may be mutated for tracking purposes
+    - This is thread-safe because each request gets its own context instance
+
+    Access Pattern:
+        Always check `if context.is_metrics_enabled:` before accessing metrics fields.
+        Always check `if context.metrics:` before accessing metrics fields directly.
+        Use computed properties (is_metrics_enabled, is_anthropic_format) for boolean checks.
     """
 
     # === Core Request ===

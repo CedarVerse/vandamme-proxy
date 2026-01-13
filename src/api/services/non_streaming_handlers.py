@@ -9,7 +9,7 @@ import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -19,6 +19,9 @@ from src.api.services.request_builder import build_anthropic_passthrough_request
 from src.conversion.response_converter import convert_openai_to_claude_response
 from src.core.logging import ConversationLogger
 from src.middleware import RequestContext, ResponseContext
+
+if TYPE_CHECKING:
+    from src.api.context.request_context import RequestContext as ApiRequestContext
 
 logger = logging.getLogger(__name__)
 conversation_logger = ConversationLogger.get_logger()
@@ -34,7 +37,7 @@ class NonStreamingHandler(ABC):
     @abstractmethod
     async def handle_with_context(
         self,
-        context: Any,  # ApiRequestContext - use Any to avoid circular import
+        context: "ApiRequestContext",
     ) -> JSONResponse:
         """Handle a non-streaming request with RequestContext.
 
@@ -56,10 +59,10 @@ class AnthropicNonStreamingHandler(NonStreamingHandler):
 
     async def handle_with_context(
         self,
-        context: Any,
+        context: "ApiRequestContext",
     ) -> JSONResponse:
         """Handle Anthropic-format non-streaming with direct passthrough."""
-        resolved_model, claude_request_dict = build_anthropic_passthrough_request(
+        _resolved_model, claude_request_dict = build_anthropic_passthrough_request(
             request=context.request,
             provider_name=context.provider_name,
         )
@@ -78,7 +81,8 @@ class AnthropicNonStreamingHandler(NonStreamingHandler):
         )
 
         # Apply middleware to response if configured
-        if hasattr(context.config.provider_manager, "middleware_chain"):
+        middleware_chain = getattr(context.config.provider_manager, "middleware_chain", None)
+        if middleware_chain:
             response_context = ResponseContext(
                 response=anthropic_response,
                 request_context=RequestContext(
@@ -89,15 +93,11 @@ class AnthropicNonStreamingHandler(NonStreamingHandler):
                 ),
                 is_streaming=False,
             )
-            processed_response = (
-                await context.config.provider_manager.middleware_chain.process_response(
-                    response_context
-                )
-            )
+            processed_response = await middleware_chain.process_response(response_context)
             anthropic_response = processed_response.response
 
         # Update metrics
-        if context.config.log_request_metrics and context.metrics:
+        if context.is_metrics_enabled and context.metrics:
             response_json = json.dumps(anthropic_response)
             context.metrics.response_size = len(response_json)
 
@@ -121,7 +121,7 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
 
     async def handle_with_context(
         self,
-        context: Any,
+        context: "ApiRequestContext",
     ) -> JSONResponse:
         """Handle OpenAI-format non-streaming with conversion to Claude format."""
         api_key_params = build_api_key_params(
@@ -137,7 +137,8 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
         )
 
         # Apply middleware to response if configured
-        if hasattr(context.config.provider_manager, "middleware_chain"):
+        middleware_chain = getattr(context.config.provider_manager, "middleware_chain", None)
+        if middleware_chain:
             response_context = ResponseContext(
                 response=openai_response,
                 request_context=RequestContext(
@@ -149,11 +150,7 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
                 ),
                 is_streaming=False,
             )
-            processed_response = (
-                await context.config.provider_manager.middleware_chain.process_response(
-                    response_context
-                )
-            )
+            processed_response = await middleware_chain.process_response(response_context)
             openai_response = processed_response.response
 
         # Error detection
@@ -203,7 +200,7 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
         tool_call_count = len(tool_calls)
 
         # Update metrics
-        if context.config.log_request_metrics and context.metrics:
+        if context.is_metrics_enabled and context.metrics:
             context.metrics.response_size = response_size
             context.metrics.input_tokens = input_tokens
             context.metrics.output_tokens = output_tokens
