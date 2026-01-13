@@ -267,12 +267,12 @@ pre-commit: sanitize test-quick ## Run pre-commit hooks (customizable)
 test: ## Run all tests except e2e (unit + integration, no API calls)
 	@printf "$(BOLD)$(CYAN)Running all tests (excluding e2e)...$(RESET)\n"
 	@# First run unit tests
-	@$(UV) run $(PYTEST) $(TEST_DIR) -v -m unit
+	@$(UV) run $(PYTEST) $(TEST_DIR)/unit -v
 	@# Then try integration tests if server is running
 	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
 	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
 		printf "$(YELLOW)Server detected, running integration tests...$(RESET)\n"; \
-		$(UV) run $(PYTEST) $(TEST_DIR) -v -m "integration and not e2e" || printf "$(YELLOW)⚠ Some integration tests failed$(RESET)\n"; \
+		$(UV) run $(PYTEST) $(TEST_DIR)/integration -v || printf "$(YELLOW)⚠ Some integration tests failed$(RESET)\n"; \
 	else \
 		printf "$(YELLOW)⚠ Server not running, skipping integration tests$(RESET)\n"; \
 		printf "$(CYAN)To run integration tests:$(RESET)\n"; \
@@ -282,7 +282,7 @@ test: ## Run all tests except e2e (unit + integration, no API calls)
 
 test-unit: ## Run unit tests only (fast, no external deps)
 	@printf "$(BOLD)$(CYAN)Running unit tests...$(RESET)\n"
-	@$(UV) run $(PYTEST) $(TEST_DIR) -v -m unit
+	@$(UV) run $(PYTEST) $(TEST_DIR)/unit -v
 
 test-integration: ## Run integration tests (requires server, no API calls)
 	@printf "$(BOLD)$(CYAN)Running integration tests...$(RESET)\n"
