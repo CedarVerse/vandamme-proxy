@@ -10,6 +10,7 @@ SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
+MAKEFLAGS += --no-print-directory
 
 .PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-e2e test-all test-quick coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
 
