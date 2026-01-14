@@ -73,6 +73,7 @@ class AnthropicNonStreamingHandler(NonStreamingHandler):
             provider_name=context.provider_name,
             client_api_key=context.client_api_key,
             provider_api_key=context.provider_api_key,
+            config=context.config,
         )
         anthropic_response = await context.openai_client.create_chat_completion(
             claude_request_dict,
@@ -129,6 +130,7 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
             provider_name=context.provider_name,
             client_api_key=context.client_api_key,
             provider_api_key=context.provider_api_key,
+            config=context.config,
         )
         openai_response = await context.openai_client.create_chat_completion(
             context.openai_request,

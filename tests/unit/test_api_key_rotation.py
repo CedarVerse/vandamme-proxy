@@ -41,7 +41,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="test_provider")
+        next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
         result = await next_key(set())
 
         assert result == "key1"
@@ -71,7 +71,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="test_provider")
+        next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
         result = await next_key({"key1"})
 
         assert result == "key2"
@@ -102,7 +102,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="test_provider")
+        next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
         result = await next_key({"key1", "key2"})
 
         assert result == "key3"
@@ -133,7 +133,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="test_provider")
+        next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
         # First call returns key1
         result1 = await next_key(set())
@@ -171,7 +171,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="test_provider")
+        next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
         with pytest.raises(HTTPException) as exc_info:
             await next_key({"key1", "key2"})
@@ -199,7 +199,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="test_provider")
+        next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
         with pytest.raises(HTTPException) as exc_info:
             await next_key({"only-key"})
@@ -229,7 +229,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="my_provider")
+        next_key = make_next_provider_key_fn(provider_name="my_provider", config=config)
 
         result1 = await next_key(set())
         assert result1 == "alpha"
@@ -259,7 +259,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="single_key_provider")
+        next_key = make_next_provider_key_fn(provider_name="single_key_provider", config=config)
 
         # Should work with empty exclude
         result = await next_key(set())
@@ -295,7 +295,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="test_provider")
+        next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
         # Simulate a scenario where current-key failed and we need the next one
         result = await next_key({"current-key"})
@@ -328,7 +328,7 @@ class TestMakeNextProviderKeyFn:
         )
         monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
 
-        next_key = make_next_provider_key_fn(provider_name="large_provider")
+        next_key = make_next_provider_key_fn(provider_name="large_provider", config=config)
 
         result = await next_key(exclude_set)
         assert result == "key-99"

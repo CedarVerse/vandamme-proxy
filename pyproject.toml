@@ -102,6 +102,8 @@ ignore = [
     "PLR0913",
     # Magic number
     "PLR2004",
+    # Function calls in default arguments (false positive for FastAPI Depends())
+    "B008",
 ]
 
 # Explicitly enable type transformation rules

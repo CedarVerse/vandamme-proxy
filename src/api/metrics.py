@@ -11,11 +11,12 @@ from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from src.api.endpoints import validate_api_key
 from src.api.services.streaming import sse_headers, streaming_response
 from src.api.utils.yaml_formatter import create_hierarchical_structure, format_running_totals_yaml
-from src.core.config import config
+from src.core.config import Config
+from src.core.config.accessors import log_request_metrics
+from src.core.config.runtime import get_config
 from src.core.logging.configuration import get_logging_mode
 from src.core.metrics.runtime import get_request_tracker
 
-LOG_REQUEST_METRICS = config.log_request_metrics
 logger = logging.getLogger(__name__)
 
 metrics_router = APIRouter()
@@ -53,11 +54,12 @@ async def get_logs(
 @metrics_router.get("/active-requests")
 async def get_active_requests(
     http_request: Request,
+    cfg: Config = Depends(get_config),
     _: None = Depends(validate_api_key),
 ) -> JSONResponse:
     """Get a snapshot of in-flight requests for the dashboard."""
 
-    if not LOG_REQUEST_METRICS:
+    if not log_request_metrics():
         return JSONResponse(
             status_code=200,
             content={
@@ -81,6 +83,7 @@ async def get_active_requests(
 @metrics_router.get("/active-requests/stream", response_model=None)
 async def stream_active_requests(
     http_request: Request,
+    cfg: Config = Depends(get_config),
     _: None = Depends(validate_api_key),
 ) -> StreamingResponse | JSONResponse:
     """Server-Sent Events stream for active requests.
@@ -94,7 +97,7 @@ async def stream_active_requests(
         - heartbeat: Keep-alive comment every 30s
     """
 
-    if not LOG_REQUEST_METRICS:
+    if not log_request_metrics():
         # Return disabled state as a single event
         async def disabled_stream() -> AsyncGenerator[str, None]:
             data = {
@@ -111,7 +114,7 @@ async def stream_active_requests(
             headers=sse_headers(),
         )
 
-    if not config.active_requests_sse_enabled:
+    if not cfg.active_requests_sse_enabled:
         # SSE is disabled via config, return error
         data = {
             "disabled": True,
@@ -121,8 +124,8 @@ async def stream_active_requests(
         return JSONResponse(status_code=503, content=data)
 
     tracker = get_request_tracker(http_request)
-    interval = config.active_requests_sse_interval
-    heartbeat_interval = config.active_requests_sse_heartbeat
+    interval = cfg.active_requests_sse_interval
+    heartbeat_interval = cfg.active_requests_sse_heartbeat
 
     async def active_requests_stream() -> AsyncGenerator[str, None]:
         """Stream active requests with push-on-change."""
@@ -206,7 +209,7 @@ async def get_running_totals(
         /metrics/running-totals?model=gpt*        # Filter by model with wildcard
     """
     try:
-        if not LOG_REQUEST_METRICS:
+        if not log_request_metrics():
             yaml_data = format_running_totals_yaml(
                 {
                     "# Message": "Request metrics logging is disabled",

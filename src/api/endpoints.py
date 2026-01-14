@@ -24,8 +24,9 @@ from src.api.utils.yaml_formatter import format_health_yaml
 from src.conversion.anthropic_sse_to_openai import anthropic_sse_to_openai_chat_completions_sse
 from src.conversion.anthropic_to_openai import anthropic_message_to_openai_chat_completion
 from src.conversion.openai_to_anthropic import openai_chat_completions_to_anthropic_messages
-from src.core.config import config
+from src.core.config import Config
 from src.core.config.accessors import log_request_metrics
+from src.core.config.runtime import get_config
 from src.core.error_types import ErrorType
 from src.core.logging import ConversationLogger
 from src.core.metrics.runtime import get_request_tracker
@@ -81,24 +82,46 @@ def _log_traceback(log: Any = logger) -> None:
     log.error(traceback.format_exc())
 
 
-# Initialize models cache if enabled
+# Initialize models cache if enabled (lazy initialization via accessor)
 models_cache = None
-if config.models_cache_enabled and not os.environ.get("PYTEST_CURRENT_TEST"):
-    models_cache = ModelsDiskCache(
-        cache_dir=Path(config.cache_dir),
-        ttl_hours=config.models_cache_ttl_hours,
-    )
+
+
+def get_models_cache() -> ModelsDiskCache | None:
+    """Get models cache instance (lazy initialization).
+
+    This avoids import-time coupling with the config singleton.
+    The cache is created on first access, not when the module is imported.
+    """
+    global models_cache
+    if models_cache is None:
+        from src.core.config.accessors import (
+            cache_dir,
+            models_cache_enabled,
+            models_cache_ttl_hours,
+        )
+
+        if models_cache_enabled() and not os.environ.get("PYTEST_CURRENT_TEST"):
+            models_cache = ModelsDiskCache(
+                cache_dir=Path(cache_dir()),
+                ttl_hours=models_cache_ttl_hours(),
+            )
+    return models_cache
+
 
 # Custom headers are now handled per provider
 # count_tool_calls has been moved to src.api.services.metrics_helper
 
 
 async def validate_api_key(
-    x_api_key: str | None = Header(None), authorization: str | None = Header(None)
+    cfg: Config = Depends(get_config),
+    x_api_key: str | None = Header(None),
+    authorization: str | None = Header(None),
 ) -> str | None:
     """
     Validate and return the client's API key from either x-api-key header or
     Authorization header. Returns the key if present, None otherwise.
+
+    Uses dependency injection to get the Config instance.
     """
     client_api_key = None
 
@@ -109,11 +132,11 @@ async def validate_api_key(
         client_api_key = authorization.replace("Bearer ", "")
 
     # Skip validation if PROXY_API_KEY is not set in the environment
-    if not config.proxy_api_key:
+    if not cfg.proxy_api_key:
         return client_api_key  # Return the key even if validation is disabled
 
     # Validate the client API key
-    if not client_api_key or not config.validate_client_api_key(client_api_key):
+    if not client_api_key or not cfg.validate_client_api_key(client_api_key):
         logger.warning("Invalid API key provided by client")
         raise HTTPException(
             status_code=401, detail="Invalid API key. Please provide a valid Anthropic API key."
@@ -156,6 +179,7 @@ def _is_error_response(response: dict[str, Any]) -> bool:
 async def chat_completions(
     request: OpenAIChatCompletionsRequest,
     http_request: Request,
+    cfg: Config = Depends(get_config),
     client_api_key: str | None = Depends(validate_api_key),
 ) -> JSONResponse | StreamingResponse:
     """OpenAI-compatible chat completions endpoint.
@@ -199,6 +223,7 @@ async def chat_completions(
         provider_ctx = await resolve_provider_context(
             model=request.model,
             client_api_key=client_api_key,
+            config=cfg,
         )
         provider_name = provider_ctx.provider_name
         resolved_model = provider_ctx.resolved_model
@@ -230,7 +255,7 @@ async def chat_completions(
         openai_request: dict[str, Any] = request.model_dump(exclude_none=True)
         openai_request["model"] = resolved_model
 
-        openai_client = config.provider_manager.get_client(provider_name, client_api_key)
+        openai_client = cfg.provider_manager.get_client(provider_name, client_api_key)
 
         provider_api_key = provider_ctx.provider_api_key
 
@@ -247,6 +272,7 @@ async def chat_completions(
                     provider_name=provider_name,
                     client_api_key=client_api_key,
                     provider_api_key=provider_api_key,
+                    config=cfg,
                 )
                 anthropic_stream = openai_client.create_chat_completion_stream(
                     anthropic_request,
@@ -281,6 +307,7 @@ async def chat_completions(
                     provider_name=provider_name,
                     client_api_key=client_api_key,
                     provider_api_key=provider_api_key,
+                    config=cfg,
                 )
                 anthropic_response = await openai_client.create_chat_completion(
                     anthropic_request,
@@ -313,6 +340,7 @@ async def chat_completions(
                 provider_name=provider_name,
                 client_api_key=client_api_key,
                 provider_api_key=provider_api_key,
+                config=cfg,
             )
             openai_stream = openai_client.create_chat_completion_stream(
                 openai_request,
@@ -342,6 +370,7 @@ async def chat_completions(
                 provider_name=provider_name,
                 client_api_key=client_api_key,
                 provider_api_key=provider_api_key,
+                config=cfg,
             )
             openai_response = await openai_client.create_chat_completion(
                 openai_request,
@@ -376,6 +405,7 @@ async def chat_completions(
 async def create_message(
     request: ClaudeMessagesRequest,
     http_request: Request,
+    cfg: Config = Depends(get_config),
     client_api_key: str | None = Depends(validate_api_key),
 ) -> JSONResponse | StreamingResponse:
     """Process a Claude Messages API request.
@@ -387,7 +417,7 @@ async def create_message(
     from src.api.orchestrator.request_orchestrator import RequestOrchestrator
 
     # Create orchestrator
-    orchestrator = RequestOrchestrator(log_request_metrics=log_request_metrics())
+    orchestrator = RequestOrchestrator(config=cfg)
 
     # Prepare the complete request context
     # This handles all initialization: metrics, provider resolution, conversion, etc.
@@ -439,8 +469,8 @@ def _log_request_start(ctx: Any) -> None:
 
 async def _handle_streaming(ctx: Any) -> StreamingResponse | JSONResponse:
     """Handle streaming requests with context."""
-    provider_config = config.provider_manager.get_provider_config(ctx.provider_name)
-    handler = get_streaming_handler(config, provider_config)
+    provider_config = ctx.config.provider_manager.get_provider_config(ctx.provider_name)
+    handler = get_streaming_handler(ctx.config, provider_config)
 
     # Use new context-based method
     return await handler.handle_with_context(ctx)
@@ -448,8 +478,8 @@ async def _handle_streaming(ctx: Any) -> StreamingResponse | JSONResponse:
 
 async def _handle_non_streaming(ctx: Any) -> JSONResponse:
     """Handle non-streaming requests with context."""
-    provider_config = config.provider_manager.get_provider_config(ctx.provider_name)
-    handler = get_non_streaming_handler(config, provider_config)
+    provider_config = ctx.config.provider_manager.get_provider_config(ctx.provider_name)
+    handler = get_non_streaming_handler(ctx.config, provider_config)
 
     # Use new context-based method
     return await handler.handle_with_context(ctx)
@@ -511,12 +541,14 @@ async def _handle_unexpected_error(
 
 @router.post("/v1/messages/count_tokens")
 async def count_tokens(
-    request: ClaudeTokenCountRequest, _: None = Depends(validate_api_key)
+    request: ClaudeTokenCountRequest,
+    cfg: Config = Depends(get_config),
+    _: None = Depends(validate_api_key),
 ) -> JSONResponse:
     try:
         # Get provider and model
         provider_name, actual_model = get_model_manager().resolve_model(request.model)
-        provider_config = config.provider_manager.get_provider_config(provider_name)
+        provider_config = cfg.provider_manager.get_provider_config(provider_name)
 
         if provider_config and provider_config.is_anthropic_format:
             # For Anthropic-compatible APIs, use their token counting if available
@@ -553,7 +585,7 @@ async def count_tokens(
 
             # Try to get token count from provider
             try:
-                client = config.provider_manager.get_client(provider_name)
+                client = cfg.provider_manager.get_client(provider_name)
                 count_response = await client.create_chat_completion(
                     {**count_request, "max_tokens": 1},
                     "count_tokens",  # We just want token count
@@ -603,19 +635,19 @@ async def count_tokens(
 
 
 @router.get("/health")
-async def health_check() -> PlainTextResponse:
+async def health_check(cfg: Config = Depends(get_config)) -> PlainTextResponse:
     """Health check endpoint with provider status"""
     try:
         # Gather provider information
         providers = {}
         try:
-            for provider_name in config.provider_manager.list_providers():
-                provider_config = config.provider_manager.get_provider_config(provider_name)
+            for provider_name in cfg.provider_manager.list_providers():
+                provider_config = cfg.provider_manager.get_provider_config(provider_name)
                 providers[provider_name] = {
                     "api_format": provider_config.api_format if provider_config else "unknown",
                     "base_url": provider_config.base_url if provider_config else None,
                     "api_key_hash": (
-                        f"sha256:{config.provider_manager.get_api_key_hash(provider_config.api_key)}"
+                        f"sha256:{cfg.provider_manager.get_api_key_hash(provider_config.api_key)}"
                         if provider_config and provider_config.api_key
                         else "<not set>"
                     ),
@@ -627,9 +659,9 @@ async def health_check() -> PlainTextResponse:
         health_data = {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
-            "api_key_valid": config.validate_api_key(),
-            "client_api_key_validation": bool(config.proxy_api_key),
-            "default_provider": getattr(config.provider_manager, "default_provider", "unknown"),
+            "api_key_valid": cfg.validate_api_key(),
+            "client_api_key_validation": bool(cfg.proxy_api_key),
+            "default_provider": getattr(cfg.provider_manager, "default_provider", "unknown"),
             "providers": providers,
         }
 
@@ -677,13 +709,11 @@ async def health_check() -> PlainTextResponse:
 
 
 @router.get("/test-connection")
-async def test_connection() -> JSONResponse:
+async def test_connection(cfg: Config = Depends(get_config)) -> JSONResponse:
     """Test API connectivity to the default provider"""
     try:
         # Get the default provider client
-        default_client = config.provider_manager.get_client(
-            config.provider_manager.default_provider
-        )
+        default_client = cfg.provider_manager.get_client(cfg.provider_manager.default_provider)
 
         # Simple test request to verify API connectivity
         test_response = await default_client.create_chat_completion(
@@ -701,10 +731,9 @@ async def test_connection() -> JSONResponse:
                 content={
                     "status": "failed",
                     "message": (
-                        f"Provider {config.provider_manager.default_provider} "
-                        f"returned None response"
+                        f"Provider {cfg.provider_manager.default_provider} returned None response"
                     ),
-                    "provider": config.provider_manager.default_provider,
+                    "provider": cfg.provider_manager.default_provider,
                     "error": "None response from provider",
                 },
             )
@@ -714,9 +743,9 @@ async def test_connection() -> JSONResponse:
             content={
                 "status": "success",
                 "message": (
-                    f"Successfully connected to {config.provider_manager.default_provider} API"
+                    f"Successfully connected to {cfg.provider_manager.default_provider} API"
                 ),
-                "provider": config.provider_manager.default_provider,
+                "provider": cfg.provider_manager.default_provider,
                 "model_used": "gpt-4o-mini",
                 "timestamp": datetime.now().isoformat(),
                 "response_id": test_response.get("id", "unknown"),
@@ -761,6 +790,7 @@ async def fetch_models_unauthenticated(
 
 @router.get("/v1/models")
 async def list_models(
+    cfg: Config = Depends(get_config),
     _: None = Depends(validate_api_key),
     provider: str | None = Query(
         None,
@@ -798,11 +828,11 @@ async def list_models(
         provider_name = (
             provider_candidate.lower()
             if provider_candidate
-            else config.provider_manager.default_provider
+            else cfg.provider_manager.default_provider
         )
 
         # Check if provider exists
-        all_providers = config.provider_manager.list_providers()
+        all_providers = cfg.provider_manager.list_providers()
         if provider_name not in all_providers:
             available_providers = ", ".join(sorted(all_providers.keys()))
             raise HTTPException(
@@ -826,8 +856,8 @@ async def list_models(
             )
 
         # Get the provider client and config
-        default_client = config.provider_manager.get_client(provider_name)
-        provider_config = config.provider_manager.get_provider_config(provider_name)
+        default_client = cfg.provider_manager.get_client(provider_name)
+        provider_config = cfg.provider_manager.get_provider_config(provider_name)
 
         base_url = default_client.base_url
         custom_headers = provider_config.custom_headers if provider_config else {}
@@ -900,7 +930,10 @@ async def list_models(
 
 
 @router.get("/v1/aliases")
-async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
+async def list_aliases(
+    cfg: Config = Depends(get_config),
+    _: None = Depends(validate_api_key),
+) -> JSONResponse:
     """List all configured model aliases grouped by provider.
 
     Only shows aliases for active providers (those with API keys configured).
@@ -910,7 +943,7 @@ async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
     """
     try:
         # Only show aliases for active providers (with API keys)
-        aliases = config.alias_service.get_active_aliases()
+        aliases = cfg.alias_service.get_active_aliases()
 
         # Return aliases grouped by provider
         total_aliases = sum(len(provider_aliases) for provider_aliases in aliases.values())
@@ -952,6 +985,7 @@ async def list_aliases(_: None = Depends(validate_api_key)) -> JSONResponse:
 
 @router.get("/top-models")
 async def top_models(
+    cfg: Config = Depends(get_config),
     _: None = Depends(validate_api_key),
     limit: int = Query(10, ge=1, le=50),
     refresh: bool = Query(False),
@@ -1000,16 +1034,16 @@ async def top_models(
 
 
 @router.get("/")
-async def root() -> dict[str, Any]:
+async def root(cfg: Config = Depends(get_config)) -> dict[str, Any]:
     """Root endpoint"""
     return {
         "message": "VanDamme Proxy v1.0.0",
         "status": "running",
         "config": {
-            "base_url": config.base_url,
-            "max_tokens_limit": config.max_tokens_limit,
-            "api_key_configured": bool(config.openai_api_key),
-            "client_api_key_validation": bool(config.proxy_api_key),
+            "base_url": cfg.base_url,
+            "max_tokens_limit": cfg.max_tokens_limit,
+            "api_key_configured": bool(cfg.openai_api_key),
+            "client_api_key_validation": bool(cfg.proxy_api_key),
         },
         "endpoints": {
             "messages": "/v1/messages",

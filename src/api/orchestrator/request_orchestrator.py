@@ -14,7 +14,7 @@ from fastapi import HTTPException, Request
 from src.api.context.request_context import RequestContext, RequestContextBuilder
 from src.api.services.metrics_helper import populate_request_metrics
 from src.conversion.request_converter import convert_claude_to_openai
-from src.core.config import config
+from src.core.config import Config
 from src.core.error_types import ErrorType
 from src.core.metrics.runtime import get_request_tracker
 from src.core.model_manager import get_model_manager
@@ -39,13 +39,14 @@ class RequestOrchestrator:
     7. Check client disconnection
     """
 
-    def __init__(self, log_request_metrics: bool = True) -> None:
+    def __init__(self, config: Config) -> None:
         """Initialize the orchestrator.
 
         Args:
-            log_request_metrics: Whether metrics tracking is enabled.
+            config: The Config instance containing all configuration.
         """
-        self.log_request_metrics = log_request_metrics
+        self.config = config
+        self.log_request_metrics = self.config.log_request_metrics
         self.logger = logging.getLogger(f"{__name__}.RequestOrchestrator")
 
     async def prepare_request_context(
@@ -88,7 +89,7 @@ class RequestOrchestrator:
 
         # Step 3: Resolve provider and model
         provider_name, resolved_model = get_model_manager().resolve_model(request.model)
-        provider_config = config.provider_manager.get_provider_config(provider_name)
+        provider_config = self.config.provider_manager.get_provider_config(provider_name)
 
         builder.with_provider(
             provider_name=provider_name,
@@ -132,7 +133,7 @@ class RequestOrchestrator:
         )
 
         # Step 7: Get client for this provider
-        openai_client = config.provider_manager.get_client(
+        openai_client = self.config.provider_manager.get_client(
             provider_name,
             client_api_key,
         )
@@ -168,7 +169,7 @@ class RequestOrchestrator:
 
         # Build and return the complete context
         builder.with_request(request)
-        builder.with_metrics(metrics=metrics, tracker=tracker, config=config)
+        builder.with_metrics(metrics=metrics, tracker=tracker, config=self.config)
         return builder.build()
 
     async def _initialize_metrics(
@@ -203,7 +204,7 @@ class RequestOrchestrator:
             timestamp=metrics.start_time_iso,
         )
 
-        builder.with_metrics(metrics=metrics, tracker=tracker, config=config)
+        builder.with_metrics(metrics=metrics, tracker=tracker, config=self.config)
         return metrics, tracker
 
     async def _prepare_authentication(
@@ -233,7 +234,7 @@ class RequestOrchestrator:
 
         # For non-passthrough providers, get next provider API key
         if provider_config and not provider_config.uses_passthrough:
-            key = await config.provider_manager.get_next_provider_api_key(provider_name)
+            key = await self.config.provider_manager.get_next_provider_api_key(provider_name)
             return key  # type: ignore[no-any-return]
 
         return None
@@ -251,7 +252,7 @@ class RequestOrchestrator:
 
         This modifies the openai_request in place if middleware changes it.
         """
-        if not hasattr(config.provider_manager, "middleware_chain"):
+        if not hasattr(self.config.provider_manager, "middleware_chain"):
             return
 
         from src.middleware import RequestContext as MiddlewareRequestContext
@@ -265,7 +266,7 @@ class RequestOrchestrator:
             client_api_key=client_api_key,
         )
 
-        processed_context = await config.provider_manager.middleware_chain.process_request(
+        processed_context = await self.config.provider_manager.middleware_chain.process_request(
             request_context
         )
 

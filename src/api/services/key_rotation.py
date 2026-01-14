@@ -5,13 +5,13 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from src.core.config import config
+from src.core.config import Config
 from src.core.provider_config import ProviderConfig
 
 NextApiKey = Callable[[set[str]], Awaitable[str]]
 
 
-def make_next_provider_key_fn(*, provider_name: str) -> NextApiKey:
+def make_next_provider_key_fn(*, provider_name: str, config: Config) -> NextApiKey:
     """Create a reusable provider API key rotator.
 
     Providers may be configured with multiple API keys. Upstream calls can "exclude" keys
@@ -21,6 +21,13 @@ def make_next_provider_key_fn(*, provider_name: str) -> NextApiKey:
 
     Fetches api_keys dynamically from provider config at runtime to ensure the callback
     always sees the current configuration, even if the provider config is modified.
+
+    Args:
+        provider_name: Name of the provider.
+        config: The Config instance.
+
+    Returns:
+        An async function that returns the next available API key.
     """
 
     async def _next_provider_key(exclude: set[str]) -> str:
@@ -50,6 +57,7 @@ def build_api_key_params(
     provider_name: str,
     client_api_key: str | None,
     provider_api_key: str | None,
+    config: Config,
 ) -> dict[str, Any]:
     """Build api_key and next_api_key parameters for upstream calls.
 
@@ -60,6 +68,7 @@ def build_api_key_params(
         provider_name: Name of the provider (for key rotation).
         client_api_key: The client's API key (for passthrough providers).
         provider_api_key: The provider's API key (for non-passthrough providers).
+        config: The Config instance.
 
     Returns:
         A dict with 'api_key' and 'next_api_key' keys suitable for unpacking
@@ -71,6 +80,8 @@ def build_api_key_params(
     return {
         "api_key": provider_api_key,
         "next_api_key": (
-            make_next_provider_key_fn(provider_name=provider_name) if provider_config else None
+            make_next_provider_key_fn(provider_name=provider_name, config=config)
+            if provider_config
+            else None
         ),
     }

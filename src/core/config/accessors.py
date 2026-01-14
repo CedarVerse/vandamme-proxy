@@ -112,3 +112,51 @@ def streaming_connect_timeout() -> float:
     if cfg is None:
         cfg = _get_global_fallback()
     return cfg.streaming_connect_timeout
+
+
+def models_cache_enabled() -> bool:
+    """Get the models_cache_enabled config value."""
+    cfg = _get_config_from_context()
+    if cfg is None:
+        cfg = _get_global_fallback()
+    return cfg.models_cache_enabled
+
+
+def cache_dir() -> str:
+    """Get the cache_dir config value."""
+    cfg = _get_config_from_context()
+    if cfg is None:
+        cfg = _get_global_fallback()
+    return cfg.cache_dir
+
+
+def models_cache_ttl_hours() -> int:
+    """Get the models_cache_ttl_hours config value."""
+    cfg = _get_config_from_context()
+    if cfg is None:
+        cfg = _get_global_fallback()
+    return cfg.models_cache_ttl_hours
+
+
+def active_requests_sse_enabled() -> bool:
+    """Get the active_requests_sse_enabled config value."""
+    cfg = _get_config_from_context()
+    if cfg is None:
+        cfg = _get_global_fallback()
+    return cfg.active_requests_sse_enabled
+
+
+def active_requests_sse_interval() -> float:
+    """Get the active_requests_sse_interval config value."""
+    cfg = _get_config_from_context()
+    if cfg is None:
+        cfg = _get_global_fallback()
+    return cfg.active_requests_sse_interval
+
+
+def active_requests_sse_heartbeat() -> float:
+    """Get the active_requests_sse_heartbeat config value."""
+    cfg = _get_config_from_context()
+    if cfg is None:
+        cfg = _get_global_fallback()
+    return cfg.active_requests_sse_heartbeat

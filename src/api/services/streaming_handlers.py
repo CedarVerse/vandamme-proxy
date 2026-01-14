@@ -78,6 +78,7 @@ class AnthropicStreamingHandler(StreamingHandler):
                 provider_name=context.provider_name,
                 client_api_key=context.client_api_key,
                 provider_api_key=context.provider_api_key,
+                config=context.config,
             )
             anthropic_stream = context.openai_client.create_chat_completion_stream(
                 claude_request_dict,
@@ -130,6 +131,7 @@ class OpenAIStreamingHandler(StreamingHandler):
                 provider_name=context.provider_name,
                 client_api_key=context.client_api_key,
                 provider_api_key=context.provider_api_key,
+                config=context.config,
             )
             openai_stream = context.openai_client.create_chat_completion_stream(
                 context.openai_request,

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException
 
-from src.core.config import config
+from src.core.config import Config
 from src.core.model_manager import get_model_manager
 from src.core.provider_config import ProviderConfig
 
@@ -18,7 +18,9 @@ class ProviderContext:
     provider_api_key: str | None
 
 
-async def resolve_provider_context(*, model: str, client_api_key: str | None) -> ProviderContext:
+async def resolve_provider_context(
+    *, model: str, client_api_key: str | None, config: Config
+) -> ProviderContext:
     """Resolve provider/model and prepare auth context.
 
     - Resolves provider prefix + model aliasing via ModelManager
@@ -27,6 +29,14 @@ async def resolve_provider_context(*, model: str, client_api_key: str | None) ->
     - Selects initial provider API key for non-passthrough providers
 
     This is intentionally minimal: it returns the pieces endpoints need today.
+
+    Args:
+        model: The model name to resolve.
+        client_api_key: The client's API key (for passthrough providers).
+        config: The Config instance.
+
+    Returns:
+        A ProviderContext with all resolved information.
     """
 
     provider_name, resolved_model = get_model_manager().resolve_model(model)
