@@ -6,13 +6,18 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from src.api.models_cache_runtime import get_models_cache
+from src.api.services.endpoint_services import (
+    AliasesListService,
+    HealthCheckService,
+    ModelsListService,
+    TokenCountService,
+)
 from src.api.services.non_streaming_handlers import get_non_streaming_handler
 from src.api.services.provider_context import resolve_provider_context
 from src.api.services.streaming_handlers import get_streaming_handler
-from src.api.utils.yaml_formatter import format_health_yaml
 from src.core.config import Config
 from src.core.config.accessors import log_request_metrics
 from src.core.config.runtime import get_config
@@ -402,168 +407,32 @@ async def count_tokens(
     cfg: Config = Depends(get_config),
     mm: ModelManager = Depends(get_model_manager),
     _: None = Depends(validate_api_key),
-) -> JSONResponse:
-    try:
-        # Get provider and model
-        provider_name, actual_model = mm.resolve_model(request.model)
-        provider_config = cfg.provider_manager.get_provider_config(provider_name)
+) -> Response:
+    """Count tokens using the TokenCountService.
 
-        if provider_config and provider_config.is_anthropic_format:
-            # For Anthropic-compatible APIs, use their token counting if available
-            # Create request for token counting
-            messages_list: list[dict[str, Any]] = []
-            count_request = {
-                "model": actual_model,
-                "messages": messages_list,
-            }
+    Tries provider API first, falls back to character-based estimation.
+    """
+    service = TokenCountService(config=cfg)
+    result = await service.execute(
+        model=request.model,
+        system=request.system,
+        messages=request.messages,
+        model_manager=mm,
+    )
 
-            # Add system message
-            if request.system:
-                messages_list.append(
-                    {
-                        "role": "user",  # type: ignore[assignment]
-                        "content": request.system if isinstance(request.system, str) else "",
-                    }
-                )
+    # Handle error case
+    if "error" in result.content:
+        raise HTTPException(status_code=result.status, detail=result.content["error"])
 
-            # Add messages (excluding content for counting)
-            for msg in request.messages:
-                msg_dict: dict[str, Any] = {"role": msg.role}
-                if isinstance(msg.content, str):
-                    msg_dict["content"] = msg.content
-                elif isinstance(msg.content, list):
-                    # For counting, we can combine text blocks
-                    text_parts = []
-                    for block in msg.content:
-                        if hasattr(block, "text") and block.text is not None:
-                            text_parts.append(block.text)
-                    msg_dict["content"] = "".join(text_parts)
-
-                messages_list.append(msg_dict)
-
-            # Try to get token count from provider
-            try:
-                client = cfg.provider_manager.get_client(provider_name)
-                count_response = await client.create_chat_completion(
-                    {**count_request, "max_tokens": 1},
-                    "count_tokens",  # We just want token count
-                )
-
-                # Extract usage if available
-                usage = count_response.get("usage", {})
-                input_tokens = usage.get("input_tokens", max(1, len(str(count_request)) // 4))
-
-                return JSONResponse(status_code=200, content={"input_tokens": input_tokens})
-
-            except Exception:
-                # Fallback to estimation if provider doesn't support counting
-                pass
-
-        # Fallback to character-based estimation
-        total_chars = 0
-
-        # Count system message characters
-        if request.system:
-            if isinstance(request.system, str):
-                total_chars += len(request.system)
-            elif isinstance(request.system, list):
-                for block in request.system:  # type: ignore[assignment]
-                    if hasattr(block, "text"):
-                        total_chars += len(block.text)
-
-        # Count message characters
-        for msg in request.messages:
-            if msg.content is None:
-                continue
-            elif isinstance(msg.content, str):
-                total_chars += len(msg.content)
-            elif isinstance(msg.content, list):
-                for block in msg.content:  # type: ignore[arg-type, assignment]
-                    if hasattr(block, "text") and block.text is not None:
-                        total_chars += len(block.text)
-
-        # Rough estimation: 4 characters per token
-        estimated_tokens = max(1, total_chars // 4)
-
-        return JSONResponse(status_code=200, content={"input_tokens": estimated_tokens})
-
-    except Exception as e:
-        logger.error(f"Error counting tokens: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return result.to_response()
 
 
 @router.get("/health")
-async def health_check(cfg: Config = Depends(get_config)) -> PlainTextResponse:
-    """Health check endpoint with provider status"""
-    try:
-        # Gather provider information
-        providers = {}
-        try:
-            for provider_name in cfg.provider_manager.list_providers():
-                provider_config = cfg.provider_manager.get_provider_config(provider_name)
-                providers[provider_name] = {
-                    "api_format": provider_config.api_format if provider_config else "unknown",
-                    "base_url": provider_config.base_url if provider_config else None,
-                    "api_key_hash": (
-                        f"sha256:{cfg.provider_manager.get_api_key_hash(provider_config.api_key)}"
-                        if provider_config and provider_config.api_key
-                        else "<not set>"
-                    ),
-                }
-        except Exception as e:
-            # If provider manager fails, include error in response
-            logger.error(f"Error gathering provider info: {e}")
-
-        health_data = {
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "api_key_valid": cfg.validate_api_key(),
-            "client_api_key_validation": bool(cfg.proxy_api_key),
-            "default_provider": getattr(cfg.provider_manager, "default_provider", "unknown"),
-            "providers": providers,
-        }
-
-        # Format as YAML
-        yaml_output = format_health_yaml(health_data)
-
-        return PlainTextResponse(
-            content=yaml_output,
-            media_type="text/yaml; charset=utf-8",
-            headers={
-                "Cache-Control": "no-cache",
-                "Content-Disposition": (
-                    f"inline; filename=health-{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml"
-                ),
-            },
-        )
-    except Exception as e:
-        # Return degraded health status if configuration is missing
-        logger.error(f"Health check error: {e}")
-        degraded_data = {
-            "status": "degraded",
-            "timestamp": datetime.now().isoformat(),
-            "error": str(e),
-            "message": "Server is running but configuration is incomplete",
-            "suggestions": [
-                "Set OPENAI_API_KEY environment variable for OpenAI provider",
-                "Set VDM_DEFAULT_PROVIDER to specify your preferred provider",
-                "Check .env file for required configuration",
-            ],
-        }
-
-        # Format as YAML
-        yaml_output = format_health_yaml(degraded_data)
-
-        return PlainTextResponse(
-            content=yaml_output,
-            media_type="text/yaml; charset=utf-8",
-            headers={
-                "Cache-Control": "no-cache",
-                "Content-Disposition": (
-                    f"inline; filename=health-{datetime.now().strftime('%Y%m%d-%H%M%S')}.yaml"
-                ),
-            },
-        )
+async def health_check(cfg: Config = Depends(get_config)) -> Response:
+    """Health check endpoint with provider status."""
+    service = HealthCheckService(config=cfg)
+    result = service.execute()
+    return result.to_response()
 
 
 @router.get("/test-connection")
@@ -679,120 +548,30 @@ async def list_models(
             "inferred as Anthropic for /v1/models compatibility"
         ),
     ),
-) -> JSONResponse:
-    """List available models from the specified provider or default provider"""
-    try:
-        # Determine provider using header > query param > default
-        provider_candidate = provider_header or provider
-        provider_name = (
-            provider_candidate.lower()
-            if provider_candidate
-            else cfg.provider_manager.default_provider
-        )
+) -> Response:
+    """List available models from the specified provider or default provider."""
+    service = ModelsListService(
+        config=cfg, models_cache=models_cache, fetch_fn=fetch_models_unauthenticated
+    )
 
-        # Check if provider exists
-        all_providers = cfg.provider_manager.list_providers()
-        if provider_name not in all_providers:
-            available_providers = ", ".join(sorted(all_providers.keys()))
-            raise HTTPException(
-                status_code=404,
-                detail=(
-                    f"Provider '{provider_name}' not found. "
-                    f"Available providers: {available_providers}"
-                ),
-            )
+    # Resolve provider (header takes precedence over query param)
+    provider_candidate = provider_header or provider
 
-        # If client didn't explicitly choose a format, allow header-based inference.
-        # Precedence rule: query param takes precedence over headers.
-        # Default should be OpenAI (OpenAI clients won't send `anthropic-version`).
-        if format is None:
-            format = "anthropic" if anthropic_version else "openai"
+    result = await service.execute(
+        provider_candidate=provider_candidate,
+        format_requested=format,
+        refresh=refresh,
+        anthropic_version=anthropic_version,
+    )
 
-        if format not in {"anthropic", "openai", "raw"}:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid format. Use format=anthropic|openai|raw",
-            )
-
-        # Get the provider client and config
-        default_client = cfg.provider_manager.get_client(provider_name)
-        provider_config = cfg.provider_manager.get_provider_config(provider_name)
-
-        base_url = default_client.base_url
-        custom_headers = provider_config.custom_headers if provider_config else {}
-
-        # 1) Try fresh cache (unless refresh requested)
-        raw: dict[str, Any] | None = None
-        if models_cache and not refresh:
-            raw = models_cache.read_response_if_fresh(
-                provider=provider_name,
-                base_url=base_url,
-                custom_headers=custom_headers,
-            )
-            if raw is not None:
-                logger.debug(f"Using cached models response for {provider_name}")
-
-        # 2) Fetch if cache miss
-        if raw is None:
-            try:
-                raw = await fetch_models_unauthenticated(base_url, custom_headers)
-                if models_cache and raw is not None:
-                    models_cache.write_response(
-                        provider=provider_name,
-                        base_url=base_url,
-                        custom_headers=custom_headers,
-                        response=raw,
-                    )
-                    logger.debug(f"Cached models response for {provider_name}")
-            except Exception as e:
-                logger.warning(f"Failed to fetch models from {provider_name}: {e}")
-
-                # 3) On upstream failure, return cached if any (stale allowed)
-                if models_cache:
-                    raw = models_cache.read_response_if_any(
-                        provider=provider_name,
-                        base_url=base_url,
-                        custom_headers=custom_headers,
-                    )
-                    if raw is not None:
-                        logger.debug(
-                            "Using stale cached models response for %s after fetch failure",
-                            provider_name,
-                        )
-
-        if raw is None:
-            raise RuntimeError("Models response was not constructed")
-
-        if format == "raw":
-            return JSONResponse(status_code=200, content=raw)
-
-        from src.conversion.models_converter import raw_to_anthropic_models, raw_to_openai_models
-
-        if format == "openai":
-            return JSONResponse(status_code=200, content=raw_to_openai_models(raw))
-
-        # Default: anthropic
-        return JSONResponse(status_code=200, content=raw_to_anthropic_models(raw))
-
-    except Exception as e:
-        logger.error(f"Error listing models: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "type": "error",
-                "error": {
-                    "type": "api_error",
-                    "message": f"Failed to list models: {str(e)}",
-                },
-            },
-        )
+    return result.to_response()
 
 
 @router.get("/v1/aliases")
 async def list_aliases(
     cfg: Config = Depends(get_config),
     _: None = Depends(validate_api_key),
-) -> JSONResponse:
+) -> Response:
     """List all configured model aliases grouped by provider.
 
     Only shows aliases for active providers (those with API keys configured).
@@ -800,46 +579,9 @@ async def list_aliases(
     Also includes a non-mutating overlay of "suggested" aliases derived from
     `/top-models`.
     """
-    try:
-        # Only show aliases for active providers (with API keys)
-        aliases = cfg.alias_service.get_active_aliases()
-
-        # Return aliases grouped by provider
-        total_aliases = sum(len(provider_aliases) for provider_aliases in aliases.values())
-
-        suggested: dict[str, dict[str, str]] = {}
-        try:
-            from src.top_models.service import TopModelsService
-
-            top = await TopModelsService().get_top_models(limit=10, refresh=False, provider=None)
-            if top.aliases:
-                # "default" indicates these are global suggestions, not provider-scoped.
-                suggested["default"] = top.aliases
-        except Exception as e:
-            # Suggestions should never break /v1/aliases
-            logger.debug(f"Failed to compute suggested aliases overlay: {e}")
-
-        return JSONResponse(
-            status_code=200,
-            content={
-                "object": "list",
-                "aliases": aliases,
-                "suggested": suggested,
-                "total": total_aliases,
-            },
-        )
-    except Exception as e:
-        logger.error(f"Error listing aliases: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "type": "error",
-                "error": {
-                    "type": "api_error",
-                    "message": f"Failed to list aliases: {str(e)}",
-                },
-            },
-        )
+    service = AliasesListService(config=cfg)
+    result = await service.execute()
+    return result.to_response()
 
 
 @router.get("/top-models")
