@@ -17,7 +17,7 @@ def format_running_totals_yaml(data: dict[str, Any], filters: dict[str, str] | N
         Formatted YAML string
     """
     # Create the YAML structure with metadata
-    yaml_data = {
+    yaml_data: dict[str, Any] = {
         "# Running Totals Report": None,
         f"# Generated: {datetime.now().isoformat()}Z": None,
     }
@@ -38,6 +38,12 @@ def format_running_totals_yaml(data: dict[str, Any], filters: dict[str, str] | N
 
     # Add the actual data
     yaml_data.update(data)
+
+    # Ensure we always have at least one real (non-comment) data key.
+    # This guarantees yaml.safe_load() returns a dict instead of None,
+    # even when metrics are disabled or the data is empty.
+    if not any(k for k in yaml_data if not k.startswith("#")):
+        yaml_data["_metrics_enabled"] = False
 
     # Configure YAML for pretty output
     class PrettyYamlDumper(yaml.SafeDumper):
