@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 
 from src.core.config import Config
-from src.core.model_manager import get_model_manager
 from src.core.provider_config import ProviderConfig
+
+if TYPE_CHECKING:
+    from src.core.model_manager import ModelManager
 
 
 @dataclass(frozen=True)
@@ -19,7 +22,7 @@ class ProviderContext:
 
 
 async def resolve_provider_context(
-    *, model: str, client_api_key: str | None, config: Config
+    *, model: str, client_api_key: str | None, config: Config, model_manager: ModelManager
 ) -> ProviderContext:
     """Resolve provider/model and prepare auth context.
 
@@ -34,12 +37,13 @@ async def resolve_provider_context(
         model: The model name to resolve.
         client_api_key: The client's API key (for passthrough providers).
         config: The Config instance.
+        model_manager: The ModelManager instance for model resolution.
 
     Returns:
         A ProviderContext with all resolved information.
     """
 
-    provider_name, resolved_model = get_model_manager().resolve_model(model)
+    provider_name, resolved_model = model_manager.resolve_model(model)
 
     provider_config = config.provider_manager.get_provider_config(provider_name)
     if provider_config is None:

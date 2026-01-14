@@ -30,7 +30,8 @@ from src.core.config.runtime import get_config
 from src.core.error_types import ErrorType
 from src.core.logging import ConversationLogger
 from src.core.metrics.runtime import get_request_tracker
-from src.core.model_manager import get_model_manager
+from src.core.model_manager import ModelManager
+from src.core.model_manager_runtime import get_model_manager
 from src.models.cache import ModelsDiskCache
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
 from src.models.openai import OpenAIChatCompletionsRequest
@@ -180,6 +181,7 @@ async def chat_completions(
     request: OpenAIChatCompletionsRequest,
     http_request: Request,
     cfg: Config = Depends(get_config),
+    mm: ModelManager = Depends(get_model_manager),
     client_api_key: str | None = Depends(validate_api_key),
 ) -> JSONResponse | StreamingResponse:
     """OpenAI-compatible chat completions endpoint.
@@ -197,7 +199,7 @@ async def chat_completions(
         tracker = get_request_tracker(http_request)
 
         # Resolve early so active requests never show provider-prefixed aliases.
-        provider_name, resolved_model = get_model_manager().resolve_model(request.model)
+        provider_name, resolved_model = mm.resolve_model(request.model)
 
         metrics = await tracker.start_request(
             request_id=request_id,
@@ -224,6 +226,7 @@ async def chat_completions(
             model=request.model,
             client_api_key=client_api_key,
             config=cfg,
+            model_manager=mm,
         )
         provider_name = provider_ctx.provider_name
         resolved_model = provider_ctx.resolved_model
@@ -406,6 +409,7 @@ async def create_message(
     request: ClaudeMessagesRequest,
     http_request: Request,
     cfg: Config = Depends(get_config),
+    mm: ModelManager = Depends(get_model_manager),
     client_api_key: str | None = Depends(validate_api_key),
 ) -> JSONResponse | StreamingResponse:
     """Process a Claude Messages API request.
@@ -417,7 +421,7 @@ async def create_message(
     from src.api.orchestrator.request_orchestrator import RequestOrchestrator
 
     # Create orchestrator
-    orchestrator = RequestOrchestrator(config=cfg)
+    orchestrator = RequestOrchestrator(config=cfg, model_manager=mm)
 
     # Prepare the complete request context
     # This handles all initialization: metrics, provider resolution, conversion, etc.
@@ -543,11 +547,12 @@ async def _handle_unexpected_error(
 async def count_tokens(
     request: ClaudeTokenCountRequest,
     cfg: Config = Depends(get_config),
+    mm: ModelManager = Depends(get_model_manager),
     _: None = Depends(validate_api_key),
 ) -> JSONResponse:
     try:
         # Get provider and model
-        provider_name, actual_model = get_model_manager().resolve_model(request.model)
+        provider_name, actual_model = mm.resolve_model(request.model)
         provider_config = cfg.provider_manager.get_provider_config(provider_name)
 
         if provider_config and provider_config.is_anthropic_format:

@@ -7,7 +7,7 @@ all initialization logic previously scattered throughout the create_message endp
 import logging
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, Request
 
@@ -17,7 +17,9 @@ from src.conversion.request_converter import convert_claude_to_openai
 from src.core.config import Config
 from src.core.error_types import ErrorType
 from src.core.metrics.runtime import get_request_tracker
-from src.core.model_manager import get_model_manager
+
+if TYPE_CHECKING:
+    from src.core.model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +41,15 @@ class RequestOrchestrator:
     7. Check client disconnection
     """
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, model_manager: "ModelManager") -> None:
         """Initialize the orchestrator.
 
         Args:
             config: The Config instance containing all configuration.
+            model_manager: The ModelManager instance for model resolution.
         """
         self.config = config
+        self.model_manager = model_manager
         self.log_request_metrics = self.config.log_request_metrics
         self.logger = logging.getLogger(f"{__name__}.RequestOrchestrator")
 
@@ -88,7 +92,7 @@ class RequestOrchestrator:
         )
 
         # Step 3: Resolve provider and model
-        provider_name, resolved_model = get_model_manager().resolve_model(request.model)
+        provider_name, resolved_model = self.model_manager.resolve_model(request.model)
         provider_config = self.config.provider_manager.get_provider_config(provider_name)
 
         builder.with_provider(
@@ -98,7 +102,7 @@ class RequestOrchestrator:
         )
 
         # Step 4: Convert request to OpenAI format
-        openai_request = convert_claude_to_openai(request, get_model_manager())
+        openai_request = convert_claude_to_openai(request, self.model_manager)
         tool_name_map_inverse = openai_request.pop("_tool_name_map_inverse", None)
         openai_request.pop("_provider", provider_name)
 
@@ -188,7 +192,7 @@ class RequestOrchestrator:
             return None, None
 
         tracker = get_request_tracker(http_request)
-        provider_name, resolved_model = get_model_manager().resolve_model(request.model)
+        provider_name, resolved_model = self.model_manager.resolve_model(request.model)
 
         metrics = await tracker.start_request(
             request_id=request_id,

@@ -176,20 +176,6 @@ def setup_test_environment_for_unit_tests():
             if module_name in sys.modules:
                 del sys.modules[module_name]
 
-        # Import and reset the config singleton
-        import src.core.config
-
-        src.core.config.Config.reset_singleton()
-
-        # Reset ModelManager lazy singleton for test isolation
-        try:
-            from src.core.model_manager import reset_model_manager_singleton
-
-            reset_model_manager_singleton()
-        except Exception:
-            # Best-effort: avoid breaking tests if import order changes
-            pass
-
         # Reset the AliasConfigLoader cache for test isolation
         from src.core.alias_config import AliasConfigLoader
 
@@ -197,16 +183,18 @@ def setup_test_environment_for_unit_tests():
 
         # Reset process-global API key rotation state for test isolation
         # This ensures multi-API-key tests start with clean rotation indices
-        from src.core.config import config as app_config
+        # Note: Since Config is no longer a singleton, this only affects
+        # the module-level state if any Config instances were created
+        import src.core.config
 
-        if hasattr(app_config, "provider_manager"):
-            if hasattr(app_config.provider_manager, "_api_key_indices"):
-                app_config.provider_manager._api_key_indices.clear()
-            if hasattr(app_config.provider_manager, "_api_key_locks"):
-                app_config.provider_manager._api_key_locks.clear()
+        if hasattr(src.core.config, "provider_manager"):
+            if hasattr(src.core.config.provider_manager, "_api_key_indices"):
+                src.core.config.provider_manager._api_key_indices.clear()
+            if hasattr(src.core.config.provider_manager, "_api_key_locks"):
+                src.core.config.provider_manager._api_key_locks.clear()
             # Clear cached HTTP clients to prevent SDK client reuse with stale keys
-            if hasattr(app_config.provider_manager, "_clients"):
-                app_config.provider_manager._clients.clear()
+            if hasattr(src.core.config.provider_manager, "_clients"):
+                src.core.config.provider_manager._clients.clear()
 
         # Force reload of modules that import config at module level
         # This ensures they get the new config instance after reset

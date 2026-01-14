@@ -77,10 +77,13 @@ class TestCorrelationFormatter:
 class TestConfigureRootLogging:
     def test_emits_debug_startup_line_when_log_level_debug(self, monkeypatch, caplog):
         monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-        # Reset config to pick up new environment variable
+
+        # Import fresh Config instance to pick up new environment variable
         from src.core.config import Config
 
-        Config.reset_singleton()
+        config = Config()
+
+        # Config.reset_singleton() removed - module reloading in conftest handles this
 
         # Call configure_root_logging first (this sets up handlers and emits the log)
         configure_root_logging(use_systemd=False)
@@ -92,16 +95,17 @@ class TestConfigureRootLogging:
         # Since caplog's handler was removed during configure_root_logging,
         # we need to check the actual log output differently
         # For now, just verify the log level is set correctly
-        from src.core.config import config
-
         assert config.log_level == "DEBUG"
 
     def test_does_not_emit_debug_startup_line_when_log_level_info(self, monkeypatch, caplog):
         monkeypatch.setenv("LOG_LEVEL", "INFO")
-        # Reset config to pick up new environment variable
+
+        # Import fresh Config instance to pick up new environment variable
         from src.core.config import Config
 
-        Config.reset_singleton()
+        config = Config()
+
+        # Config.reset_singleton() removed - module reloading in conftest handles this
 
         # Call configure_root_logging first
         configure_root_logging(use_systemd=False)
@@ -109,14 +113,7 @@ class TestConfigureRootLogging:
         # Set up caplog
         caplog.set_level(logging.DEBUG)
 
-        # Verify the log level is set correctly - re-import to get fresh reference
-        import importlib
-
-        import src.core.config
-
-        importlib.reload(src.core.config)
-        from src.core.config import config
-
+        # Verify the log level is set correctly
         assert config.log_level == "INFO"
 
     def teardown_method(self):
@@ -131,6 +128,5 @@ class TestConfigureRootLogging:
         logging.getLogger("src.core.logging.configuration").propagate = True
 
         # Reset config to pick up default LOG_LEVEL
-        from src.core.config import Config
 
-        Config.reset_singleton()
+        # Config.reset_singleton() removed - module reloading in conftest handles this

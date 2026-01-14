@@ -5,9 +5,11 @@ from fastapi import FastAPI
 
 from src import __version__
 from src.api.metrics import metrics_router
+from src.api.middleware_integration import MiddlewareAwareRequestProcessor
 from src.api.routers.v1 import router as api_router
 from src.core.config import Config
 from src.core.metrics import create_request_tracker
+from src.core.model_manager import ModelManager
 
 app = FastAPI(title="Vandamme Proxy", version=__version__)
 
@@ -15,9 +17,25 @@ app = FastAPI(title="Vandamme Proxy", version=__version__)
 # This avoids module-level singletons and keeps imports side-effect free.
 app.state.request_tracker = create_request_tracker()
 app.state.config = Config()  # Eager initialization at startup
+app.state.model_manager = ModelManager(app.state.config)
+app.state.middleware_processor = MiddlewareAwareRequestProcessor()
 
 app.include_router(api_router)
 app.include_router(metrics_router, prefix="/metrics", tags=["metrics"])
+
+
+@app.on_event("startup")
+async def startup_middleware_processor() -> None:
+    """Initialize middleware processor on startup."""
+    await app.state.middleware_processor.initialize()
+
+
+@app.on_event("shutdown")
+async def shutdown_middleware_processor() -> None:
+    """Cleanup middleware processor on shutdown."""
+    if hasattr(app.state, "middleware_processor"):
+        await app.state.middleware_processor.cleanup()
+
 
 # Dashboard (Dash) mounted under /dashboard
 try:

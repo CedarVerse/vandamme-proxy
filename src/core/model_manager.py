@@ -87,30 +87,3 @@ class ModelManager:
             )
 
         return provider_name, actual_model
-
-
-_model_manager: "ModelManager | None" = None
-
-
-def get_model_manager() -> "ModelManager":
-    """Return the process-global ModelManager singleton.
-
-    Important: this is intentionally lazy to avoid import-time configuration
-    validation. Provider configuration is loaded when the ModelManager is first
-    requested (i.e., at runtime request handling), not during module import.
-    """
-    from src.core.config import Config
-
-    global _model_manager
-    if _model_manager is None:
-        _model_manager = ModelManager(Config())
-    return _model_manager
-
-
-def reset_model_manager_singleton() -> None:
-    """Reset the cached ModelManager singleton.
-
-    This should only be used by tests to ensure isolation.
-    """
-    global _model_manager
-    _model_manager = None

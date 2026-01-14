@@ -8,8 +8,11 @@ import pytest
 from fastapi import HTTPException
 
 from src.api.services.key_rotation import make_next_provider_key_fn
-from src.core.config import config
+from src.core.config import Config
 from src.core.provider_config import ProviderConfig
+
+# Create a shared config instance for all tests
+config = Config()
 
 
 @pytest.mark.unit
@@ -33,13 +36,13 @@ class TestMakeNextProviderKeyFn:
         )
 
         # Mock get_provider_config to return a test provider config
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="test_provider",
             api_key="key1",
             api_keys=["key1", "key2"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
         result = await next_key(set())
@@ -63,13 +66,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="test_provider",
             api_key="key1",
             api_keys=["key1", "key2"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
         result = await next_key({"key1"})
@@ -94,13 +97,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="test_provider",
             api_key="key1",
             api_keys=["key1", "key2", "key3"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
         result = await next_key({"key1", "key2"})
@@ -125,13 +128,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="test_provider",
             api_key="key1",
             api_keys=["key1", "key2", "key3"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
@@ -163,13 +166,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="test_provider",
             api_key="key1",
             api_keys=["key1", "key2"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
@@ -191,13 +194,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="test_provider",
             api_key="only-key",
             api_keys=["only-key"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
@@ -221,13 +224,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="my_provider",
             api_key="alpha",
             api_keys=["alpha", "beta", "gamma"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="my_provider", config=config)
 
@@ -251,13 +254,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="single_key_provider",
             api_key="solo-key",
             api_keys=["solo-key"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="single_key_provider", config=config)
 
@@ -287,13 +290,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="test_provider",
             api_key="current-key",
             api_keys=["current-key", "next-key", "backup-key"],
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="test_provider", config=config)
 
@@ -320,13 +323,13 @@ class TestMakeNextProviderKeyFn:
             fake_get_next_provider_api_key,
         )
 
-        test_config = ProviderConfig(
+        testconfig = ProviderConfig(
             name="large_provider",
             api_key="key-0",
             api_keys=key_list,
             base_url="https://api.test.com",
         )
-        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: test_config)
+        monkeypatch.setattr(config.provider_manager, "get_provider_config", lambda _: testconfig)
 
         next_key = make_next_provider_key_fn(provider_name="large_provider", config=config)
 

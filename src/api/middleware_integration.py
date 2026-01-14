@@ -190,9 +190,26 @@ async def get_middleware_processor() -> MiddlewareAwareRequestProcessor:
     """
     Get the global middleware processor instance.
 
+    .. deprecated::
+        Use FastAPI dependency injection instead:
+        `proc: MiddlewareAwareRequestProcessor = Depends(get_middleware_processor)` from
+        `src.api.middleware_runtime import get_middleware_processor`
+
+        This singleton is maintained for backward compatibility only
+        and will be removed in a future version.
+
     Returns:
         The middleware processor instance
     """
+    import warnings
+
+    warnings.warn(
+        "get_middleware_processor() singleton is deprecated. "
+        "Use Depends(get_middleware_processor) from src.api.middleware_runtime instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     global _processor_instance
 
     if _processor_instance is None:
@@ -203,7 +220,20 @@ async def get_middleware_processor() -> MiddlewareAwareRequestProcessor:
 
 
 async def cleanup_middleware_processor() -> None:
-    """Cleanup the global middleware processor."""
+    """Cleanup the global middleware processor.
+
+    .. deprecated::
+        The middleware processor is now managed by app.state lifecycle.
+        This method is maintained for backward compatibility only.
+    """
+    import warnings
+
+    warnings.warn(
+        "cleanup_middleware_processor() is deprecated. "
+        "The middleware processor is now managed by app.state lifecycle.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     global _processor_instance
 
     if _processor_instance:

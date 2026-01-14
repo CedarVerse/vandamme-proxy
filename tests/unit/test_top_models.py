@@ -15,10 +15,6 @@ def test_top_models_endpoint_manual_rankings_order(respx_mock, tmp_path, monkeyp
 
     monkeypatch.setenv("TOP_MODELS_SOURCE", "manual_rankings")
 
-    from src.core.config import Config
-
-    Config.reset_singleton()
-
     from src.main import app
 
     rankings = tmp_path / "programming.toml"
@@ -36,8 +32,6 @@ id = \"openai/gpt-4o\"
     )
 
     monkeypatch.setenv("TOP_MODELS_RANKINGS_FILE", str(rankings))
-
-    Config.reset_singleton()
 
     # Note: /v1/models fetches base_url/models. For provider=openrouter, base_url is configured
     # by ProviderManager; tests already mock the OpenRouter catalog endpoint directly.

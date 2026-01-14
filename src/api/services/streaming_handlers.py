@@ -67,9 +67,14 @@ class AnthropicStreamingHandler(StreamingHandler):
         context: "ApiRequestContext",
     ) -> StreamingResponse | JSONResponse:
         """Handle Anthropic-format streaming with direct passthrough."""
+        # Get model_manager from app.state
+        from src.core.model_manager_runtime import get_model_manager
+
+        model_manager = get_model_manager(context.http_request)
         _resolved_model, claude_request_dict = build_anthropic_passthrough_request(
             request=context.request,
             provider_name=context.provider_name,
+            model_manager=model_manager,
         )
 
         try:

@@ -49,6 +49,21 @@ def _create_mock_provider_manager(
     return pm
 
 
+def _create_mock_model_manager(provider: str = "openai", model: str = "gpt-4o") -> Mock:
+    """Create a mock ModelManager.
+
+    Args:
+        provider: Provider name to return from resolve_model
+        model: Model name to return from resolve_model
+
+    Returns:
+        A mock ModelManager with resolve_model method.
+    """
+    mm = Mock(spec_set=["resolve_model"])
+    mm.resolve_model = Mock(return_value=(provider, model))
+    return mm
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_orchestrator_prepares_basic_context() -> None:
@@ -76,14 +91,13 @@ async def test_orchestrator_prepares_basic_context() -> None:
         ),
     )
 
-    orchestrator = RequestOrchestrator(config=mock_config)
+    mock_model_manager = _create_mock_model_manager()
+    orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
-        patch("src.api.orchestrator.request_orchestrator.get_model_manager") as mock_mm,
         patch("src.api.orchestrator.request_orchestrator.convert_claude_to_openai") as mock_convert,
     ):
         # Setup mocks
-        mock_mm.return_value.resolve_model.return_value = ("openai", "gpt-4o")
         mock_convert.return_value = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "Hello"}],
@@ -135,21 +149,20 @@ async def test_orchestrator_with_metrics_enabled() -> None:
         ),
     )
 
-    orchestrator = RequestOrchestrator(config=mock_config)
+    mock_model_manager = _create_mock_model_manager()
+    orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
         patch(
             "src.api.orchestrator.request_orchestrator.get_request_tracker",
             return_value=mock_tracker,
         ),
-        patch("src.api.orchestrator.request_orchestrator.get_model_manager") as mock_mm,
         patch("src.api.orchestrator.request_orchestrator.convert_claude_to_openai") as mock_convert,
         patch(
             "src.api.orchestrator.request_orchestrator.populate_request_metrics",
             return_value=(1, 100, 0),
         ),
     ):
-        mock_mm.return_value.resolve_model.return_value = ("openai", "gpt-4o")
         mock_convert.return_value = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "Hello"}],
@@ -196,20 +209,18 @@ async def test_orchestrator_passthrough_validation_requires_client_key() -> None
         ),
     )
 
-    orchestrator = RequestOrchestrator(config=mock_config)
+    mock_model_manager = _create_mock_model_manager(
+        provider="anthropic", model="claude-3-5-sonnet-20241022"
+    )
+    orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
-        patch("src.api.orchestrator.request_orchestrator.get_model_manager") as mock_mm,
         patch("src.api.orchestrator.request_orchestrator.convert_claude_to_openai") as mock_convert,
         patch(
             "src.api.orchestrator.request_orchestrator.populate_request_metrics",
             return_value=(1, 100, 0),
         ),
     ):
-        mock_mm.return_value.resolve_model.return_value = (
-            "anthropic",
-            "claude-3-5-sonnet-20241022",
-        )
         mock_convert.return_value = {
             "model": "claude-3-5-sonnet-20241022",
             "messages": [{"role": "user", "content": "Hello"}],
@@ -261,21 +272,20 @@ async def test_orchestrator_client_disconnect_before_processing() -> None:
         ),
     )
 
-    orchestrator = RequestOrchestrator(config=mock_config)
+    mock_model_manager = _create_mock_model_manager()
+    orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
         patch(
             "src.api.orchestrator.request_orchestrator.get_request_tracker",
             return_value=mock_tracker,
         ),
-        patch("src.api.orchestrator.request_orchestrator.get_model_manager") as mock_mm,
         patch("src.api.orchestrator.request_orchestrator.convert_claude_to_openai") as mock_convert,
         patch(
             "src.api.orchestrator.request_orchestrator.populate_request_metrics",
             return_value=(1, 100, 0),
         ),
     ):
-        mock_mm.return_value.resolve_model.return_value = ("openai", "gpt-4o")
         mock_convert.return_value = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "Hello"}],
@@ -329,17 +339,16 @@ async def test_orchestrator_applies_middleware_preprocessing() -> None:
         ),
     )
 
-    orchestrator = RequestOrchestrator(config=mock_config)
+    mock_model_manager = _create_mock_model_manager(provider="gemini", model="gemini-2.0-flash")
+    orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
-        patch("src.api.orchestrator.request_orchestrator.get_model_manager") as mock_mm,
         patch("src.api.orchestrator.request_orchestrator.convert_claude_to_openai") as mock_convert,
         patch(
             "src.api.orchestrator.request_orchestrator.populate_request_metrics",
             return_value=(1, 100, 0),
         ),
     ):
-        mock_mm.return_value.resolve_model.return_value = ("gemini", "gemini-2.0-flash")
         mock_convert.return_value = {
             "model": "gemini-2.0-flash",
             "messages": [{"role": "user", "content": "Hello"}],
@@ -385,17 +394,16 @@ async def test_orchestrator_no_middleware_when_not_configured() -> None:
         ),
     )
 
-    orchestrator = RequestOrchestrator(config=mock_config)
+    mock_model_manager = _create_mock_model_manager()
+    orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
-        patch("src.api.orchestrator.request_orchestrator.get_model_manager") as mock_mm,
         patch("src.api.orchestrator.request_orchestrator.convert_claude_to_openai") as mock_convert,
         patch(
             "src.api.orchestrator.request_orchestrator.populate_request_metrics",
             return_value=(1, 100, 0),
         ),
     ):
-        mock_mm.return_value.resolve_model.return_value = ("openai", "gpt-4o")
         mock_convert.return_value = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "Hello"}],
@@ -415,13 +423,18 @@ async def test_orchestrator_no_middleware_when_not_configured() -> None:
 @pytest.mark.unit
 def test_orchestrator_initialization() -> None:
     """Test RequestOrchestrator initialization."""
+    mock_model_manager = _create_mock_model_manager()
     # Default: metrics enabled
-    orchestrator = RequestOrchestrator(config=MagicMock(log_request_metrics=True))
+    orchestrator = RequestOrchestrator(
+        config=MagicMock(log_request_metrics=True), model_manager=mock_model_manager
+    )
     assert orchestrator.config.log_request_metrics is True
     assert orchestrator.log_request_metrics is True
 
     # Metrics disabled
-    orchestrator_no_metrics = RequestOrchestrator(config=MagicMock(log_request_metrics=False))
+    orchestrator_no_metrics = RequestOrchestrator(
+        config=MagicMock(log_request_metrics=False), model_manager=mock_model_manager
+    )
     assert orchestrator_no_metrics.config.log_request_metrics is False
     assert orchestrator_no_metrics.log_request_metrics is False
 
@@ -455,17 +468,16 @@ async def test_orchestrator_context_contains_all_required_fields() -> None:
         ),
     )
 
-    orchestrator = RequestOrchestrator(config=mock_config)
+    mock_model_manager = _create_mock_model_manager()
+    orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
-        patch("src.api.orchestrator.request_orchestrator.get_model_manager") as mock_mm,
         patch("src.api.orchestrator.request_orchestrator.convert_claude_to_openai") as mock_convert,
         patch(
             "src.api.orchestrator.request_orchestrator.populate_request_metrics",
             return_value=(1, 150, 0),
         ),
     ):
-        mock_mm.return_value.resolve_model.return_value = ("openai", "gpt-4o")
         mock_convert.return_value = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "Hello"}],

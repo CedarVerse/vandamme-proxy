@@ -26,10 +26,6 @@ id = \"google/gemini-2.0-flash\"
     monkeypatch.setenv("TOP_MODELS_RANKINGS_FILE", str(rankings))
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
-    from src.core.config import Config
-
-    Config.reset_singleton()
-
     # Reload modules to pick up new config after env var changes
     import importlib
     import sys

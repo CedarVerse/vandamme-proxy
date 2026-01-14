@@ -239,20 +239,3 @@ class Config:
             if not self.openai_api_key
             else "sha256:" + hashlib.sha256(self.openai_api_key.encode()).hexdigest()[:16] + "..."
         )
-
-    @classmethod
-    def reset_singleton(cls) -> None:
-        """Reset the global config singleton for test isolation.
-
-        This method is primarily used by the test suite to ensure
-        clean state between tests. It recreates the config singleton
-        after the test environment has been modified.
-
-        WARNING: Never call this in production code!
-        """
-        global config
-        config = cls()
-
-
-# Module-level singleton
-config = Config()

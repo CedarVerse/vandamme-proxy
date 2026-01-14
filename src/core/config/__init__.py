@@ -16,19 +16,19 @@ The configuration is split into focused modules:
 - middleware: Middleware configuration (thought signatures)
 - top_models: Top models feature configuration
 - lazy_managers: Lazy initialization for provider/alias managers
-- config: Main Config singleton
+- config: Main Config class
 
 Public API:
     Config: The main configuration class
-    config: The global configuration singleton
 
 Example:
-    from src.core.config import config
+    from src.core.config import Config
 
-    provider = config.default_provider
-    port = config.port
+    cfg = Config()
+    provider = cfg.default_provider
+    port = cfg.port
 """
 
-from src.core.config.config import Config, config
+from src.core.config.config import Config
 
-__all__ = ["Config", "config"]
+__all__ = ["Config"]
