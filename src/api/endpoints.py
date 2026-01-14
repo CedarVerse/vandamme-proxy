@@ -25,6 +25,7 @@ from src.conversion.anthropic_sse_to_openai import anthropic_sse_to_openai_chat_
 from src.conversion.anthropic_to_openai import anthropic_message_to_openai_chat_completion
 from src.conversion.openai_to_anthropic import openai_chat_completions_to_anthropic_messages
 from src.core.config import config
+from src.core.config.accessors import log_request_metrics
 from src.core.error_types import ErrorType
 from src.core.logging import ConversationLogger
 from src.core.metrics.runtime import get_request_tracker
@@ -33,7 +34,6 @@ from src.models.cache import ModelsDiskCache
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
 from src.models.openai import OpenAIChatCompletionsRequest
 
-LOG_REQUEST_METRICS = config.log_request_metrics
 logger = logging.getLogger(__name__)
 conversation_logger = ConversationLogger.get_logger()
 
@@ -169,7 +169,7 @@ async def chat_completions(
     request_id = str(uuid.uuid4())
 
     # Start request tracking if metrics are enabled
-    if LOG_REQUEST_METRICS:
+    if log_request_metrics():
         tracker = get_request_tracker(http_request)
 
         # Resolve early so active requests never show provider-prefixed aliases.
@@ -204,7 +204,7 @@ async def chat_completions(
         resolved_model = provider_ctx.resolved_model
         provider_config = provider_ctx.provider_config
 
-        if LOG_REQUEST_METRICS and metrics:
+        if log_request_metrics() and metrics:
             metrics.provider = provider_name  # type: ignore[assignment]
 
             # Metrics must always use the resolved target model (no provider prefix).
@@ -268,7 +268,7 @@ async def chat_completions(
                         http_request=http_request,
                         request_id=request_id,
                         provider_name=provider_name,
-                        metrics_enabled=LOG_REQUEST_METRICS,
+                        metrics_enabled=log_request_metrics(),
                     ),
                     headers=sse_headers(),
                 )
@@ -288,7 +288,7 @@ async def chat_completions(
                     **api_key_params,
                 )
             except Exception as e:
-                if LOG_REQUEST_METRICS and metrics:
+                if log_request_metrics() and metrics:
                     metrics.error = str(e)
                     metrics.error_type = ErrorType.UPSTREAM_ERROR
                     await tracker.end_request(request_id)
@@ -301,7 +301,7 @@ async def chat_completions(
                 anthropic=anthropic_response
             )
 
-            if LOG_REQUEST_METRICS and metrics:
+            if log_request_metrics() and metrics:
                 await tracker.end_request(request_id)
             return JSONResponse(status_code=200, content=openai_response)
 
@@ -331,7 +331,7 @@ async def chat_completions(
                     http_request=http_request,
                     request_id=request_id,
                     provider_name=provider_name,
-                    metrics_enabled=LOG_REQUEST_METRICS,
+                    metrics_enabled=log_request_metrics(),
                 ),
                 headers=sse_headers(),
             )
@@ -349,7 +349,7 @@ async def chat_completions(
                 **api_key_params,
             )
         except Exception as e:
-            if LOG_REQUEST_METRICS and metrics:
+            if log_request_metrics() and metrics:
                 metrics.error = str(e)
                 metrics.error_type = ErrorType.UPSTREAM_ERROR
                 await tracker.end_request(request_id)
@@ -367,7 +367,7 @@ async def chat_completions(
             resolved_model,
         )
 
-        if LOG_REQUEST_METRICS and metrics:
+        if log_request_metrics() and metrics:
             await tracker.end_request(request_id)
         return JSONResponse(status_code=200, content=openai_response)
 
@@ -387,7 +387,7 @@ async def create_message(
     from src.api.orchestrator.request_orchestrator import RequestOrchestrator
 
     # Create orchestrator
-    orchestrator = RequestOrchestrator(log_request_metrics=LOG_REQUEST_METRICS)
+    orchestrator = RequestOrchestrator(log_request_metrics=log_request_metrics())
 
     # Prepare the complete request context
     # This handles all initialization: metrics, provider resolution, conversion, etc.
@@ -419,7 +419,7 @@ async def create_message(
 
 def _log_request_start(ctx: Any) -> None:
     """Log request start with metrics awareness."""
-    if LOG_REQUEST_METRICS:
+    if log_request_metrics():
         conversation_logger.info(
             f"🚀 START | Model: {ctx.request.model} "
             f"(resolved: {ctx.provider_name}:{ctx.resolved_model}) | "
@@ -457,7 +457,7 @@ async def _handle_non_streaming(ctx: Any) -> JSONResponse:
 
 async def _finalize_metrics_on_error(ctx: Any, error_type: str) -> None:
     """Finalize metrics when an HTTP exception occurs."""
-    if LOG_REQUEST_METRICS and ctx.metrics:
+    if log_request_metrics() and ctx.metrics:
         ctx.metrics.error = "HTTP exception"
         ctx.metrics.error_type = error_type
         ctx.metrics.end_time = time.time()
@@ -473,7 +473,7 @@ async def _handle_unexpected_error(
 
     # Check for timeout
     if _is_timeout_error(exception):
-        if LOG_REQUEST_METRICS and ctx.metrics:
+        if log_request_metrics() and ctx.metrics:
             ctx.metrics.error = "Upstream timeout"
             ctx.metrics.error_type = ErrorType.TIMEOUT
             ctx.metrics.end_time = time.time()
@@ -487,13 +487,13 @@ async def _handle_unexpected_error(
         error_message = str(exception)
 
     # Update metrics
-    if LOG_REQUEST_METRICS and ctx.metrics:
+    if log_request_metrics() and ctx.metrics:
         ctx.metrics.error = error_message
         ctx.metrics.error_type = ErrorType.UNEXPECTED_ERROR
         ctx.metrics.end_time = time.time()
 
     # Log error
-    if LOG_REQUEST_METRICS:
+    if log_request_metrics():
         conversation_logger.error(
             f"❌ ERROR | Duration: {duration_ms:.0f}ms | Error: {error_message}"
         )
@@ -503,7 +503,7 @@ async def _handle_unexpected_error(
         _log_traceback()
 
     # Finalize metrics
-    if LOG_REQUEST_METRICS:
+    if log_request_metrics():
         await ctx.tracker.end_request(ctx.request_id)
 
     raise HTTPException(status_code=500, detail=error_message) from exception

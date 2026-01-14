@@ -6,14 +6,15 @@ from fastapi import FastAPI
 from src import __version__
 from src.api.metrics import metrics_router
 from src.api.routers.v1 import router as api_router
-from src.core.config import config
+from src.core.config import Config
 from src.core.metrics import create_request_tracker
 
 app = FastAPI(title="Vandamme Proxy", version=__version__)
 
-# Process-local metrics tracking is owned by the FastAPI app instance.
+# Process-local state owned by the FastAPI app instance.
 # This avoids module-level singletons and keeps imports side-effect free.
 app.state.request_tracker = create_request_tracker()
+app.state.config = Config()  # Eager initialization at startup
 
 app.include_router(api_router)
 app.include_router(metrics_router, prefix="/metrics", tags=["metrics"])
@@ -68,21 +69,22 @@ def main() -> None:
     configure_root_logging(use_systemd=False)
 
     # Configuration summary
+    cfg = app.state.config
     print("🚀 Vandamme Proxy v1.0.0")
     print("✅ Configuration loaded successfully")
-    print(f"   API Key : {config.api_key_hash}")
-    print(f"   Base URL: {config.base_url}")
-    print(f"   Max Tokens Limit: {config.max_tokens_limit}")
-    print(f"   Request Timeout : {config.request_timeout}s")
-    print(f"   Server: {config.host}:{config.port}")
-    print(f"   Client API Key Validation: {'Enabled' if config.proxy_api_key else 'Disabled'}")
+    print(f"   API Key : {cfg.api_key_hash}")
+    print(f"   Base URL: {cfg.base_url}")
+    print(f"   Max Tokens Limit: {cfg.max_tokens_limit}")
+    print(f"   Request Timeout : {cfg.request_timeout}s")
+    print(f"   Server: {cfg.host}:{cfg.port}")
+    print(f"   Client API Key Validation: {'Enabled' if cfg.proxy_api_key else 'Disabled'}")
     print("")
 
     # Show provider summary
-    config.provider_manager.print_provider_summary()
+    cfg.provider_manager.print_provider_summary()
 
     # Parse log level - extract just the first word to handle comments
-    log_level = config.log_level.split()[0].lower()
+    log_level = cfg.log_level.split()[0].lower()
 
     # Validate and set default if invalid
     valid_levels = ["debug", "info", "warning", "error", "critical"]
@@ -92,8 +94,8 @@ def main() -> None:
     # Start server
     uvicorn.run(
         "src.main:app",
-        host=config.host,
-        port=config.port,
+        host=cfg.host,
+        port=cfg.port,
         log_level=log_level,
         access_log=(log_level == "debug"),  # Only show access logs at DEBUG level
         reload=False,

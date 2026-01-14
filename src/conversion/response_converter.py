@@ -14,14 +14,13 @@ from src.conversion.openai_stream_to_claude_state_machine import (
     initial_events,
     parse_openai_sse_line,
 )
-from src.core.config import config
+from src.core.config.accessors import log_request_metrics
 from src.core.constants import Constants
 from src.core.error_types import ErrorType
 from src.core.logging import ConversationLogger
 from src.core.metrics.runtime import get_request_tracker
 from src.models.claude import ClaudeMessagesRequest
 
-LOG_REQUEST_METRICS = config.log_request_metrics
 conversation_logger = ConversationLogger.get_logger()
 logger = logging.getLogger(__name__)
 
@@ -240,7 +239,7 @@ async def convert_openai_streaming_to_claude(
     Features enabled by optional parameters:
     - http_request + openai_client + request_id: Enables cancellation detection
     - metrics + request_id: Enables metrics tracking and logging
-    - enable_usage_tracking: Explicit control (default: uses LOG_REQUEST_METRICS)
+    - enable_usage_tracking: Explicit control (default: uses log_request_metrics())
 
     Args:
         openai_stream: The OpenAI streaming response to convert.
@@ -284,7 +283,7 @@ async def convert_openai_streaming_to_claude(
     # Priority: explicit param > global config
     # Note: metrics param only affects whether metrics are updated, not tracker creation
     should_track_usage = (
-        enable_usage_tracking if enable_usage_tracking is not None else LOG_REQUEST_METRICS
+        enable_usage_tracking if enable_usage_tracking is not None else log_request_metrics()
     )
 
     # Initialize optional feature helpers
@@ -296,7 +295,7 @@ async def convert_openai_streaming_to_claude(
     )
 
     # Get request metrics for updating (if enabled) - best-effort only
-    if metrics is None and LOG_REQUEST_METRICS and http_request and request_id:
+    if metrics is None and log_request_metrics() and http_request and request_id:
         tracker = get_request_tracker(http_request)
         try:
             metrics = await tracker.get_request(request_id)
@@ -354,7 +353,7 @@ async def convert_openai_streaming_to_claude(
                         metrics.cache_read_tokens = usage_data.get("cache_read_input_tokens", 0)
 
                     # Log progress periodically
-                    if LOG_REQUEST_METRICS:
+                    if log_request_metrics():
                         usage_tracker.log_progress()
 
                 except ConversionError:
