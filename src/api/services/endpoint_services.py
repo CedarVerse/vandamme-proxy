@@ -333,7 +333,8 @@ class HealthCheckService:
                 },
             )
 
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
+            logger.debug(f"Health check data gathering failed: {type(e).__name__}: {e}")
             return self._degraded_response(str(e))
 
     def _gather_health_data(self) -> dict[str, Any]:
@@ -366,9 +367,9 @@ class HealthCheckService:
                         else "<not set>"
                     ),
                 }
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
             # Provider info is optional; don't fail health check
-            pass
+            logger.debug(f"Provider info gathering failed: {type(e).__name__}: {e}")
 
         return providers
 
@@ -446,11 +447,12 @@ class TokenCountService:
             estimated = self._estimate_tokens(system, messages)
             return TokenCountResult(status=200, content={"input_tokens": estimated})
 
-        except Exception as e:
-            return TokenCountResult(
-                status=500,
-                content={"error": str(e)},
+        except (AttributeError, KeyError, TypeError, ValueError, ImportError) as e:
+            logger.debug(
+                f"Token counting failed, falling back to estimation: {type(e).__name__}: {e}"
             )
+            estimated = self._estimate_tokens(system, messages)
+            return TokenCountResult(status=200, content={"input_tokens": estimated})
 
     async def _try_provider_token_count(
         self,
@@ -482,8 +484,16 @@ class TokenCountService:
             tokens = usage.get("input_tokens")
             return tokens if isinstance(tokens, int) else None
 
-        except Exception:
+        except (
+            httpx.HTTPError,
+            ConnectionError,
+            asyncio.TimeoutError,
+            KeyError,
+            AttributeError,
+            TypeError,
+        ) as e:
             # Provider doesn't support counting; fall through
+            logger.debug(f"Provider token count failed: {type(e).__name__}: {e}")
             return None
 
     def _build_messages_for_counting(
@@ -587,6 +597,8 @@ class AliasesListService:
             )
 
         except Exception as e:
+            # Service boundary: catch all exceptions for API error response conversion
+            logger.error(f"Aliases listing failed: {type(e).__name__}: {e}")
             return AliasesListResult(
                 status=500,
                 content={
@@ -605,13 +617,21 @@ class AliasesListService:
         """
         try:
             from src.top_models.service import TopModelsService
+            from src.top_models.source import TopModelsSourceError
 
             top = await TopModelsService().get_top_models(limit=10, refresh=False, provider=None)
             if top.aliases:
                 return {"default": top.aliases}
-        except Exception:
+        except (
+            ImportError,
+            ConnectionError,
+            asyncio.TimeoutError,
+            AttributeError,
+            TopModelsSourceError,
+            RuntimeError,
+        ) as e:
             # Suggestions are optional; log and continue
-            pass
+            logger.debug(f"Suggested aliases fetch failed: {type(e).__name__}: {e}")
 
         return {}
 
@@ -698,7 +718,15 @@ class TestConnectionService:
                 },
             )
 
-        except Exception as e:
+        except (
+            httpx.HTTPError,
+            ConnectionError,
+            asyncio.TimeoutError,
+            KeyError,
+            AttributeError,
+            TypeError,
+        ) as e:
+            logger.debug(f"Connection test failed: {type(e).__name__}: {e}")
             return TestConnectionResult(
                 status=503,
                 content={
@@ -792,8 +820,17 @@ class TopModelsEndpointService:
                 },
             )
 
-        except Exception as e:
+        except (
+            ImportError,
+            ConnectionError,
+            asyncio.TimeoutError,
+            AttributeError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as e:
             # Return graceful error response
+            logger.debug(f"Top models endpoint failed: {type(e).__name__}: {e}")
             return TopModelsEndpointResult(
                 status=500,
                 content={
