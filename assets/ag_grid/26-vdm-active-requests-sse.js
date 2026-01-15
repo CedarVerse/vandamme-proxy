@@ -167,6 +167,7 @@
     function onMessage(event) {
         if (event.type === 'disabled') {
             console.info('[vdm][sse] Metrics disabled, falling back to polling');
+            isSseEnabled = false;  // Prevent reconnection attempts
             disconnectSSE();
             return;
         }
