@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -14,6 +16,7 @@ from src.core.metrics.runtime import get_request_tracker
 AnySseStream = AsyncGenerator[str, None] | Any
 
 conversation_logger = ConversationLogger.get_logger()
+logger = logging.getLogger(__name__)
 
 
 def sse_headers() -> dict[str, str]:
@@ -165,7 +168,9 @@ def with_sse_error_handler(
             provider_info = f" (provider={provider_name})" if provider_name else ""
             try:
                 error_detail = e.response.json() if e.response.content else str(e)
-            except Exception:
+            except (json.JSONDecodeError, ValueError, TypeError) as parse_err:
+                # Failed to parse error response as JSON
+                logger.debug(f"Failed to parse HTTP error response: {parse_err}")
                 error_detail = str(e)
             conversation_logger.warning(
                 f"[{request_id}] Upstream HTTP error{provider_info}: "

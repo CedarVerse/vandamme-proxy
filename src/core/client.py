@@ -290,8 +290,15 @@ class OpenAIClient:
             # Note: Timeouts and other streaming errors should NOT be converted to
             # HTTPException here - they will be caught by the SSE error handler wrapper
             # in streaming.py and converted to graceful error events.
-            except Exception:
-                # Let timeout errors propagate so they can be handled by the SSE wrapper
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                # Let timeout and cancellation errors propagate for SSE wrapper handling
+                logger.debug("Timeout/cancellation in streaming, propagating to SSE wrapper")
+                raise
+            except Exception as unexpected:
+                # Any other exception is truly unexpected and should be logged
+                logger.error(
+                    f"Unexpected error in streaming: {type(unexpected).__name__}: {unexpected}"
+                )
                 raise
             finally:
                 # Clean up active request tracking

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, TypeVar
 
+from src.core.safe_ops import JSON_PARSE_EXCEPTIONS
+
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 
 def safe_json_loads(value: str | None, *, default: T) -> T:
@@ -20,7 +25,9 @@ def safe_json_loads(value: str | None, *, default: T) -> T:
 
     try:
         return json.loads(value)  # type: ignore[no-any-return]
-    except Exception:
+    except JSON_PARSE_EXCEPTIONS as e:
+        # Expected during streaming - log at DEBUG to avoid noise
+        logger.debug(f"JSON parse error in content_utils: {type(e).__name__}: {e}")
         return default
 
 

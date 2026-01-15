@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Any
 
 from src.conversion.tool_call_delta import ToolCallIdAllocator, coerce_tool_id, coerce_tool_name
+from src.core.safe_ops import JSON_PARSE_EXCEPTIONS
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -191,7 +195,9 @@ async def anthropic_sse_to_openai_chat_completions_sse(
         if ev.name == "content_block_start":
             try:
                 payload = json.loads(ev.data)
-            except Exception:
+            except JSON_PARSE_EXCEPTIONS as e:
+                # Expected during malformed SSE events - log at DEBUG
+                logger.debug(f"SSE content_block_start JSON parse error: {type(e).__name__}: {e}")
                 continue
             idx = payload.get("index")
             block = payload.get("content_block") or {}
@@ -214,7 +220,9 @@ async def anthropic_sse_to_openai_chat_completions_sse(
         if ev.name == "content_block_delta":
             try:
                 payload = json.loads(ev.data)
-            except Exception:
+            except JSON_PARSE_EXCEPTIONS as e:
+                # Expected during malformed SSE events - log at DEBUG
+                logger.debug(f"SSE content_block_delta JSON parse error: {type(e).__name__}: {e}")
                 continue
             idx = payload.get("index")
             delta = payload.get("delta") or {}
@@ -245,7 +253,9 @@ async def anthropic_sse_to_openai_chat_completions_sse(
         if ev.name == "message_delta":
             try:
                 payload = json.loads(ev.data)
-            except Exception:
+            except JSON_PARSE_EXCEPTIONS as e:
+                # Expected during malformed SSE events - log at DEBUG
+                logger.debug(f"SSE message_delta JSON parse error: {type(e).__name__}: {e}")
                 continue
 
             stop_reason = (payload.get("delta") or {}).get("stop_reason")

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
+
+from src.core.safe_ops import JSON_PARSE_EXCEPTIONS
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,10 +53,17 @@ class ToolCallArgsAssembler:
 
     @staticmethod
     def is_complete_json(s: str) -> bool:
+        """Check if string is complete JSON.
+
+        Logs incomplete JSON at DEBUG level to aid debugging without
+        creating noise during normal streaming operations.
+        """
         try:
             json.loads(s)
             return True
-        except Exception:
+        except JSON_PARSE_EXCEPTIONS:
+            # Expected during streaming - log at DEBUG
+            logger.debug(f"Incomplete JSON detected: {s[:50]}...")
             return False
 
 

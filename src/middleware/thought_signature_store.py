@@ -208,9 +208,16 @@ class ThoughtSignatureStore:
                 await asyncio.sleep(self.cleanup_interval)
                 await self._cleanup_expired()
             except asyncio.CancelledError:
+                # Task was cancelled - exit gracefully
                 break
-            except Exception:
-                self.logger.exception("Error in cleanup loop")
+            except (OSError, RuntimeError) as e:
+                # File system or runtime errors during cleanup
+                self.logger.warning(f"Cleanup loop error: {type(e).__name__}: {e}")
+            except Exception as unexpected:
+                # Catch-all for truly unexpected errors
+                self.logger.exception(
+                    f"Unexpected error in cleanup loop: {type(unexpected).__name__}"
+                )
 
     async def _cleanup_expired(self) -> None:
         async with self._lock:

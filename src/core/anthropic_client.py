@@ -6,6 +6,7 @@ bypasses all format conversions when talking to Anthropic-compatible APIs.
 
 import hashlib
 import json
+import logging
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any
@@ -22,6 +23,7 @@ from src.core.config.accessors import (
 from src.core.logging import ConversationLogger
 
 conversation_logger = ConversationLogger.get_logger()
+logger = logging.getLogger(__name__)
 
 NextApiKey = Callable[[set[str]], Awaitable[str]]
 
@@ -161,12 +163,22 @@ class AnthropicClient:
                 return response_data
 
             except httpx.HTTPStatusError as e:
+                # Try to extract structured error from JSON response
+                error_detail = "Unknown error"
+
+                # First attempt: parse as JSON
                 try:
-                    error_detail = e.response.json()
-                except Exception:
+                    if e.response.content:
+                        error_detail = e.response.json()
+                except (json.JSONDecodeError, ValueError, TypeError) as parse_error:
+                    # Fallback: use text content
+                    logger.debug(f"Failed to parse error response as JSON: {parse_error}")
                     try:
-                        error_detail = e.response.text
-                    except Exception:
+                        if hasattr(e.response, "text"):
+                            error_detail = e.response.text
+                    except (AttributeError, OSError) as text_error:
+                        # Final fallback: string representation
+                        logger.warning(f"Failed to extract error response text: {text_error}")
                         error_detail = str(e)
 
                 exc = HTTPException(status_code=e.response.status_code, detail=error_detail)
@@ -236,10 +248,19 @@ class AnthropicClient:
                     return
 
             except httpx.HTTPStatusError as e:
+                # Try to extract structured error from JSON response
                 try:
                     content = e.response.read()
                     error_detail = json.loads(content.decode("utf-8")) if content else str(e)
-                except Exception:
+                except (
+                    json.JSONDecodeError,
+                    ValueError,
+                    TypeError,
+                    UnicodeDecodeError,
+                    OSError,
+                ) as parse_err:
+                    # Failed to parse error response - use string representation
+                    logger.debug(f"Failed to parse streaming error response: {parse_err}")
                     error_detail = str(e)
 
                 exc = HTTPException(status_code=e.response.status_code, detail=error_detail)
@@ -253,6 +274,9 @@ class AnthropicClient:
             except Exception:
                 # Let streaming-specific errors (ReadTimeout, etc.) propagate
                 # so they can be handled by the SSE error wrapper
+                # We catch Exception broadly here because we want to preserve
+                # the original exception type for the SSE wrapper to handle
+                logger.debug("Streaming error propagating to SSE wrapper")
                 raise
 
             # Rotation decision (only for auth/key errors)

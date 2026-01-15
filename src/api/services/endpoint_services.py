@@ -12,6 +12,8 @@ Design principles:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,6 +29,8 @@ from src.models.cache import ModelsDiskCache
 
 # Type alias for fetch function
 FetchModelsFunc = Callable[[str, dict[str, str]], Awaitable[dict[str, Any]]]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,8 +152,15 @@ class ModelsListService:
 
             return self._convert_to_format(raw, format_type)
 
-        except Exception as e:
+        except (httpx.HTTPStatusError, ValueError, KeyError) as e:
+            # Expected errors: HTTP errors, validation errors, missing keys
             return self._error_response(str(e))
+        except Exception as unexpected:
+            # Truly unexpected errors
+            logger.error(
+                f"Unexpected error in ModelsListService: {type(unexpected).__name__}: {unexpected}"
+            )
+            return self._error_response(str(unexpected))
 
     async def execute_with_request(self, request: ModelsListRequest) -> ModelsListResult:
         """Execute using ModelsListRequest DTO.
@@ -234,8 +245,9 @@ class ModelsListService:
                 )
             return raw
 
-        except Exception:
-            # On failure, try stale cache
+        except (httpx.HTTPError, ConnectionError, asyncio.TimeoutError) as e:
+            # Network/HTTP errors - try stale cache
+            logger.debug(f"Upstream fetch failed, trying stale cache: {type(e).__name__}: {e}")
             if self._cache:
                 stale = self._cache.read_response_if_any(
                     provider=provider_name,

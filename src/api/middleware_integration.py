@@ -16,6 +16,7 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from src.core.safe_ops import JSON_PARSE_EXCEPTIONS
 from src.middleware import MiddlewareChain, RequestContext, ResponseContext
 from src.middleware.base import StreamChunkContext
 from src.models.claude import ClaudeMessagesRequest
@@ -285,7 +286,9 @@ class MiddlewareStreamingWrapper:
 
         try:
             parsed = json.loads(payload)
-        except Exception:
+        except JSON_PARSE_EXCEPTIONS as e:
+            # Expected during malformed SSE events - log at DEBUG
+            logger.debug(f"SSE delta parsing JSON parse error: {type(e).__name__}: {e}")
             return None
 
         if not isinstance(parsed, dict):

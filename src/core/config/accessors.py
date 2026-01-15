@@ -16,10 +16,13 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .config import Config
+
+logger = logging.getLogger(__name__)
 
 
 def _get_config_from_context() -> Config | None:
@@ -30,21 +33,32 @@ def _get_config_from_context() -> Config | None:
 
     In tests, config is provided via dependency injection fixtures.
     In CLI, config is created explicitly per command.
+
+    Stack inspection is expensive and fragile, so we use specific exceptions
+    and log failures to aid debugging. This function is called frequently
+    during request processing, so failures are logged at DEBUG level.
     """
     try:
         # Try to get from FastAPI request context by inspecting the call stack
         import inspect
 
         for frame_info in inspect.stack():
-            frame_locals = frame_info.frame.f_locals
+            try:
+                frame_locals = frame_info.frame.f_locals
+            except (AttributeError, ValueError, RuntimeError):
+                # Frame unavailable or corrupted - stop iterating
+                break
+
             if "request" in frame_locals:
                 from fastapi import Request
 
                 request = frame_locals["request"]
                 if isinstance(request, Request):
                     return getattr(request.app.state, "config", None)
-    except Exception:
-        pass
+    except (AttributeError, ValueError, RuntimeError, ImportError) as e:
+        # Stack inspection failed - expected in non-request contexts
+        # Log at DEBUG to avoid noise while still providing visibility
+        logger.debug(f"Stack inspection for config context failed: {type(e).__name__}: {e}")
     return None
 
 

@@ -92,13 +92,22 @@ class DiskJsonCache(ABC):
             )
             temp_path.replace(path)
             logger.debug(f"Cache written to {path}")
-        except Exception as e:
+        except (OSError, ValueError) as e:
+            # File system errors during write
             if temp_path.exists():
                 try:
                     temp_path.unlink()
-                except Exception:
-                    logger.debug(f"Failed to cleanup temp file: {temp_path}")
+                except OSError as cleanup_err:
+                    logger.debug(f"Failed to cleanup temp file: {temp_path}: {cleanup_err}")
             raise DiskCacheError(f"Failed to write cache to {path}: {e}") from e
+        except Exception as unexpected:
+            # Truly unexpected errors
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError as cleanup_err:
+                    logger.debug(f"Failed to cleanup temp file: {temp_path}: {cleanup_err}")
+            raise DiskCacheError(f"Failed to write cache to {path}: {unexpected}") from unexpected
 
     def _read_cache_file(self, path: Path) -> dict[str, Any] | None:
         """Read and validate cache file."""
@@ -159,8 +168,15 @@ class DiskJsonCache(ABC):
 
         try:
             return self._deserialize(cache_data)
-        except Exception as e:
-            logger.debug(f"Cache deserialization failed: {e}")
+        except (json.JSONDecodeError, ValueError, TypeError, KeyError) as e:
+            # Specific exceptions that occur during JSON deserialization
+            logger.debug(f"Cache deserialization failed: {type(e).__name__}: {e}")
+            return None
+        except Exception as unexpected:
+            # Truly unexpected errors - log at WARNING for visibility
+            logger.warning(
+                f"Unexpected cache deserialization error: {type(unexpected).__name__}: {unexpected}"
+            )
             return None
 
     def write(self, payload: Any) -> None:  # noqa: ANN401
