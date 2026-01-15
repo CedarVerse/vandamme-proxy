@@ -1,8 +1,16 @@
 # Multi-Provider Support
 
 <cite>
-**Referenced Files in This Document**   
+**Referenced Files in This Document**
 - [provider_manager.py](file://src/core/provider_manager.py)
+- [provider_registry.py](file://src/core/provider/provider_registry.py)
+- [client_factory.py](file://src/core/provider/client_factory.py)
+- [middleware_manager.py](file://src/core/provider/middleware_manager.py)
+- [api_key_rotator.py](file://src/core/provider/api_key_rotator.py)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py)
+- [default_selector.py](file://src/core/provider/default_selector.py)
+- [error_types.py](file://src/core/error_types.py)
+- [error_handling.py](file://src/api/services/error_handling.py)
 - [provider_config.py](file://src/core/provider_config.py)
 - [client.py](file://src/core/client.py)
 - [anthropic_client.py](file://src/core/anthropic_client.py)
@@ -14,7 +22,21 @@
 - [anthropic-direct.env](file://examples/anthropic-direct.env)
 - [aws-bedrock.env](file://examples/aws-bedrock.env)
 - [google-vertex.env](file://examples/google-vertex.env)
+- [test_request_orchestrator_error_paths.py](file://tests/api/orchestrator/test_request_orchestrator_error_paths.py)
 </cite>
+
+## Update Summary
+This document has been updated to reflect the enhanced provider system architecture that splits the monolithic ProviderManager into focused, single-responsibility components. Key improvements include:
+- A provider registry for storing and retrieving configurations
+- A client factory for dynamic client creation and caching
+- A middleware manager for lifecycle management of middleware chains
+- An API key rotator for thread-safe round-robin rotation
+- A provider config loader implementing hierarchical configuration merging
+- A default provider selector with intelligent fallback
+- Improved error handling using an ErrorType enum and ErrorResponseBuilder pattern
+- Comprehensive unit tests covering provider integration and error scenarios
+
+These changes enable better modularity, clearer separation of concerns, and improved reliability when managing multiple upstream providers.
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -29,74 +51,93 @@
 10. [Practical Configuration Examples](#practical-configuration-examples)
 
 ## Introduction
-
-The vandamme-proxy system implements a sophisticated multi-provider support architecture that enables seamless integration with various LLM providers including OpenAI, Anthropic, Poe, Azure, Gemini, and AWS Bedrock. At the core of this system is the ProviderManager class, which orchestrates provider configuration, routing, and client management through a flexible and extensible design. The system supports both static API key configurations and client key passthrough modes, allowing for diverse deployment scenarios from simple single-provider setups to complex multi-tenant environments. This documentation details the architecture and implementation of the multi-provider system, focusing on the ProviderManager class and its interactions with configuration management, routing mechanisms, and client creation patterns.
+The vandamme-proxy multi-provider system now implements a modular architecture centered around a facade ProviderManager coordinating specialized components. This design improves maintainability, testability, and scalability when integrating multiple LLM providers such as OpenAI, Anthropic, Poe, Azure, Gemini, and AWS Bedrock. The system supports explicit routing via 'provider:model' syntax, default provider selection with fallback, and robust configuration loading from environment variables and TOML files. Enhanced error handling and middleware management further strengthen reliability and observability.
 
 ## ProviderManager Architecture
-
-The ProviderManager class serves as the central orchestrator for managing multiple LLM providers within the vandamme-proxy system. It implements a singleton-like pattern through lazy initialization, ensuring that provider configurations are loaded only when needed during request processing. The architecture follows a clear separation of concerns, with distinct responsibilities for configuration loading, client management, and middleware integration. The ProviderManager maintains internal dictionaries for storing provider configurations (`_configs`) and instantiated clients (`_clients`), enabling efficient lookup and reuse of resources. It also manages process-global state for API key rotation through `_api_key_locks` and `_api_key_indices`, ensuring thread-safe operation when multiple requests access the same provider. The class implements a comprehensive error handling system that provides meaningful feedback when provider configurations are invalid or incomplete.
+The ProviderManager remains the central coordinator, but it now delegates responsibilities to dedicated components:
+- ProviderRegistry: stores and retrieves provider configurations
+- ClientFactory: creates and caches provider clients
+- ProviderConfigLoader: loads and merges provider configurations
+- DefaultProviderSelector: selects a valid default provider with fallback
+- MiddlewareManager: owns and initializes middleware chains
+- ApiKeyRotator: manages round-robin key rotation
 
 ```mermaid
 classDiagram
 class ProviderManager {
 +default_provider : str
 +default_provider_source : str
--_clients : dict[str, Client]
--_configs : dict[str, ProviderConfig]
--_loaded : bool
--_load_results : list[ProviderLoadResult]
--_api_key_locks : dict[str, asyncio.Lock]
--_api_key_indices : dict[str, int]
--middleware_chain : MiddlewareChain
--_middleware_initialized : bool
 +load_provider_configs()
 +get_client(provider_name, client_api_key)
 +get_next_provider_api_key(provider_name)
 +get_provider_config(provider_name)
 +list_providers()
 +print_provider_summary()
++initialize_middleware()
++cleanup_middleware()
++parse_model_name(model)
 }
-class ProviderConfig {
-+name : str
-+api_key : str
-+base_url : str
-+api_keys : list[str]
-+api_version : str
-+timeout : int
-+max_retries : int
-+custom_headers : dict[str, str]
-+api_format : str
-+tool_name_sanitization : bool
-+is_azure : bool
-+is_anthropic_format : bool
-+uses_passthrough : bool
-+get_api_keys()
-+get_effective_api_key(client_api_key)
+class ProviderRegistry {
++register(config)
++get(provider_name)
++list_all()
++exists(provider_name)
++clear()
 }
-class ProviderLoadResult {
-+name : str
-+status : str
-+message : str | None
-+api_key_hash : str | None
-+base_url : str | None
+class ClientFactory {
++get_or_create_client(config)
++has_client(provider_name)
++clear()
 }
-ProviderManager --> ProviderConfig : "manages"
-ProviderManager --> ProviderLoadResult : "tracks"
-ProviderManager --> OpenAIClient : "creates"
-ProviderManager --> AnthropicClient : "creates"
+class ProviderConfigLoader {
++scan_providers()
++load_provider(provider_name, require_api_key)
++load_provider_with_result(provider_name)
++get_custom_headers(provider_prefix)
+}
+class DefaultProviderSelector {
++select(available_providers)
++configured_default
++actual_default
+}
+class MiddlewareManager {
++initialize_sync()
++initialize()
++cleanup()
++is_initialized
+}
+class ApiKeyRotator {
++get_next_key(provider_name, api_keys)
++reset_rotation(provider_name)
+}
+ProviderManager --> ProviderRegistry : "stores/retrieves"
+ProviderManager --> ClientFactory : "creates/caches"
+ProviderManager --> ProviderConfigLoader : "loads configs"
+ProviderManager --> DefaultProviderSelector : "fallback logic"
+ProviderManager --> MiddlewareManager : "initializes"
+ProviderManager --> ApiKeyRotator : "rotation"
 ```
 
 **Diagram sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L29-L586)
-- [provider_config.py](file://src/core/provider_config.py#L7-L102)
+- [provider_manager.py](file://src/core/provider_manager.py#L30-L120)
+- [provider_registry.py](file://src/core/provider/provider_registry.py#L1-L66)
+- [client_factory.py](file://src/core/provider/client_factory.py#L1-L81)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L1-L251)
+- [default_selector.py](file://src/core/provider/default_selector.py#L1-L86)
+- [middleware_manager.py](file://src/core/provider/middleware_manager.py#L1-L66)
+- [api_key_rotator.py](file://src/core/provider/api_key_rotator.py#L1-L54)
 
 **Section sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L29-L586)
-- [provider_config.py](file://src/core/provider_config.py#L7-L102)
+- [provider_manager.py](file://src/core/provider_manager.py#L30-L120)
+- [provider_registry.py](file://src/core/provider/provider_registry.py#L1-L66)
+- [client_factory.py](file://src/core/provider/client_factory.py#L1-L81)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L1-L251)
+- [default_selector.py](file://src/core/provider/default_selector.py#L1-L86)
+- [middleware_manager.py](file://src/core/provider/middleware_manager.py#L1-L66)
+- [api_key_rotator.py](file://src/core/provider/api_key_rotator.py#L1-L54)
 
 ## Provider Routing Mechanism
-
-The provider routing mechanism in vandamme-proxy uses a simple yet powerful 'provider:model' syntax to direct requests to specific LLM providers. This syntax allows clients to explicitly specify which provider should handle a request by prefixing the model name with the provider identifier followed by a colon. For example, 'openai:gpt-4o' routes the request to the OpenAI provider, while 'anthropic:claude-3-5-sonnet' directs it to Anthropic. When no provider prefix is specified, the system uses the default provider configured through environment variables or TOML files. The routing process is implemented in the `parse_model_name` method of the ProviderManager class, which parses the model string and returns a tuple containing the provider name and the actual model name. This mechanism enables fine-grained control over provider selection while maintaining backward compatibility with existing client applications.
+Requests can target a specific provider using the 'provider:model' syntax. When omitted, the default provider is used. The ProviderManager’s parse_model_name method extracts the provider and model, delegating to the ProviderRegistry and ProviderConfigLoader for configuration retrieval. The ModelManager and ProviderContext coordinate alias resolution and provider context construction.
 
 ```mermaid
 sequenceDiagram
@@ -123,18 +164,17 @@ ModelManager-->>Client : (default_provider, "gpt-4o")
 ```
 
 **Diagram sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L408-L417)
+- [provider_manager.py](file://src/core/provider_manager.py#L421-L431)
 - [model_manager.py](file://src/core/model_manager.py#L19-L91)
 - [provider_context.py](file://src/api/services/provider_context.py#L21-L58)
 
 **Section sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L408-L417)
+- [provider_manager.py](file://src/core/provider_manager.py#L421-L431)
 - [model_manager.py](file://src/core/model_manager.py#L19-L91)
 - [provider_context.py](file://src/api/services/provider_context.py#L21-L58)
 
 ## Configuration Management
-
-The multi-provider system implements a comprehensive configuration management approach that supports multiple sources and formats. Provider configurations are primarily defined through environment variables, with each provider requiring specific environment variables such as `{PROVIDER}_API_KEY`, `{PROVIDER}_BASE_URL`, and `{PROVIDER}_API_VERSION`. The system automatically discovers providers by scanning for environment variables ending with `_API_KEY`, allowing for dynamic provider registration without code changes. In addition to environment variables, the system supports TOML-based configuration files that provide default values and additional settings. The configuration loading process follows a hierarchical approach, with environment variables taking precedence over TOML configurations, which in turn override hardcoded defaults. This layered approach enables flexible deployment scenarios, from simple environment-based configurations to complex setups with multiple configuration sources.
+Provider configurations are loaded from environment variables and merged with TOML defaults. The ProviderConfigLoader scans for {PROVIDER}_API_KEY patterns, resolves base URLs with precedence (environment > TOML > defaults), and applies provider-specific settings like API format, timeouts, retries, and custom headers. The DefaultProviderSelector chooses a valid default provider, falling back to the first available if the configured default is missing.
 
 ```mermaid
 flowchart TD
@@ -145,29 +185,31 @@ AdditionalProviders --> TOMLCheck["Check TOML Configuration"]
 TOMLCheck --> EnvOverride["Override with Environment Variables"]
 EnvOverride --> Validation["Validate Configuration"]
 Validation --> Result["Store Provider Config"]
-Result --> End([Configuration Complete])
+Result --> DefaultSelection["Select Default Provider"]
+DefaultSelection --> End([Configuration Complete])
 style Start fill:#f9f,stroke:#333
 style End fill:#f9f,stroke:#333
 ```
 
 **Diagram sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L91-L108)
-- [provider_config.py](file://src/core/provider_config.py#L7-L102)
-- [alias_config.py](file://src/core/alias_config.py#L27-L224)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L36-L187)
+- [default_selector.py](file://src/core/provider/default_selector.py#L33-L86)
+- [defaults.toml](file://src/config/defaults.toml#L1-L89)
 
 **Section sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L91-L108)
-- [provider_config.py](file://src/core/provider_config.py#L7-L102)
-- [alias_config.py](file://src/core/alias_config.py#L27-L224)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L36-L187)
+- [default_selector.py](file://src/core/provider/default_selector.py#L33-L86)
+- [defaults.toml](file://src/config/defaults.toml#L1-L89)
 
 ## Factory Pattern and Client Creation
-
-The vandamme-proxy system implements a factory pattern for dynamic provider client creation, enabling lazy loading and efficient resource management. The ProviderManager class acts as a factory that creates and manages client instances for different providers based on their API format. When a client is requested through the `get_client` method, the ProviderManager checks if a client for the specified provider already exists in its cache. If not, it creates a new client instance based on the provider's configuration, particularly the `api_format` setting which determines whether to instantiate an OpenAIClient or AnthropicClient. This factory approach enables several key benefits: clients are created only when needed (lazy loading), multiple requests to the same provider can share the same client instance, and the system can support different client types (OpenAI vs Anthropic) through a consistent interface. The factory also handles special cases such as passthrough providers, where the client is configured to use the client's API key rather than a static provider key.
+The ClientFactory dynamically creates and caches provider clients based on ProviderConfig.api_format. It supports both OpenAI-style and Anthropic-style APIs, and handles passthrough providers by initializing clients without static API keys. Cached clients avoid repeated HTTP connection setup and reduce latency.
 
 ```mermaid
 classDiagram
-class ProviderManager {
-+get_client(provider_name, client_api_key)
+class ClientFactory {
++get_or_create_client(config)
++has_client(provider_name)
++clear()
 }
 class OpenAIClient {
 +create_chat_completion(request)
@@ -177,30 +219,22 @@ class AnthropicClient {
 +create_chat_completion(request)
 +create_chat_completion_stream(request)
 }
-class ClientFactory {
-<<interface>>
-+create_client(config, api_key)
-}
-ProviderManager --> ClientFactory : "implements"
-ProviderManager --> OpenAIClient : "creates"
-ProviderManager --> AnthropicClient : "creates"
-OpenAIClient ..|> ClientFactory : "implements"
-AnthropicClient ..|> ClientFactory : "implements"
+ClientFactory --> OpenAIClient : "creates"
+ClientFactory --> AnthropicClient : "creates"
 ```
 
 **Diagram sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L419-L473)
+- [client_factory.py](file://src/core/provider/client_factory.py#L1-L81)
 - [client.py](file://src/core/client.py#L32-L352)
 - [anthropic_client.py](file://src/core/anthropic_client.py#L25-L271)
 
 **Section sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L419-L473)
+- [client_factory.py](file://src/core/provider/client_factory.py#L1-L81)
 - [client.py](file://src/core/client.py#L32-L352)
 - [anthropic_client.py](file://src/core/anthropic_client.py#L25-L271)
 
 ## Hierarchical Configuration Loading
-
-The vandamme-proxy system implements a hierarchical configuration loading process that combines environment variables, user configuration files, and package defaults to provide flexible and robust configuration management. The loading process begins with environment variables, which have the highest precedence and allow for runtime configuration and deployment-specific settings. When environment variables are not present, the system looks for configuration in TOML files, starting with local overrides (`vandamme-config.toml` in the current directory), then user-specific configurations (`~/.config/vandamme-proxy/vandamme-config.toml`), and finally package defaults (`src/config/defaults.toml`). This hierarchy enables a powerful configuration cascade where local settings can override user preferences, which in turn override system defaults. The system also supports provider-specific configuration options such as custom headers, timeouts, and retry limits, allowing for fine-tuned control over each provider's behavior.
+The system follows a strict precedence order: environment variables override TOML, which override package defaults. ProviderConfigLoader encapsulates this logic, while ProviderManager integrates it into runtime initialization and middleware setup.
 
 ```mermaid
 graph TD
@@ -222,18 +256,19 @@ E --> F
 ```
 
 **Diagram sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L145-L321)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L76-L187)
+- [provider_manager.py](file://src/core/provider_manager.py#L158-L219)
 - [alias_config.py](file://src/core/alias_config.py#L32-L155)
 - [defaults.toml](file://src/config/defaults.toml#L1-L89)
 
 **Section sources**
-- [provider_manager.py](file://src/core/provider_manager.py#L145-L321)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L76-L187)
+- [provider_manager.py](file://src/core/provider_manager.py#L158-L219)
 - [alias_config.py](file://src/core/alias_config.py#L32-L155)
 - [defaults.toml](file://src/config/defaults.toml#L1-L89)
 
 ## Error Handling and Validation
-
-The multi-provider system implements comprehensive error handling and validation to ensure robust operation in various deployment scenarios. The ProviderConfig class includes a `__post_init__` method that validates configuration parameters such as provider name, API key, base URL, and API format, raising descriptive errors when requirements are not met. The system specifically prevents mixed configurations where passthrough mode (`!PASSTHRU`) is combined with static API keys, ensuring clear and predictable behavior. During provider loading, the system tracks load results through the ProviderLoadResult class, capturing success, partial, and failure states with detailed messages. This information is used to generate informative summaries through the `print_provider_summary` method, which displays provider status, API key hashes, and base URLs. The client classes also implement sophisticated error handling for API interactions, including automatic key rotation on authentication failures and proper mapping of provider-specific error messages to standardized HTTP responses.
+Enhanced error handling uses an ErrorType enum and a centralized ErrorResponseBuilder to produce consistent error responses across endpoints. ProviderConfigLoader and ProviderManager validate configurations and raise descriptive errors for missing or conflicting settings. Tests cover error paths in orchestrator flows, including unknown providers, invalid models, authentication failures, and middleware exceptions.
 
 ```mermaid
 flowchart TD
@@ -255,18 +290,24 @@ style M fill:#f9f,stroke:#333
 ```
 
 **Diagram sources**
-- [provider_config.py](file://src/core/provider_config.py#L69-L97)
-- [provider_manager.py](file://src/core/provider_manager.py#L244-L321)
-- [client.py](file://src/core/client.py#L23-L219)
+- [error_types.py](file://src/core/error_types.py#L1-L48)
+- [error_handling.py](file://src/api/services/error_handling.py#L19-L219)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L103-L187)
+- [test_request_orchestrator_error_paths.py](file://tests/api/orchestrator/test_request_orchestrator_error_paths.py#L1-L75)
 
 **Section sources**
-- [provider_config.py](file://src/core/provider_config.py#L69-L97)
-- [provider_manager.py](file://src/core/provider_manager.py#L244-L321)
-- [client.py](file://src/core/client.py#L23-L219)
+- [error_types.py](file://src/core/error_types.py#L1-L48)
+- [error_handling.py](file://src/api/services/error_handling.py#L19-L219)
+- [provider_config_loader.py](file://src/core/provider/provider_config_loader.py#L103-L187)
+- [test_request_orchestrator_error_paths.py](file://tests/api/orchestrator/test_request_orchestrator_error_paths.py#L1-L75)
 
 ## Performance Considerations
-
-The multi-provider system incorporates several performance optimizations to handle multiple upstream services efficiently. The client classes implement connection pooling through cached HTTP clients, reducing the overhead of establishing new connections for each request. The ProviderManager maintains a cache of client instances, allowing multiple requests to reuse the same client and avoiding the cost of repeated client initialization. For providers with multiple API keys, the system implements round-robin key rotation with process-global locks to ensure thread-safe operation while distributing load across available keys. The system also supports streaming responses with proper cancellation handling, allowing long-running requests to be terminated gracefully without resource leaks. Configuration loading is designed to be lazy, with providers loaded only when first accessed, reducing startup time and memory usage. The system also includes configurable timeouts and retry limits, allowing administrators to tune performance characteristics based on their specific deployment requirements and provider capabilities.
+Performance optimizations include:
+- Connection pooling and client caching via ClientFactory
+- Lazy loading of provider configurations and middleware
+- Round-robin API key rotation with process-global locks
+- Configurable timeouts and retry limits
+- Streaming support with proper cancellation handling
 
 ```mermaid
 graph TB
@@ -307,19 +348,17 @@ M --> Performance
 ```
 
 **Diagram sources**
+- [client_factory.py](file://src/core/provider/client_factory.py#L23-L81)
+- [api_key_rotator.py](file://src/core/provider/api_key_rotator.py#L16-L54)
 - [client.py](file://src/core/client.py#L53-L86)
-- [provider_manager.py](file://src/core/provider_manager.py#L44-L46)
-- [anthropic_client.py](file://src/core/anthropic_client.py#L50-L54)
-- [client.py](file://src/core/client.py#L109-L137)
 
 **Section sources**
+- [client_factory.py](file://src/core/provider/client_factory.py#L23-L81)
+- [api_key_rotator.py](file://src/core/provider/api_key_rotator.py#L16-L54)
 - [client.py](file://src/core/client.py#L53-L86)
-- [provider_manager.py](file://src/core/provider_manager.py#L44-L46)
-- [anthropic_client.py](file://src/core/anthropic_client.py#L50-L54)
 
 ## Integration with Alias System
-
-The multi-provider system integrates closely with the alias system to provide flexible model name resolution and provider abstraction. The ModelManager class coordinates between the ProviderManager and AliasManager to resolve model names through a multi-step process: first applying alias resolution if available, then parsing the provider prefix, and finally returning the resolved provider and model name. This integration allows users to define aliases in TOML configuration files that can reference specific providers or use provider-specific aliases. For example, an alias 'haiku' might resolve to different models depending on the context provider, enabling consistent naming across different providers. The system also supports cross-provider aliases, where an alias can reference a model on a different provider, facilitating migration between providers or cost-based routing. The alias resolution process is designed to be efficient, with caching mechanisms to avoid repeated parsing and resolution operations.
+The alias system integrates with the provider routing pipeline. The ModelManager resolves aliases and provider prefixes, then delegates to ProviderManager for configuration retrieval. This enables cross-provider aliasing and consistent model naming across providers.
 
 ```mermaid
 sequenceDiagram
@@ -344,44 +383,20 @@ ModelManager-->>Client : ("poe", "glm-4.6")
 **Diagram sources**
 - [model_manager.py](file://src/core/model_manager.py#L19-L91)
 - [alias_config.py](file://src/core/alias_config.py#L157-L175)
-- [provider_manager.py](file://src/core/provider_manager.py#L408-L417)
+- [provider_manager.py](file://src/core/provider_manager.py#L421-L431)
 
 **Section sources**
 - [model_manager.py](file://src/core/model_manager.py#L19-L91)
 - [alias_config.py](file://src/core/alias_config.py#L157-L175)
 
 ## Practical Configuration Examples
+The examples demonstrate multi-provider setups and provider-specific configurations:
+- multi-provider.env: Configure multiple providers (OpenAI, Anthropic, AWS Bedrock, Azure)
+- anthropic-direct.env: Direct Anthropic access with default provider set to Anthropic
+- aws-bedrock.env: AWS Bedrock with Claude models and custom headers
+- google-vertex.env: Google Vertex AI with Anthropic models and GCP project settings
 
-The vandamme-proxy system provides several practical configuration examples that demonstrate different deployment scenarios for the multi-provider system. The `multi-provider.env` example shows how to configure multiple providers including OpenAI, Anthropic, AWS Bedrock, and Azure, with each provider having its own API key and base URL. This configuration enables clients to route requests to different providers using the 'provider:model' syntax. The `anthropic-direct.env` example demonstrates a simple setup with direct Anthropic API access, setting the default provider to Anthropic. The `aws-bedrock.env` example shows configuration for AWS Bedrock with Claude models, including AWS-specific settings like region and custom headers. The `google-vertex.env` example illustrates configuration for Google Vertex AI with Anthropic models, including Google Cloud project settings. These examples provide templates for common use cases and can be customized based on specific requirements, such as adding custom headers, adjusting timeouts, or configuring multiple API keys for load balancing and failover.
-
-```mermaid
-graph TD
-A[Configuration Examples] --> B[multi-provider.env]
-A --> C[anthropic-direct.env]
-A --> D[aws-bedrock.env]
-A --> E[google-vertex.env]
-B --> F[Multiple Providers]
-B --> G[OpenAI, Anthropic, AWS, Azure]
-B --> H[Provider-Specific Settings]
-C --> I[Direct Anthropic Access]
-C --> J[Default Provider: Anthropic]
-C --> K[Simplified Configuration]
-D --> L[AWS Bedrock]
-D --> M[Claude Models]
-D --> N[AWS Region Settings]
-D --> O[Custom Headers]
-E --> P[Google Vertex AI]
-E --> Q[Anthropic Models]
-E --> R[GCP Project Settings]
-E --> S[Custom Headers]
-style A fill:#f9f,stroke:#333
-```
-
-**Diagram sources**
-- [multi-provider.env](file://examples/multi-provider.env#L1-L48)
-- [anthropic-direct.env](file://examples/anthropic-direct.env#L1-L22)
-- [aws-bedrock.env](file://examples/aws-bedrock.env#L1-L32)
-- [google-vertex.env](file://examples/google-vertex.env#L1-L32)
+Environment variables commonly used include {PROVIDER}_API_KEY, {PROVIDER}_BASE_URL, {PROVIDER}_API_VERSION, and {PROVIDER}_CUSTOM_HEADER_* for per-provider headers.
 
 **Section sources**
 - [multi-provider.env](file://examples/multi-provider.env#L1-L48)

@@ -4,11 +4,19 @@
 **Referenced Files in This Document**
 - [alias_config.py](file://src/core/alias_config.py)
 - [defaults.toml](file://src/config/defaults.toml)
-- [config.py](file://src/core/config.py)
-- [alias_manager.py](file://src/core/alias_manager.py)
+- [config.py](file://src/core/config/config.py)
+- [accessors.py](file://src/core/config/accessors.py)
+- [runtime.py](file://src/core/config/runtime.py)
+- [providers.py](file://src/core/config/providers.py)
+- [schema.py](file://src/core/config/schema.py)
+- [validation.py](file://src/core/config/validation.py)
+- [server.py](file://src/core/config/server.py)
+- [timeouts.py](file://src/core/config/timeouts.py)
+- [cache.py](file://src/core/config/cache.py)
+- [metrics.py](file://src/core/config/metrics.py)
+- [middleware.py](file://src/core/config/middleware.py)
+- [security.py](file://src/core/config/security.py)
 - [test_alias_config.py](file://tests/core/test_alias_config.py)
-- [config.py](file://src/cli/commands/config.py)
-- [README.md](file://README.md)
 </cite>
 
 ## Table of Contents
@@ -30,7 +38,7 @@ The configuration system spans several modules:
 - Alias configuration loader: loads and merges TOML files from three locations and caches the result.
 - Package defaults: bundled TOML with baseline provider and alias settings.
 - Runtime configuration: reads environment variables and applies them on top of the merged alias configuration.
-- Alias manager: loads environment-based aliases and merges them with fallback aliases from TOML.
+- Accessors and runtime wiring: DI-friendly accessors and FastAPI runtime accessors replace the old global singleton.
 
 ```mermaid
 graph TB
@@ -42,33 +50,37 @@ TOML_PKG["Package Defaults<br/>src/config/defaults.toml"]
 end
 subgraph "Loading Pipeline"
 AC["AliasConfigLoader<br/>load_config()"]
-AM["AliasManager<br/>_load_aliases()"]
-CFG["Runtime Config<br/>src/core/config.py"]
+CFG["Config<br/>src/core/config/config.py"]
+ACC["Accessors<br/>src/core/config/accessors.py"]
+RT["Runtime Accessor<br/>src/core/config/runtime.py"]
 end
-ENV --> AM
+ENV --> CFG
 TOML_LOCAL --> AC
 TOML_USER --> AC
 TOML_PKG --> AC
-AC --> AM
-AM --> CFG
+AC --> CFG
+ACC --> CFG
+RT --> CFG
 ```
 
 **Diagram sources**
 - [alias_config.py](file://src/core/alias_config.py#L30-L39)
-- [alias_manager.py](file://src/core/alias_manager.py#L201-L208)
-- [config.py](file://src/core/config.py#L16-L47)
+- [config.py](file://src/core/config/config.py#L50-L68)
+- [accessors.py](file://src/core/config/accessors.py#L69-L163)
+- [runtime.py](file://src/core/config/runtime.py#L19-L33)
 
 **Section sources**
 - [alias_config.py](file://src/core/alias_config.py#L30-L39)
 - [defaults.toml](file://src/config/defaults.toml#L1-L89)
-- [config.py](file://src/core/config.py#L16-L47)
-- [alias_manager.py](file://src/core/alias_manager.py#L201-L208)
+- [config.py](file://src/core/config/config.py#L50-L68)
+- [accessors.py](file://src/core/config/accessors.py#L69-L163)
+- [runtime.py](file://src/core/config/runtime.py#L19-L33)
 
 ## Core Components
 - AliasConfigLoader: Loads and merges TOML configuration from three paths, with higher-priority files overriding lower-priority ones. It caches the merged configuration and logs provider/alias counts.
 - Package defaults: A bundled TOML file containing provider sections and default aliases.
 - Runtime Config: Reads environment variables and applies them on top of the merged alias configuration.
-- Alias Manager: Loads environment-based aliases and merges them with fallback aliases from TOML.
+- Accessors and runtime wiring: DI-friendly accessors and FastAPI runtime accessors replace the old global singleton.
 
 Key behaviors:
 - Loading order: package defaults (lowest) → user config → local override (highest).
@@ -79,20 +91,21 @@ Key behaviors:
 **Section sources**
 - [alias_config.py](file://src/core/alias_config.py#L41-L155)
 - [defaults.toml](file://src/config/defaults.toml#L5-L89)
-- [config.py](file://src/core/config.py#L16-L98)
-- [alias_manager.py](file://src/core/alias_manager.py#L214-L269)
+- [config.py](file://src/core/config/config.py#L50-L115)
+- [accessors.py](file://src/core/config/accessors.py#L69-L163)
+- [runtime.py](file://src/core/config/runtime.py#L19-L33)
 
 ## Architecture Overview
-The configuration pipeline integrates environment variables, TOML files, and defaults into a unified runtime configuration. The AliasConfigLoader is responsible for merging TOML sources, while environment variables are handled separately in the runtime configuration and alias manager.
+The configuration pipeline integrates environment variables, TOML files, and defaults into a unified runtime configuration. The AliasConfigLoader is responsible for merging TOML sources, while environment variables are handled in dedicated modules and the Config singleton.
 
 ```mermaid
 sequenceDiagram
 participant App as "Application"
 participant Loader as "AliasConfigLoader"
 participant FS as "Filesystem"
-participant AM as "AliasManager"
 participant Env as "Environment"
-participant Runtime as "Runtime Config"
+participant Providers as "ProviderSettings"
+participant Runtime as "Config"
 App->>Loader : load_config()
 Loader->>FS : Read package defaults.toml
 FS-->>Loader : Defaults
@@ -102,21 +115,19 @@ Loader->>FS : Read ./vandamme-config.toml
 FS-->>Loader : Local override
 Loader->>Loader : Merge (later overrides earlier)
 Loader-->>App : Merged config
-App->>AM : _load_aliases()
-AM->>Env : Scan environment for <PROVIDER>_ALIAS_* variables
-Env-->>AM : Explicit aliases
-AM->>AM : Merge explicit aliases over fallbacks
-App->>Runtime : Initialize runtime config
-Runtime->>Env : Read environment variables
-Runtime->>Loader : get_defaults()
-Loader-->>Runtime : default-provider
+App->>Providers : resolve_default_provider()
+Providers->>Env : Read VDM_DEFAULT_PROVIDER
+Providers->>Loader : get_defaults()
+Loader-->>Providers : default-provider
+Providers-->>App : ProviderConfig
+App->>Runtime : Initialize Config (loads env via schema)
 Runtime-->>App : Final runtime config
 ```
 
 **Diagram sources**
 - [alias_config.py](file://src/core/alias_config.py#L41-L155)
-- [alias_manager.py](file://src/core/alias_manager.py#L214-L269)
-- [config.py](file://src/core/config.py#L16-L98)
+- [providers.py](file://src/core/config/providers.py#L86-L120)
+- [config.py](file://src/core/config/config.py#L50-L68)
 
 ## Detailed Component Analysis
 
@@ -184,21 +195,39 @@ The runtime configuration reads environment variables and applies them on top of
 This ensures environment variables take precedence over TOML for runtime behavior.
 
 **Section sources**
-- [config.py](file://src/core/config.py#L16-L98)
+- [config.py](file://src/core/config/config.py#L50-L115)
+- [schema.py](file://src/core/config/schema.py#L50-L124)
+- [validation.py](file://src/core/config/validation.py#L62-L128)
 
-### Alias Manager: Environment-Based Aliases Overriding Fallbacks
-The alias manager loads explicit aliases from environment variables and merges them with fallback aliases from TOML. The explicit aliases take precedence over fallbacks.
+### DI Accessors and Runtime Wiring
+The configuration system replaces the global singleton with DI-friendly accessors and runtime wiring:
+- Accessors: Functions like log_request_metrics(), max_tokens_limit(), etc., fetch values from either FastAPI request context or a lazily created fallback Config instance.
+- Runtime accessor: get_config(request) retrieves the Config instance from app state, enabling dependency injection in API endpoints.
+- Config: The main Config class delegates to focused modules (server, providers, security, timeouts, cache, metrics, middleware, top_models) and lazily initializes managers.
 
-Key points:
-- Environment aliases are loaded using the pattern {PROVIDER}_ALIAS_{NAME}=TARGET.
-- Aliases are normalized to lowercase.
-- Fallback aliases are applied only for providers that are known (either configured or present in environment variable names).
+```mermaid
+graph TB
+ACC["Accessors<br/>accessors.py"] --> CFG["Config<br/>config.py"]
+RT["Runtime Accessor<br/>runtime.py"] --> CFG
+CFG --> SVR["ServerSettings"]
+CFG --> PRV["ProviderSettings"]
+CFG --> SEC["SecuritySettings"]
+CFG --> TMO["TimeoutSettings"]
+CFG --> CCH["CacheSettings"]
+CFG --> MET["MetricsSettings"]
+CFG --> MID["MiddlewareSettings"]
+```
+
+**Diagram sources**
+- [accessors.py](file://src/core/config/accessors.py#L69-L163)
+- [runtime.py](file://src/core/config/runtime.py#L19-L33)
+- [config.py](file://src/core/config/config.py#L50-L68)
 
 **Section sources**
-- [alias_manager.py](file://src/core/alias_manager.py#L201-L208)
-- [alias_manager.py](file://src/core/alias_manager.py#L214-L269)
-- [alias_manager.py](file://src/core/alias_manager.py#L301-L336)
-- [alias_manager.py](file://src/core/alias_manager.py#L338-L382)
+- [accessors.py](file://src/core/config/accessors.py#L25-L68)
+- [accessors.py](file://src/core/config/accessors.py#L69-L163)
+- [runtime.py](file://src/core/config/runtime.py#L19-L33)
+- [config.py](file://src/core/config/config.py#L50-L68)
 
 ### Example Scenarios: How Values Are Resolved and Overridden
 Below are practical examples derived from the test suite and configuration logic. These illustrate how the three-tier hierarchy resolves values.
@@ -238,32 +267,39 @@ These scenarios are verified by the test suite and reflect the documented merge 
 ## Dependency Analysis
 The configuration system exhibits clear separation of concerns:
 - AliasConfigLoader depends on filesystem access and TOML parsing to build a merged configuration.
-- AliasManager depends on AliasConfigLoader for fallback aliases and on environment variables for explicit aliases.
-- Runtime Config depends on environment variables and on AliasConfigLoader for default-provider resolution.
+- ProviderSettings depends on AliasConfigLoader for default-provider resolution and on environment variables for API keys/base URLs.
+- Config depends on environment variables (via schema-based validation) and on AliasConfigLoader for default-provider resolution.
+- Accessors and runtime accessor provide DI-friendly access without global imports.
 
 ```mermaid
 graph TB
 AC["AliasConfigLoader"] --> FS["Filesystem"]
 AC --> TOML["tomli"]
-AM["AliasManager"] --> AC
-AM --> ENV["Environment"]
-RC["Runtime Config"] --> ENV
-RC --> AC
+PRV["ProviderSettings"] --> AC
+PRV --> ENV["Environment"]
+CFG["Config"] --> PRV
+CFG --> ENV
+ACC["Accessors"] --> CFG
+RT["Runtime Accessor"] --> CFG
 ```
 
 **Diagram sources**
 - [alias_config.py](file://src/core/alias_config.py#L14-L18)
-- [alias_manager.py](file://src/core/alias_manager.py#L226-L230)
-- [config.py](file://src/core/config.py#L28-L32)
+- [providers.py](file://src/core/config/providers.py#L86-L120)
+- [config.py](file://src/core/config/config.py#L50-L68)
+- [accessors.py](file://src/core/config/accessors.py#L69-L163)
+- [runtime.py](file://src/core/config/runtime.py#L19-L33)
 
 **Section sources**
 - [alias_config.py](file://src/core/alias_config.py#L14-L18)
-- [alias_manager.py](file://src/core/alias_manager.py#L226-L230)
-- [config.py](file://src/core/config.py#L28-L32)
+- [providers.py](file://src/core/config/providers.py#L86-L120)
+- [config.py](file://src/core/config/config.py#L50-L68)
+- [accessors.py](file://src/core/config/accessors.py#L69-L163)
+- [runtime.py](file://src/core/config/runtime.py#L19-L33)
 
 ## Performance Considerations
 - Caching: AliasConfigLoader caches the merged configuration to avoid repeated file I/O. Tests confirm cache reuse and explicit cache invalidation via reset_cache.
-- Lazy loading: Runtime configuration and alias manager defer heavy initialization until needed.
+- Lazy loading: Config delegates to focused modules and lazily initializes managers to avoid circular dependencies and reduce startup cost.
 - Minimal parsing overhead: Only provider sections and defaults are processed; aliases are extracted and normalized efficiently.
 
 Recommendations:
@@ -298,6 +334,6 @@ The configuration hierarchy provides a robust, layered approach to managing appl
 - TOML files provide structured, portable configuration with a clear override order.
 - Package defaults ensure sensible defaults when no user configuration is present.
 - The AliasConfigLoader enforces a predictable merge strategy, and caching improves performance.
-- The alias manager complements this by applying environment-based aliases over fallbacks.
+- DI accessors and runtime wiring replace the global singleton, improving testability and modularity.
 
 This design supports flexible development workflows (local overrides) and production deployments (environment-driven configuration) while maintaining reliability and clarity.

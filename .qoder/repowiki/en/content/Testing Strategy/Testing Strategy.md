@@ -1,7 +1,7 @@
 # Testing Strategy
 
 <cite>
-**Referenced Files in This Document**   
+**Referenced Files in This Document**
 - [conftest.py](file://tests/conftest.py)
 - [mock_http.py](file://tests/fixtures/mock_http.py)
 - [Makefile](file://Makefile)
@@ -14,7 +14,20 @@
 - [server_manager.py](file://tests/helpers/server_manager.py)
 - [anthropic_tool_stream.py](file://tests/fixtures/anthropic_tool_stream.py)
 - [pyproject.toml](file://pyproject.toml)
+- [test_openai_stream_to_claude_state_machine.py](file://tests/unit/test_openai_stream_to_claude_state_machine.py)
+- [test_streaming_state_machine_edge_cases.py](file://tests/unit/test_streaming_state_machine_edge_cases.py)
+- [test_chat_completions_handlers.py](file://tests/unit/test_chat_completions_handlers.py)
+- [openai_stream_to_claude_state_machine.py](file://src/conversion/openai_stream_to_claude_state_machine.py)
+- [stream_test_helpers.py](file://tests/unit/helpers/stream_test_helpers.py)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced streaming state machine testing with comprehensive unit tests for previously untested code paths
+- Added extensive edge case testing for streaming state machines and error handling
+- Expanded handler implementation testing for chat completions with strategy pattern coverage
+- Improved test infrastructure with specialized helper utilities for streaming scenarios
+- Added property-based testing for state machine invariants and streaming contract validation
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -62,7 +75,7 @@ IntegrationTestFiles --> |Tests| SystemIntegration["System Integration"]
 DashboardTestFiles --> |Tests| DashboardFunctionality["Dashboard Functionality"]
 ```
 
-**Diagram sources **
+**Diagram sources**
 - [conftest.py](file://tests/conftest.py#L72-L102)
 - [pyproject.toml](file://pyproject.toml#L130-L140)
 
@@ -81,6 +94,21 @@ Unit tests are the foundation of the testing strategy, focusing on individual fu
 - **Alias Resolution**: Tests verify that aliases are correctly resolved and that the system handles various edge cases, such as empty alias values and invalid provider names.
 - **Conversion Logic**: Tests ensure that the conversion between different API formats (e.g., OpenAI to Anthropic) is accurate and handles edge cases.
 - **Middleware Processing**: Tests validate that middleware components correctly process requests and responses, including streaming and error handling.
+
+**Enhanced Streaming State Machine Testing**: The testing infrastructure now includes comprehensive unit tests for streaming state machines with extensive coverage of:
+
+- **Text Streaming**: Basic content deltas and sequential text chunk handling
+- **Tool Call State Machine**: ID allocation, start events, argument buffering, and concurrent tool handling
+- **Edge Cases**: Malformed data, negative indices, non-integer indices, and state corruption scenarios
+- **Stop Reason Mapping**: Proper finish_reason to stop_reason conversion
+- **Property-Based Invariants**: Monotonic index calculation and state consistency validation
+
+**Handler Implementation Testing**: Chat completions handlers are now thoroughly tested using the strategy pattern:
+
+- **Anthropic Handler**: Non-streaming and streaming paths with proper SSE conversion
+- **OpenAI Handler**: Direct passthrough and streaming chunk processing
+- **Factory Pattern**: Proper handler selection based on provider configuration
+- **Metrics Integration**: Tracker integration and metrics handling
 
 ### Integration Testing
 
@@ -105,11 +133,22 @@ IntegrationTesting[Integration Testing]
 DashboardTesting[Dashboard Testing]
 end
 UnitTesting --> |Focuses on| IndividualComponents["Individual Components"]
+UnitTesting --> |Enhanced with| StreamingStateMachine["Streaming State Machines"]
+UnitTesting --> |Enhanced with| HandlerImplementations["Handler Implementations"]
 IntegrationTesting --> |Focuses on| SystemIntegration["System Integration"]
 DashboardTesting --> |Focuses on| DashboardFunctionality["Dashboard Functionality"]
 IndividualComponents --> |Tests| AliasResolution["Alias Resolution"]
 IndividualComponents --> |Tests| ConversionLogic["Conversion Logic"]
 IndividualComponents --> |Tests| MiddlewareProcessing["Middleware Processing"]
+StreamingStateMachine --> |Tests| TextStreaming["Text Streaming"]
+StreamingStateMachine --> |Tests| ToolCalls["Tool Call State Machine"]
+StreamingStateMachine --> |Tests| EdgeCases["Edge Cases"]
+StreamingStateMachine --> |Tests| StopReasons["Stop Reason Mapping"]
+StreamingStateMachine --> |Tests| Invariants["Property-Based Invariants"]
+HandlerImplementations --> |Tests| AnthropicHandler["Anthropic Handler"]
+HandlerImplementations --> |Tests| OpenAIHandler["OpenAI Handler"]
+HandlerImplementations --> |Tests| FactoryPattern["Factory Pattern"]
+HandlerImplementations --> |Tests| MetricsIntegration["Metrics Integration"]
 SystemIntegration --> |Tests| APIEndpoints["API Endpoints"]
 SystemIntegration --> |Tests| SystemIntegration["System Integration"]
 SystemIntegration --> |Tests| RealAPICalls["Real API Calls"]
@@ -117,7 +156,10 @@ DashboardFunctionality --> |Tests| UIComponents["UI Components"]
 DashboardFunctionality --> |Tests| DataSources["Data Sources"]
 ```
 
-**Diagram sources **
+**Diagram sources**
+- [test_openai_stream_to_claude_state_machine.py](file://tests/unit/test_openai_stream_to_claude_state_machine.py#L1-L941)
+- [test_streaming_state_machine_edge_cases.py](file://tests/unit/test_streaming_state_machine_edge_cases.py#L1-L641)
+- [test_chat_completions_handlers.py](file://tests/unit/test_chat_completions_handlers.py#L1-L752)
 - [test_alias_manager.py](file://tests/unit/test_alias_manager.py#L1-L532)
 - [test_api_endpoints.py](file://tests/unit/test_api_endpoints.py#L1-L425)
 - [test_conversion_helpers.py](file://tests/unit/test_conversion_helpers.py#L1-L66)
@@ -126,6 +168,9 @@ DashboardFunctionality --> |Tests| DataSources["Data Sources"]
 - [test_dashboard_app.py](file://tests/dashboard/test_dashboard_app.py#L1-L103)
 
 **Section sources**
+- [test_openai_stream_to_claude_state_machine.py](file://tests/unit/test_openai_stream_to_claude_state_machine.py#L1-L941)
+- [test_streaming_state_machine_edge_cases.py](file://tests/unit/test_streaming_state_machine_edge_cases.py#L1-L641)
+- [test_chat_completions_handlers.py](file://tests/unit/test_chat_completions_handlers.py#L1-L752)
 - [test_alias_manager.py](file://tests/unit/test_alias_manager.py#L1-L532)
 - [test_api_endpoints.py](file://tests/unit/test_api_endpoints.py#L1-L425)
 - [test_conversion_helpers.py](file://tests/unit/test_conversion_helpers.py#L1-L66)
@@ -163,14 +208,27 @@ The `mock_http.py` file in the `tests/fixtures/` directory provides fixtures for
 
 These fixtures are used to create realistic test scenarios and ensure that the system handles various response types correctly.
 
+### Streaming Test Helpers
+
+**New**: Specialized helper utilities for streaming state machine testing:
+
+- **create_malformed_sse_chunk**: Creates SSE chunks with customizable fields for edge case testing
+- **create_tool_call_delta**: Generates tool call deltas for inclusion in SSE chunks
+- **assert_state_invariants**: Validates state machine invariants and consistency
+- **simulate_incomplete_stream**: Simulates incomplete streams for termination handling
+
+These helpers enable comprehensive testing of streaming scenarios and edge cases that were previously difficult to test.
+
 ```mermaid
 graph TD
 subgraph "Fixtures and Test Configuration"
 Conftest[conftest.py]
 MockHttp[mock_http.py]
+StreamingHelpers[stream_test_helpers.py]
 end
 Conftest --> |Defines| SharedFixtures["Shared Fixtures"]
 MockHttp --> |Defines| HttpMocking["HTTP Mocking Fixtures"]
+StreamingHelpers --> |Defines| StreamingTestHelpers["Streaming Test Helpers"]
 SharedFixtures --> |Includes| MockOpenAIKey["mock_openai_api_key"]
 SharedFixtures --> |Includes| MockAnthropicKey["mock_anthropic_api_key"]
 SharedFixtures --> |Includes| MockConfig["mock_config"]
@@ -183,15 +241,21 @@ HttpMocking --> |Includes| OpenAIStreamingChunks["openai_streaming_chunks"]
 HttpMocking --> |Includes| AnthropicMessageResponse["anthropic_message_response"]
 HttpMocking --> |Includes| AnthropicMessageWithToolUse["anthropic_message_with_tool_use"]
 HttpMocking --> |Includes| AnthropicStreamingEvents["anthropic_streaming_events"]
+StreamingTestHelpers --> |Includes| CreateMalformedChunk["create_malformed_sse_chunk"]
+StreamingTestHelpers --> |Includes| CreateToolCallDelta["create_tool_call_delta"]
+StreamingTestHelpers --> |Includes| AssertStateInvariants["assert_state_invariants"]
+StreamingTestHelpers --> |Includes| SimulateIncompleteStream["simulate_incomplete_stream"]
 ```
 
-**Diagram sources **
+**Diagram sources**
 - [conftest.py](file://tests/conftest.py#L15-L102)
 - [mock_http.py](file://tests/fixtures/mock_http.py#L17-L257)
+- [stream_test_helpers.py](file://tests/unit/helpers/stream_test_helpers.py#L1-L178)
 
 **Section sources**
 - [conftest.py](file://tests/conftest.py#L15-L102)
 - [mock_http.py](file://tests/fixtures/mock_http.py#L17-L257)
+- [stream_test_helpers.py](file://tests/unit/helpers/stream_test_helpers.py#L1-L178)
 
 ## Running Tests
 
@@ -247,6 +311,16 @@ make check-quick
 
 This command runs static checks and quick tests, providing a fast feedback loop during development.
 
+### Test Coverage
+
+The Makefile includes a `coverage` target that runs tests with coverage reporting:
+
+```bash
+make coverage
+```
+
+This command runs tests and generates a coverage report in the `htmlcov/` directory. The report provides detailed information about which lines of code are covered by tests and which are not. The goal is to achieve high test coverage, ensuring that critical components are thoroughly tested.
+
 ```mermaid
 graph TD
 subgraph "Running Tests"
@@ -258,18 +332,22 @@ TestTargets --> |Includes| TestIntegration["test-integration"]
 TestTargets --> |Includes| TestAll["test"]
 TestTargets --> |Includes| TestE2E["test-e2e"]
 TestTargets --> |Includes| CheckQuick["check-quick"]
+TestTargets --> |Includes| Coverage["coverage"]
 TestUnit --> |Runs| UnitTests["Unit Tests"]
 TestIntegration --> |Runs| IntegrationTests["Integration Tests"]
 TestAll --> |Runs| AllTests["All Tests"]
 TestE2E --> |Runs| EndToEndTests["End-to-End Tests"]
 CheckQuick --> |Runs| QuickValidation["Quick Validation"]
+Coverage --> |Runs| CoverageReport["Coverage Report"]
 ```
 
-**Diagram sources **
+**Diagram sources**
 - [Makefile](file://Makefile#L267-L325)
+- [Makefile](file://Makefile#L332-L344)
 
 **Section sources**
 - [Makefile](file://Makefile#L267-L325)
+- [Makefile](file://Makefile#L332-L344)
 
 ## Test Coverage and Metrics
 
@@ -291,26 +369,48 @@ The project aims to achieve the following coverage goals:
 
 These goals ensure that the most critical parts of the codebase are well-tested, reducing the risk of bugs and regressions.
 
+**Enhanced Coverage Areas**: The recently added streaming state machine tests significantly improve coverage in:
+
+- **Streaming State Machine**: Comprehensive coverage of text streaming, tool call handling, and edge cases
+- **Handler Implementations**: Full coverage of chat completions handler strategy pattern
+- **Error Handling Paths**: Extensive testing of malformed input and state corruption scenarios
+
 ```mermaid
 graph TD
 subgraph "Test Coverage and Metrics"
 CoverageTarget[coverage]
 CoverageReport[htmlcov/]
+EnhancedCoverage[Enhanced Coverage Areas]
 end
 CoverageTarget --> |Generates| CoverageReport
 CoverageReport --> |Provides| LineCoverage["Line Coverage"]
 CoverageReport --> |Provides| BranchCoverage["Branch Coverage"]
 CoverageReport --> |Provides| MissingLines["Missing Lines"]
+EnhancedCoverage --> |Includes| StreamingStateMachine["Streaming State Machine"]
+EnhancedCoverage --> |Includes| HandlerImplementations["Handler Implementations"]
+EnhancedCoverage --> |Includes| ErrorHandlingPaths["Error Handling Paths"]
 LineCoverage --> |Goal| UnitTests["90% for Unit Tests"]
 LineCoverage --> |Goal| IntegrationTests["80% for Integration Tests"]
 LineCoverage --> |Goal| DashboardTests["70% for Dashboard Tests"]
+StreamingStateMachine --> |Coverage| TextStreaming["Text Streaming"]
+StreamingStateMachine --> |Coverage| ToolCalls["Tool Call Handling"]
+StreamingStateMachine --> |Coverage| EdgeCases["Edge Cases"]
+HandlerImplementations --> |Coverage| AnthropicHandler["Anthropic Handler"]
+HandlerImplementations --> |Coverage| OpenAIHandler["OpenAI Handler"]
+HandlerImplementations --> |Coverage| FactoryPattern["Factory Pattern"]
+ErrorHandlingPaths --> |Coverage| MalformedInput["Malformed Input"]
+ErrorHandlingPaths --> |Coverage| StateCorruption["State Corruption"]
+ErrorHandlingPaths --> |Coverage| TerminationScenarios["Termination Scenarios"]
 ```
 
-**Diagram sources **
-- [Makefile](file://Makefile#L331-L344)
+**Diagram sources**
+- [Makefile](file://Makefile#L332-L344)
+- [test_openai_stream_to_claude_state_machine.py](file://tests/unit/test_openai_stream_to_claude_state_machine.py#L1-L941)
+- [test_streaming_state_machine_edge_cases.py](file://tests/unit/test_streaming_state_machine_edge_cases.py#L1-L641)
+- [test_chat_completions_handlers.py](file://tests/unit/test_chat_completions_handlers.py#L1-L752)
 
 **Section sources**
-- [Makefile](file://Makefile#L331-L344)
+- [Makefile](file://Makefile#L332-L344)
 
 ## Writing New Tests
 
@@ -369,42 +469,107 @@ class TestAliasManager:
             assert aliases["anthropic"]["chat"] == "claude-3-5-sonnet-20241022"
 ```
 
-### Example: Writing an Integration Test
+### Example: Writing Streaming State Machine Tests
 
-Here is an example of an integration test for the `/v1/messages` endpoint:
+**New**: Example of testing streaming state machine with comprehensive edge case coverage:
 
 ```python
 import pytest
-import httpx
+from tests.unit.helpers.stream_test_helpers import create_malformed_sse_chunk, assert_state_invariants
 
-@pytest.mark.integration
+@pytest.mark.unit
+def test_streaming_state_machine_edge_cases():
+    """Test streaming state machine handles edge cases and malformed input."""
+    state = OpenAIToClaudeStreamState(message_id="test", tool_name_map_inverse={})
+    
+    # Test negative tool index handling
+    chunk = create_malformed_sse_chunk(tool_index=-1, tool_id="call_neg", tool_name="negative_tool")
+    ingest_openai_chunk(state, chunk)
+    assert -1 in state.current_tool_calls
+    
+    # Test non-integer tool index (float/string)
+    chunk_float = {"choices": [{"delta": {"tool_calls": [{"index": 1.5, "id": "call_float"}]}}]}
+    ingest_openai_chunk(state, chunk_float)
+    assert 1.5 in state.current_tool_calls
+    
+    # Validate state invariants hold
+    assert_state_invariants(state)
+```
+
+### Example: Writing Handler Implementation Tests
+
+**New**: Example of testing chat completions handler strategy pattern:
+
+```python
+import pytest
+from unittest.mock import AsyncMock, patch
+
+@pytest.mark.unit
 @pytest.mark.asyncio
-async def test_basic_chat():
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            f"{BASE_URL}/v1/messages",
-            json={
-                "model": "claude-3-5-sonnet-20241022",
-                "max_tokens": 20,
-                "messages": [{"role": "user", "content": "Say 'Hello world'"}],
-            },
+async def test_anthropic_handler_streaming_with_metrics():
+    """Test Anthropic handler streaming with metrics enabled."""
+    handler = AnthropicChatCompletionsHandler()
+    openai_request = {"model": "claude-3-5-sonnet-20241022", "stream": True}
+    
+    # Mock streaming response
+    async def mock_stream(*args, **kwargs):
+        yield 'data: {"type": "message_start"}\n'
+        yield 'data: {"type": "content_block_delta", "delta": {"text": "Hi"}}\n'
+        yield "data: [DONE]\n"
+    
+    mock_client = AsyncMock()
+    mock_client.create_chat_completion_stream = mock_stream
+    
+    with patch("src.conversion.anthropic_sse_to_openai.anthropic_sse_to_openai_chat_completions_sse") as mock_sse_convert:
+        async def converted_stream():
+            yield 'data: {"choices": [{"delta": {"content": "Hi"}}]}\n\n'
+            yield "data: [DONE]\n\n"
+        mock_sse_convert.return_value = converted_stream()
+        
+        response = await handler.handle(
+            openai_request=openai_request,
+            resolved_model="claude-3-5-sonnet-20241022",
+            provider_name="anthropic",
+            provider_config=ProviderConfig(...),
+            provider_api_key="test-key",
+            client_api_key=None,
+            config=mock_config,
+            openai_client=mock_client,
+            request_id="req-1",
+            http_request=mock_http_request,
+            is_metrics_enabled=True,
+            metrics=MagicMock(),
+            tracker=mock_tracker,
         )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "content" in data
-        assert len(data["content"]) > 0
-        assert "role" in data
-        assert data["role"] == "assistant"
+        
+        # Verify StreamingResponse with correct headers
+        assert hasattr(response, "body_iterator")
+        headers = dict(response.headers)
+        assert "text/event-stream" in headers.get("content-type", "")
 ```
 
 **Section sources**
 - [test_alias_manager.py](file://tests/unit/test_alias_manager.py#L1-L532)
 - [test_api_endpoints.py](file://tests/integration/test_api_endpoints.py#L1-L556)
+- [test_openai_stream_to_claude_state_machine.py](file://tests/unit/test_openai_stream_to_claude_state_machine.py#L1-L941)
+- [test_streaming_state_machine_edge_cases.py](file://tests/unit/test_streaming_state_machine_edge_cases.py#L1-L641)
+- [test_chat_completions_handlers.py](file://tests/unit/test_chat_completions_handlers.py#L1-L752)
 
 ## Conclusion
 
-The testing strategy for the Vandamme Proxy is designed to ensure the reliability, quality, and robustness of the codebase. By following a multi-layered approach that includes unit tests, integration tests, and dashboard tests, the project maintains a high level of confidence in its functionality. The use of fixtures and the Makefile simplifies the process of running tests and ensures consistency across different environments. Developers are encouraged to write new tests for features and bug fixes, following the guidelines provided in this document. By adhering to these practices, the codebase will continue to evolve with confidence and maintain its high standards of quality.
+The testing strategy for the Vandamme Proxy is designed to ensure the reliability, quality, and robustness of the codebase. By following a multi-layered approach that includes unit tests, integration tests, and dashboard tests, the project maintains a high level of confidence in its functionality. The use of fixtures and the Makefile simplifies the process of running tests and ensures consistency across different environments.
+
+**Recent Enhancements**: The testing infrastructure has been significantly strengthened with:
+
+- **Comprehensive Streaming State Machine Testing**: Extensive coverage of text streaming, tool call handling, and edge cases
+- **Advanced Handler Implementation Testing**: Full coverage of chat completions handler strategy pattern
+- **Specialized Test Helpers**: Reusable utilities for streaming scenario testing
+- **Property-Based Testing**: Invariant validation and contract enforcement
+
+Developers are encouraged to write new tests for features and bug fixes, following the guidelines provided in this document. The enhanced testing infrastructure enables confident development and maintenance of the codebase, with particular strength in streaming processing and handler implementations. By adhering to these practices, the codebase will continue to evolve with confidence and maintain its high standards of quality.
+
+**Section sources**
+- [test_openai_stream_to_claude_state_machine.py](file://tests/unit/test_openai_stream_to_claude_state_machine.py#L1-L941)
+- [test_streaming_state_machine_edge_cases.py](file://tests/unit/test_streaming_state_machine_edge_cases.py#L1-L641)
+- [test_chat_completions_handlers.py](file://tests/unit/test_chat_completions_handlers.py#L1-L752)
+- [stream_test_helpers.py](file://tests/unit/helpers/stream_test_helpers.py#L1-L178)
