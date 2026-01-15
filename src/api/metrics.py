@@ -115,13 +115,21 @@ async def stream_active_requests(
         )
 
     if not cfg.active_requests_sse_enabled:
-        # SSE is disabled via config, return error
-        data = {
-            "disabled": True,
-            "message": "SSE for active requests is disabled",
-            "suggestion": "Set VDM_ACTIVE_REQUESTS_SSE_ENABLED=true to enable",
-        }
-        return JSONResponse(status_code=503, content=data)
+        # SSE is disabled via config - return as SSE event so client handles gracefully
+        async def sse_disabled_stream() -> AsyncGenerator[str, None]:
+            data = {
+                "disabled": True,
+                "message": "SSE for active requests is disabled",
+                "suggestion": "Set VDM_ACTIVE_REQUESTS_SSE_ENABLED=true to enable",
+            }
+            yield "event: disabled\n"
+            yield f"data: {json.dumps(data)}\n\n"
+
+        return StreamingResponse(
+            sse_disabled_stream(),
+            media_type="text/event-stream",
+            headers=sse_headers(),
+        )
 
     tracker = get_request_tracker(http_request)
     interval = cfg.active_requests_sse_interval
