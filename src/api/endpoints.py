@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from src.api.models.endpoint_requests import ModelsListRequest, TopModelsRequest
 from src.api.models_cache_runtime import get_models_cache
 from src.api.orchestrator.request_orchestrator import RequestOrchestrator
+from src.api.services.chat_completions_handlers import get_chat_completions_handler
 from src.api.services.endpoint_services import (
     AliasesListService,
     HealthCheckService,
@@ -173,8 +174,6 @@ async def chat_completions(
         openai_client = cfg.provider_manager.get_client(provider_name, client_api_key)
 
         # Get appropriate handler and execute
-        from src.api.services.chat_completions_handlers import get_chat_completions_handler
-
         handler = get_chat_completions_handler(provider_config)
 
         try:
