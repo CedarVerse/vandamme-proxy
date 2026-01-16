@@ -120,7 +120,7 @@ async def stream_active_requests(
             data = {
                 "disabled": True,
                 "message": "SSE for active requests is disabled",
-                "suggestion": "Set VDM_ACTIVE_REQUESTS_SSE_ENABLED=true to enable",
+                "suggestion": "Unset VDM_ACTIVE_REQUESTS_SSE_ENABLED (or set to true)",
             }
             yield "event: disabled\n"
             yield f"data: {json.dumps(data)}\n\n"

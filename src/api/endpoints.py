@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from src.api.models.endpoint_requests import ModelsListRequest, TopModelsRequest
 from src.api.models_cache_runtime import get_models_cache
+from src.api.orchestrator.request_orchestrator import RequestOrchestrator
 from src.api.services.endpoint_services import (
     AliasesListService,
     HealthCheckService,
@@ -15,6 +16,11 @@ from src.api.services.endpoint_services import (
     TestConnectionService,
     TokenCountService,
     TopModelsEndpointService,
+)
+from src.api.services.metrics_orchestrator import (
+    MetricsContext,
+    MetricsOrchestrator,
+    create_request_id,
 )
 from src.api.services.non_streaming_handlers import get_non_streaming_handler
 from src.api.services.provider_context import resolve_provider_context
@@ -129,10 +135,6 @@ async def chat_completions(
     - If the resolved provider is Anthropic-format: translate OpenAI request to
       Anthropic Messages API and translate response back.
     """
-    from src.api.services.metrics_orchestrator import (
-        MetricsOrchestrator,
-        create_request_id,
-    )
 
     request_id = create_request_id()
     orchestrator = MetricsOrchestrator(config=cfg)
@@ -211,11 +213,12 @@ async def create_message(
     This endpoint now delegates all initialization to the RequestOrchestrator,
     making the endpoint code clean and focused on routing.
     """
-    # Import orchestrator - placed here to avoid circular imports
-    from src.api.orchestrator.request_orchestrator import RequestOrchestrator
-
-    # Create orchestrator
-    orchestrator = RequestOrchestrator(config=cfg, model_manager=mm)
+    # Create orchestrator with protocol-based dependencies
+    orchestrator = RequestOrchestrator(
+        config=cfg,  # ConfigProvider
+        model_manager=mm,  # ModelResolver
+        client_factory=cfg.provider_manager,  # ProviderClientFactory
+    )
 
     # Prepare the complete request context
     # This handles all initialization: metrics, provider resolution, conversion, etc.
@@ -285,10 +288,6 @@ async def _handle_non_streaming(ctx: Any) -> JSONResponse:
 
 async def _finalize_metrics_on_error(ctx: Any, error_type: str) -> None:
     """Finalize metrics when an HTTP exception occurs."""
-    from src.api.services.metrics_orchestrator import (
-        MetricsContext,
-        MetricsOrchestrator,
-    )
 
     # Create MetricsContext from RequestContext for unified error handling
     metrics_ctx = MetricsContext(
@@ -307,10 +306,6 @@ async def _handle_unexpected_error(
     exception: Exception,
 ) -> JSONResponse:
     """Handle unexpected errors with proper logging and metrics."""
-    from src.api.services.metrics_orchestrator import (
-        MetricsContext,
-        MetricsOrchestrator,
-    )
 
     duration_ms = (time.time() - ctx.start_time) * 1000
     orchestrator = MetricsOrchestrator(config=ctx.config)

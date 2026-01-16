@@ -9,19 +9,17 @@ import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
+from src.api.context.request_context import RequestContext as ApiRequestContext
 from src.api.services.key_rotation import build_api_key_params
 from src.api.services.request_builder import build_anthropic_passthrough_request
 from src.conversion.response_converter import convert_openai_to_claude_response
 from src.core.logging import ConversationLogger
 from src.middleware import RequestContext, ResponseContext
-
-if TYPE_CHECKING:
-    from src.api.context.request_context import RequestContext as ApiRequestContext
 
 logger = logging.getLogger(__name__)
 conversation_logger = ConversationLogger.get_logger()

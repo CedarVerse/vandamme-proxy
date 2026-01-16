@@ -1,3 +1,13 @@
+"""Provider management for multi-provider API support.
+
+This module provides the ProviderManager class which manages multiple
+OpenAI clients for different providers with automatic failover and
+API key rotation.
+
+The ProviderManager implements the ProviderClientFactory protocol for
+clean dependency inversion, eliminating circular imports.
+"""
+
 import asyncio
 import hashlib
 import logging
@@ -6,6 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Union
 
 from src.core.client import OpenAIClient
+from src.core.protocols import ProviderClientFactory
 from src.core.provider_config import PASSTHROUGH_SENTINEL, ProviderConfig
 from src.middleware import MiddlewareChain, ThoughtSignatureMiddleware
 
@@ -27,11 +38,14 @@ class ProviderLoadResult:
     base_url: str | None = None
 
 
-class ProviderManager:
+class ProviderManager(ProviderClientFactory):
     """Manages multiple OpenAI clients for different providers.
 
     The provider manager can be configured with an optional MiddlewareConfig
     to avoid circular dependencies with the global config singleton.
+
+    This class implements the ProviderClientFactory protocol for clean
+    dependency inversion.
     """
 
     def __init__(
@@ -41,7 +55,7 @@ class ProviderManager:
         middleware_config: "MiddlewareConfig | None" = None,
     ) -> None:
         # Use provided default_provider or fall back to "openai" for backward compatibility
-        self.default_provider = default_provider if default_provider is not None else "openai"
+        self._default_provider = default_provider if default_provider is not None else "openai"
         self.default_provider_source = default_provider_source or "system"
         self._clients: dict[str, OpenAIClient | AnthropicClient] = {}
         self._configs: dict[str, ProviderConfig] = {}
@@ -59,6 +73,16 @@ class ProviderManager:
         self.middleware_chain = MiddlewareChain()
         self._middleware_initialized = False
 
+    @property
+    def default_provider(self) -> str:
+        """Get the default provider name.
+
+        This property is part of the ProviderClientFactory protocol.
+        It can be modified internally by _select_default_from_available()
+        but appears read-only to external code.
+        """
+        return self._default_provider
+
     @staticmethod
     def get_api_key_hash(api_key: str) -> str:
         """Return first 8 chars of sha256 hash"""
@@ -69,24 +93,24 @@ class ProviderManager:
 
     def _select_default_from_available(self) -> None:
         """Select a default provider from available providers if original default is unavailable"""
-        if self.default_provider in self._configs:
+        if self._default_provider in self._configs:
             return  # Original default is available
 
         if self._configs:
             # Select the first available provider
-            original_default = self.default_provider
-            self.default_provider = list(self._configs.keys())[0]
+            original_default = self._default_provider
+            self._default_provider = list(self._configs.keys())[0]
 
             if self.default_provider_source != "system":
                 # User configured a default but it's not available
                 logger.info(
-                    f"Using '{self.default_provider}' as default provider "
+                    f"Using '{self._default_provider}' as default provider "
                     f"(configured '{original_default}' not available)"
                 )
             else:
                 # No user configuration, just pick the first available
                 logger.debug(
-                    f"Using '{self.default_provider}' as default provider "
+                    f"Using '{self._default_provider}' as default provider "
                     f"(first available provider)"
                 )
         else:

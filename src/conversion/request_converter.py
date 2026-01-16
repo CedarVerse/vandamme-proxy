@@ -9,7 +9,6 @@ from src.conversion.conversion_metrics import (
     log_request_metrics as log_request_metrics_impl,
 )
 from src.conversion.tool_schema import build_tool_name_maps_if_enabled, collect_all_tool_names
-from src.core.config import Config
 from src.core.config.accessors import log_request_metrics
 from src.core.constants import Constants
 from src.core.logging import ConversationLogger
@@ -121,7 +120,9 @@ def _build_initial_context(
     from src.conversion.pipeline.base import ConversionContext
 
     # Get provider config to check if tool name sanitization is enabled
-    cfg = Config()
+    from src.core.dependencies import get_config
+
+    cfg = get_config()
     provider_config = cfg.provider_manager.get_provider_config(provider_name)
 
     # Build tool name maps if sanitization is enabled

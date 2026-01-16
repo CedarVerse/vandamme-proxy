@@ -4,12 +4,10 @@ This module provides utilities for building requests in different formats
 for various providers.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from src.core.model_manager import ModelManager
 from src.models.claude import ClaudeMessagesRequest
-
-if TYPE_CHECKING:
-    from src.core.model_manager import ModelManager
 
 
 def build_anthropic_passthrough_request(

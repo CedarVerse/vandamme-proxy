@@ -7,7 +7,8 @@ import uvicorn
 from rich.console import Console
 from rich.table import Table
 
-from src.core.config import Config
+from src.core.dependencies import get_config, initialize_app
+from src.core.logging.configuration import configure_root_logging
 
 app = typer.Typer(help="Server management")
 
@@ -24,10 +25,11 @@ def start(
     ),
 ) -> None:
     """Start the proxy server."""
-    # Configure logging FIRST before any console output
-    from src.core.logging.configuration import configure_root_logging
+    # Initialize all dependencies first
+    initialize_app()
 
-    cfg = Config()
+    # Get the initialized config
+    cfg = get_config()
 
     # Override config if provided
     server_host = host or cfg.host

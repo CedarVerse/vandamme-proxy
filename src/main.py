@@ -10,15 +10,14 @@ from src import __version__
 from src.api.metrics import metrics_router
 from src.api.middleware_integration import MiddlewareAwareRequestProcessor
 from src.api.routers.v1 import router as api_router
-from src.core.config import Config
 from src.core.config.accessors import (
     cache_dir,
     config_context_middleware,
     models_cache_enabled,
     models_cache_ttl_hours,
 )
+from src.core.dependencies import get_config, get_model_manager, initialize_app
 from src.core.metrics import create_request_tracker
-from src.core.model_manager import ModelManager
 from src.models.cache import ModelsDiskCache
 
 app = FastAPI(title="Vandamme Proxy", version=__version__)
@@ -26,8 +25,14 @@ app = FastAPI(title="Vandamme Proxy", version=__version__)
 # Process-local state owned by the FastAPI app instance.
 # This avoids module-level singletons and keeps imports side-effect free.
 app.state.request_tracker = create_request_tracker()
-app.state.config = Config()  # Eager initialization at startup
-app.state.model_manager = ModelManager(app.state.config)
+
+# Initialize all application dependencies using the new centralized system
+# This replaces the previous individual Config/ModelManager initialization
+initialize_app()
+
+# Get the initialized singletons from the dependencies module
+app.state.config = get_config()
+app.state.model_manager = get_model_manager()
 app.state.middleware_processor = MiddlewareAwareRequestProcessor()
 
 # Initialize models cache if enabled (not in pytest)

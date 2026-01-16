@@ -7,11 +7,12 @@ This eliminates deep nesting in the endpoint by using a strategy pattern.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from src.api.context.request_context import RequestContext as ApiRequestContext
 from src.api.services.error_handling import (
     build_streaming_error_response,
     finalize_metrics_on_streaming_error,
@@ -25,9 +26,6 @@ from src.api.services.streaming import (
 )
 from src.conversion.response_converter import convert_openai_streaming_to_claude
 from src.middleware import RequestContext
-
-if TYPE_CHECKING:
-    from src.api.context.request_context import RequestContext as ApiRequestContext
 
 logger = logging.getLogger(__name__)
 

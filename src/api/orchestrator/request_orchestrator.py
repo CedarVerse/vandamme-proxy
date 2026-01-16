@@ -2,24 +2,24 @@
 
 This module provides the RequestOrchestrator class which encapsulates
 all initialization logic previously scattered throughout the create_message endpoint.
+
+The RequestOrchestrator uses protocols (ConfigProvider, ModelResolver, ProviderClientFactory)
+for clean dependency inversion, eliminating circular imports.
 """
 
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException, Request
 
 from src.api.context.request_context import RequestContext, RequestContextBuilder
 from src.api.services.metrics_helper import populate_request_metrics
 from src.conversion.request_converter import convert_claude_to_openai
-from src.core.config import Config
 from src.core.error_types import ErrorType
 from src.core.metrics.runtime import get_request_tracker
-
-if TYPE_CHECKING:
-    from src.core.model_manager import ModelManager
+from src.core.protocols import ConfigProvider, ModelResolver, ProviderClientFactory
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,13 @@ class RequestOrchestrator:
     scattered throughout the create_message endpoint, providing a clean
     separation of concerns.
 
+    The orchestrator uses protocols for dependency inversion:
+    - ConfigProvider: Access to configuration values
+    - ModelResolver: Model name resolution
+    - ProviderClientFactory: Creating provider clients
+
+    This design eliminates circular imports and improves testability.
+
     Responsibilities:
     1. Generate request ID and initialize tracking
     2. Resolve provider and model
@@ -41,15 +48,24 @@ class RequestOrchestrator:
     7. Check client disconnection
     """
 
-    def __init__(self, config: Config, model_manager: "ModelManager") -> None:
+    def __init__(
+        self,
+        config: ConfigProvider,
+        model_manager: ModelResolver,
+        client_factory: ProviderClientFactory | None = None,
+    ) -> None:
         """Initialize the orchestrator.
 
         Args:
-            config: The Config instance containing all configuration.
-            model_manager: The ModelManager instance for model resolution.
+            config: Configuration object implementing ConfigProvider protocol.
+            model_manager: Model resolver implementing ModelResolver protocol.
+            client_factory: Optional client factory. If None, uses config (which
+                           also implements ProviderClientFactory via ProviderManager).
         """
         self.config = config
         self.model_manager = model_manager
+        # Config also implements ProviderClientFactory through its provider_manager property
+        self.client_factory: ProviderClientFactory = client_factory or config  # type: ignore[assignment]
         self.log_request_metrics = self.config.log_request_metrics
         self.logger = logging.getLogger(f"{__name__}.RequestOrchestrator")
 
@@ -93,7 +109,7 @@ class RequestOrchestrator:
 
         # Step 3: Resolve provider and model
         provider_name, resolved_model = self.model_manager.resolve_model(request.model)
-        provider_config = self.config.provider_manager.get_provider_config(provider_name)
+        provider_config = self.client_factory.get_provider_config(provider_name)
 
         builder.with_provider(
             provider_name=provider_name,
@@ -137,7 +153,7 @@ class RequestOrchestrator:
         )
 
         # Step 7: Get client for this provider
-        openai_client = self.config.provider_manager.get_client(
+        openai_client = self.client_factory.get_client(
             provider_name,
             client_api_key,
         )
@@ -238,7 +254,7 @@ class RequestOrchestrator:
 
         # For non-passthrough providers, get next provider API key
         if provider_config and not provider_config.uses_passthrough:
-            key = await self.config.provider_manager.get_next_provider_api_key(provider_name)
+            key = await self.client_factory.get_next_provider_api_key(provider_name)
             return key  # type: ignore[no-any-return]
 
         return None
@@ -256,7 +272,7 @@ class RequestOrchestrator:
 
         This modifies the openai_request in place if middleware changes it.
         """
-        if not hasattr(self.config.provider_manager, "middleware_chain"):
+        if not hasattr(self.client_factory, "middleware_chain"):
             return
 
         from src.middleware import RequestContext as MiddlewareRequestContext
@@ -270,7 +286,7 @@ class RequestOrchestrator:
             client_api_key=client_api_key,
         )
 
-        processed_context = await self.config.provider_manager.middleware_chain.process_request(
+        processed_context = await self.client_factory.middleware_chain.process_request(
             request_context
         )
 

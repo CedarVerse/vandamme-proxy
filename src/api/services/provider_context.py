@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 
 from src.core.config import Config
+from src.core.model_manager import ModelManager
 from src.core.provider_config import ProviderConfig
-
-if TYPE_CHECKING:
-    from src.core.model_manager import ModelManager
 
 
 @dataclass(frozen=True)

@@ -16,18 +16,16 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from fastapi import Request
+
+from src.core.config import Config
 from src.core.error_types import ErrorType
 from src.core.logging import ConversationLogger
-
-if TYPE_CHECKING:
-    from fastapi import Request
-
-    from src.core.config import Config
-    from src.core.metrics.models.request import RequestMetrics
-    from src.core.metrics.tracker.tracker import RequestTracker
-    from src.core.model_manager import ModelManager
+from src.core.metrics.models.request import RequestMetrics
+from src.core.metrics.tracker.tracker import RequestTracker
+from src.core.model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
 conversation_logger = ConversationLogger.get_logger()

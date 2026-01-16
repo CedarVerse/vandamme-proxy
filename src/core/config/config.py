@@ -12,6 +12,9 @@ Configuration is organized into focused modules:
 - metrics: Metrics and monitoring (token limits, SSE settings)
 - middleware: Middleware configuration (thought signatures)
 - top_models: Top models feature configuration
+
+The Config class implements the ConfigProvider protocol from src.core.protocols,
+enabling clean dependency inversion and eliminating circular imports.
 """
 
 import hashlib
@@ -19,7 +22,6 @@ import os
 from typing import TYPE_CHECKING
 
 from src.core.config.cache import CacheSettings
-from src.core.config.lazy_managers import LazyManagers
 from src.core.config.metrics import MetricsSettings
 from src.core.config.middleware import MiddlewareSettings
 from src.core.config.provider_utils import get_default_base_url, get_provider_base_url_env_var
@@ -43,8 +45,14 @@ class Config:
     values are loaded at initialization time from environment variables
     using schema-based validation.
 
-    Manager properties (provider_manager, alias_manager, alias_service)
-    are lazily initialized to avoid circular dependencies.
+    The Config class implements the ConfigProvider protocol for dependency
+    inversion. Manager properties delegate to the global singletons managed
+    by src.core.dependencies.
+
+    This design ensures:
+    1. No circular imports - protocols break dependency cycles
+    2. Clean initialization order - all dependencies initialized explicitly
+    3. Testability - protocols can be mocked easily
     """
 
     def __init__(self) -> None:
@@ -57,14 +65,6 @@ class Config:
         self._metrics = MetricsSettings.load()
         self._middleware = MiddlewareSettings.load()
         self._top_models = TopModelsSettings.load()
-
-        # Lazy manager initialization with dependency injection
-        # Pass already-loaded configs to avoid double-loading
-        self._managers = LazyManagers(
-            provider_config=self._providers,
-            middleware_config=self._middleware,
-            cache_config=self._cache,
-        )
 
     # Server settings
     @property
@@ -213,18 +213,40 @@ class Config:
     def top_models_exclude(self) -> tuple[str, ...]:
         return self._top_models.exclude
 
-    # Lazy manager properties
+    # Manager properties - delegate to global singletons from dependencies module
+    # These properties provide backward compatibility while using centralized initialization
     @property
     def provider_manager(self) -> "ProviderManager":
-        return self._managers.provider_manager
+        """Get the global ProviderManager instance.
+
+        Delegates to src.core.dependencies for centralized singleton management.
+        This ensures clean initialization order and eliminates circular imports.
+        """
+        from src.core.dependencies import get_provider_manager
+
+        return get_provider_manager()
 
     @property
     def alias_manager(self) -> "AliasManager":
-        return self._managers.alias_manager
+        """Get the global AliasManager instance.
+
+        Delegates to src.core.dependencies for centralized singleton management.
+        This ensures clean initialization order and eliminates circular imports.
+        """
+        from src.core.dependencies import get_alias_manager
+
+        return get_alias_manager()
 
     @property
     def alias_service(self) -> "AliasService":
-        return self._managers.alias_service
+        """Get the global AliasService instance.
+
+        Delegates to src.core.dependencies for centralized singleton management.
+        This ensures clean initialization order and eliminates circular imports.
+        """
+        from src.core.dependencies import get_alias_service
+
+        return get_alias_service()
 
     # Utility methods
     def validate_api_key(self) -> bool:

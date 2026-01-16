@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from src.core.config import Config
+from src.core.dependencies import get_config, initialize_app
 
 app = typer.Typer(help="Test commands")
 
@@ -15,8 +15,9 @@ app = typer.Typer(help="Test commands")
 @app.command()
 def connection() -> None:
     """Test API connectivity."""
+    initialize_app()
     console = Console()
-    cfg = Config()
+    cfg = get_config()
 
     console.print("[bold cyan]Testing API Connectivity[/bold cyan]")
     console.print()
@@ -49,8 +50,9 @@ def connection() -> None:
 @app.command()
 def providers() -> None:
     """List all configured providers."""
+    initialize_app()
     console = Console()
-    cfg = Config()
+    cfg = get_config()
 
     console.print("[bold cyan]Provider Status[/bold cyan]")
     console.print()

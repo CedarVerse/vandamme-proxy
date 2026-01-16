@@ -15,8 +15,7 @@ The configuration is split into focused modules:
 - metrics: Metrics and monitoring (token limits, SSE settings)
 - middleware: Middleware configuration (thought signatures)
 - top_models: Top models feature configuration
-- lazy_managers: Lazy initialization for provider/alias managers
-- config: Main Config class
+- config: Main Config class (with protocol-based dependency injection)
 
 Public API:
     Config: The main configuration class

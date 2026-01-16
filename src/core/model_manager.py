@@ -1,18 +1,52 @@
+"""Model name resolution with alias support and provider parsing.
+
+This module provides the ModelManager class which resolves model names
+through aliases and determines the appropriate provider for each request.
+
+The ModelManager implements the ModelResolver protocol for clean
+dependency inversion, eliminating circular imports.
+"""
+
 import logging
 from typing import TYPE_CHECKING
 
+from src.core.protocols import ConfigProvider, ModelResolver
+
 if TYPE_CHECKING:
     from src.core.alias_manager import AliasManager
-    from src.core.config import Config
 
 logger = logging.getLogger(__name__)
 
 
-class ModelManager:
-    def __init__(self, config: "Config") -> None:
+class ModelManager(ModelResolver):
+    """Manages model name resolution with alias support and provider parsing.
+
+    This class implements the ModelResolver protocol, providing clean
+    dependency inversion. It uses the ConfigProvider protocol for
+    configuration access instead of depending on the concrete Config class.
+
+    The ModelManager orchestrates:
+    1. Provider prefix parsing (e.g., "openai:gpt-4" -> ("openai", "gpt-4"))
+    2. Alias resolution through AliasManager
+    3. Default provider fallback
+
+    Attributes:
+        config: Configuration implementing ConfigProvider protocol
+        provider_manager: Provider manager instance from dependencies
+        alias_manager: Alias manager instance from dependencies
+    """
+
+    def __init__(self, config: ConfigProvider) -> None:
+        """Initialize ModelManager with configuration.
+
+        Args:
+            config: Configuration object implementing ConfigProvider protocol.
+                   This allows dependency injection and cleaner separation of concerns.
+        """
         self.config = config
-        self.provider_manager = config.provider_manager
-        self.alias_manager: AliasManager | None = getattr(config, "alias_manager", None)
+        # Access managers through config (which delegates to dependencies module)
+        self.provider_manager = config.provider_manager  # type: ignore[attr-defined]
+        self.alias_manager: AliasManager | None = getattr(config, "alias_manager", None)  # type: ignore[attr-defined]
 
     def resolve_model(self, model: str) -> tuple[str, str]:
         """Resolve model name to (provider, actual_model)

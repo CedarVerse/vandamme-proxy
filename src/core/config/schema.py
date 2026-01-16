@@ -151,7 +151,7 @@ class ConfigSchema:
 
     VDM_ACTIVE_REQUESTS_SSE_ENABLED = EnvVarSpec(
         name="VDM_ACTIVE_REQUESTS_SSE_ENABLED",
-        default=False,
+        default=True,
         type_hint=bool,
         description="Enable active requests SSE endpoint",
     )
