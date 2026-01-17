@@ -12,7 +12,7 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-print-directory
 
-.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-e2e test-all test-quick coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check
+.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check .ensure-server-running .ensure-external-opt-in
 
 # ============================================================================
 # Configuration
@@ -290,36 +290,49 @@ test-integration: ## Run integration tests (requires server, no API calls)
 	@printf "$(YELLOW)Note: Ensure server is running$(RESET)\n"
 	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
 	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
-		$(UV) run $(PYTEST) $(TEST_DIR) -v -m "integration and not e2e"; \
+		$(UV) run $(PYTEST) $(TEST_DIR) -v -m "integration and not external"; \
 	else \
 		printf "$(RED)❌ Server not running. Start with 'make dev' first$(RESET)\n"; \
 		exit 1; \
 	fi
 
-test-e2e: ## Run end-to-end tests with real APIs (requires server and API keys)
-	@printf "$(BOLD)$(CYAN)Running end-to-end tests...$(RESET)\n"
+test-external: ## Run external tests (requires API keys and ALLOW_EXTERNAL_TESTS=1)
+	@printf "$(BOLD)$(CYAN)Running external tests...$(RESET)\n"
 	@printf "$(YELLOW)⚠ These tests make real API calls and will incur costs$(RESET)\n"
-	@printf "$(YELLOW)Note: Ensure server is running and API keys are set in .env$(RESET)\n"
-	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
-	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
-		$(UV) run $(PYTEST) $(TEST_DIR) -v -m e2e; \
-	else \
-		printf "$(RED)❌ Server not running. Start with 'make dev' first$(RESET)\n"; \
-		exit 1; \
-	fi
+	@$(MAKE) -s .ensure-server-running
+	@$(MAKE) -s .ensure-external-opt-in
+	@printf "$(CYAN)Note: Ensure API keys are set in .env$(RESET)\n"
+	$(UV) run $(PYTEST) $(TEST_DIR) -v -m external
 
-test-all: ## Run ALL tests including e2e (requires server and API keys)
-	@printf "$(BOLD)$(CYAN)Running ALL tests (unit + integration + e2e)...$(RESET)\n"
-	@printf "$(YELLOW)⚠ E2E tests make real API calls and will incur costs$(RESET)\n"
+test-external-oneshot: ## Run external tests (one-shot mode with opt-in)
+	@printf "$(BOLD)$(CYAN)Running external tests (one-shot mode)...$(RESET)\n"
+	@printf "$(YELLOW)⚠ These tests make real API calls and will incur costs$(RESET)\n"
+	@$(MAKE) -s .ensure-server-running
+	ALLOW_EXTERNAL_TESTS=1 $(UV) run $(PYTEST) $(TEST_DIR) -v -m external
+
+test-external-lenient: ## Run external tests (skipping if keys missing)
+	@printf "$(BOLD)$(CYAN)Running external tests (lenient mode)...$(RESET)\n"
+	@printf "$(YELLOW)⚠ These tests make real API calls and will incur costs$(RESET)\n"
+	@printf "$(YELLOW)ℹ️ Tests will skip if their required API keys are missing$(RESET)\n"
+	@$(MAKE) -s .ensure-server-running
+	ALLOW_EXTERNAL_TESTS=1 EXTERNAL_TESTS_SKIP_MISSING=1 $(UV) run $(PYTEST) $(TEST_DIR) -v -m external
+
+test-e2e: ## DEPRECATED: Use 'test-external' instead. Run external tests with real APIs
+	@printf "$(YELLOW)⚠ WARNING: 'test-e2e' is deprecated. Use 'make test-external' instead.$(RESET)\n"
+	@$(MAKE) test-external
+
+test-all: ## Run ALL tests including external (requires server and API keys)
+	@printf "$(BOLD)$(CYAN)Running ALL tests (unit + integration + external)...$(RESET)\n"
+	@printf "$(YELLOW)⚠ External tests make real API calls and will incur costs$(RESET)\n"
 	@# First run unit tests
 	@$(UV) run $(PYTEST) $(TEST_DIR) -v -m unit
-	@# Then check if server is running for integration and e2e tests
+	@# Then check if server is running for integration tests
 	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
 	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
 		printf "$(YELLOW)Server detected, running integration tests...$(RESET)\n"; \
-		$(UV) run $(PYTEST) $(TEST_DIR) -v -m "integration and not e2e" || printf "$(YELLOW)⚠ Some integration tests failed$(RESET)\n"; \
-		printf "$(YELLOW)Running e2e tests...$(RESET)\n"; \
-		$(UV) run $(PYTEST) $(TEST_DIR) -v -m e2e || printf "$(YELLOW)⚠ Some e2e tests failed (check API keys)$(RESET)\n"; \
+		$(UV) run $(PYTEST) $(TEST_DIR) -v -m integration || printf "$(YELLOW)⚠ Some integration tests failed$(RESET)\n"; \
+		printf "$(YELLOW)Running external tests...$(RESET)\n"; \
+		$(MAKE) test-external-oneshot || printf "$(YELLOW)⚠ Some external tests failed (check API keys)$(RESET)\n"; \
 	else \
 		printf "$(RED)❌ Server not running. Start with 'make dev' first$(RESET)\n"; \
 		exit 1; \
@@ -343,6 +356,26 @@ coverage: ## Run tests with coverage report
 		$(UV) run $(PYTEST) $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=html --cov-report=term-missing -m unit; \
 	fi
 	@printf "$(GREEN)✓ Coverage report generated in htmlcov/$(RESET)\n"
+
+# =============================================================================
+# Helper Targets
+# =============================================================================
+
+.ensure-server-running:
+	@if ! curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 && \
+	   ! curl -s http://localhost:18082/health > /dev/null 2>&1; then \
+		printf "$(RED)❌ Server not running on port $(PORT) or 18082$(RESET)\n"; \
+		printf "$(CYAN)Start server with: make dev$(RESET)\n"; \
+		exit 1; \
+	fi
+
+.ensure-external-opt-in:
+	@if [ -z "$(ALLOW_EXTERNAL_TESTS)" ]; then \
+		printf "$(RED)❌ External tests require ALLOW_EXTERNAL_TESTS=1$(RESET)\n"; \
+		printf "$(CYAN)Run: ALLOW_EXTERNAL_TESTS=1 make test-external$(RESET)\n"; \
+		printf "$(CYAN)Or use one-shot mode: make test-external-oneshot$(RESET)\n"; \
+		exit 1; \
+	fi
 
 # ============================================================================
 # Binary Builds (Nuitka)

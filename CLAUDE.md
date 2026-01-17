@@ -41,26 +41,34 @@ docker compose up -d
 
 ### Testing
 
-The test suite follows a three-tier pyramid strategy:
+The test suite follows a strictly enforced three-tier categorization:
 
-1. **Unit Tests** (~90%): Fast, mocked, no external dependencies
-2. **Integration Tests** (~10%): Require running server, no API calls
-3. **E2E Tests** (<5%): Real API calls for critical validation
+| Category | Location | Dependencies | API Calls | Default |
+|----------|----------|--------------|-----------|---------|
+| **unit** | `tests/unit/` | None (RESPX mocked) | None | Yes |
+| **integration** | `tests/integration/` | Running local server | Only localhost | Yes |
+| **external** | `tests/external/` | Real external APIs | Real HTTP | No (opt-in) |
 
 ```bash
-# Run all tests except e2e (default - no API costs)
+# Run default tests (unit + integration, no API costs)
 make test
 
-# Run unit tests only (fastest)
+# Run unit tests only (fast, all mocked)
 make test-unit
 
-# Run integration tests (requires server, no API calls)
+# Run integration tests (requires server, localhost only)
 make test-integration
 
-# Run e2e tests with real APIs (requires API keys, incurs costs)
-make test-e2e
+# Run external tests (requires API keys + opt-in)
+ALLOW_EXTERNAL_TESTS=1 make test-external
 
-# Run ALL tests including e2e (full validation)
+# External test one-shot mode (auto-enables opt-in)
+make test-external-oneshot
+
+# External test lenient mode (skips if keys missing)
+ALLOW_EXTERNAL_TESTS=1 EXTERNAL_TESTS_SKIP_MISSING=1 make test-external
+
+# Run ALL tests including external (full validation)
 make test-all
 
 # Quick tests without coverage
@@ -72,6 +80,14 @@ vdm test models
 vdm health upstream
 vdm config validate
 ```
+
+**External Test Opt-In:**
+- `ALLOW_EXTERNAL_TESTS=1` - Required to run external tests (prevents accidental API charges)
+- `EXTERNAL_TESTS_SKIP_MISSING=1` - Skip tests when their required API keys are missing
+
+**Deprecated:**
+- `make test-e2e` - Use `make test-external` instead
+
 
 #### HTTP Mocking with RESPX
 

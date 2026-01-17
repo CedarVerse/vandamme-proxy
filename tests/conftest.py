@@ -89,34 +89,45 @@ def base_url(integration_test_port):
 
 def pytest_configure(config):
     """Register custom markers."""
-    config.addinivalue_line("markers", "unit: marks tests as unit tests (fast, no external deps)")
+    config.addinivalue_line("markers", "unit: No external dependencies, all HTTP mocked")
+    config.addinivalue_line("markers", "integration: Local server only, no external APIs")
+    config.addinivalue_line("markers", "external: Requires real external API calls and API keys")
+    # Legacy support for old e2e marker (will be deprecated)
     config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests (requires services)"
-    )
-    config.addinivalue_line(
-        "markers", "e2e: marks tests as end-to-end tests (requires valid API keys)"
+        "markers",
+        "e2e: DEPRECATED - Use 'external' marker instead. Requires real external API calls.",
     )
 
 
 def pytest_collection_modifyitems(config, items):
     """Add markers to tests based on their location."""
     for item in items:
+        path = str(item.fspath)
+
         # Add unit marker to tests in unit/ and middleware/ directories
-        if "tests/unit/" in str(item.fspath) or "tests/middleware/" in str(item.fspath):
+        if "tests/unit/" in path or "tests/middleware/" in path:
             item.add_marker(pytest.mark.unit)
 
+        # Add external marker to tests in external/ directory
+        elif "tests/external/" in path:
+            item.add_marker(pytest.mark.external)
+
         # Add integration marker to tests in integration/ directory
-        elif "tests/integration/" in str(item.fspath):
+        elif "tests/integration/" in path:
             item.add_marker(pytest.mark.integration)
 
         # Legacy handling for tests in root tests/ directory
-        elif "tests/" in str(item.fspath):
+        elif "tests/" in path:
             # Assume they're unit tests if they use TestClient
             if "TestClient" in item.function.__code__.co_names:
                 item.add_marker(pytest.mark.unit)
             # Otherwise mark as integration
             else:
                 item.add_marker(pytest.mark.integration)
+
+        # Convert legacy e2e marker to external for backward compatibility
+        if item.get_closest_marker("e2e"):
+            item.add_marker(pytest.mark.external)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -245,3 +256,146 @@ def setup_test_environment_for_unit_tests():
         for module_name in test_modules:
             if module_name.startswith("src.") or module_name.startswith("tests."):
                 sys.modules.pop(module_name, None)
+
+
+# =============================================================================
+# Isolation Guards - Prevent tests from crossing category boundaries
+# =============================================================================
+
+
+def _guard_unit_test_network(request: pytest.FixtureRequest) -> None:
+    """Guard unit tests to ensure no real HTTP calls are made.
+
+    Unit tests that use HTTP clients must use RESPX mocking.
+    RESPX's assert_all_mocked=True will catch any unmocked calls.
+
+    This guard only applies to tests that actually use HTTP-related fixtures.
+
+    Args:
+        request: pytest request object
+
+    Raises:
+        pytest.fail.Exception: If test uses HTTP clients without proper mocking
+    """
+    # Check if test is using HTTP-related fixtures
+    fixture_names = request.fixturenames
+
+    # pytest's built-in "request" fixture is for test introspection, not HTTP
+    # We need to exclude it from our HTTP fixture detection
+    http_client_fixtures = {
+        "client",
+        "http_client",
+        "async_client",
+        "httpx_client",
+        "test_client",
+        "ac_client",  # AsyncClient variants
+    }
+
+    # Only check for HTTP client fixtures (not pytest's "request" fixture)
+    uses_http_client = any(
+        fixture in http_client_fixtures or "client" in fixture.lower()
+        for fixture in fixture_names
+        if fixture != "request"  # Exclude pytest's built-in request fixture
+    )
+
+    # Only enforce mocking if the test actually uses HTTP client fixtures
+    if not uses_http_client:
+        return
+
+    # Check if test has RESPX mocking
+    has_resp = any(
+        "mock_openai_api" in name or "mock_anthropic_api" in name for name in fixture_names
+    )
+
+    if not has_resp:
+        # Check if test has a direct marker that might indicate it's intentional
+        # (e.g., testing error handling without mocks)
+        node = request.node
+        for marker in node.iter_markers():
+            if marker.name == "allow_unmocked":
+                return  # Test explicitly opts out of mocking
+
+        pytest.fail(
+            f"Unit test '{request.node.name}' uses HTTP client fixtures without mocking. "
+            f"Add 'mock_openai_api' or 'mock_anthropic_api' fixture, or mark with "
+            f"@pytest.mark.allow_unmocked if this is intentional."
+        )
+
+
+def _guard_integration_test_network(request: pytest.FixtureRequest) -> None:
+    """Guard integration tests to ensure only localhost HTTP calls are made.
+
+    Integration tests may make HTTP calls, but only to the local server.
+    This prevents accidental external API calls.
+
+    Args:
+        request: pytest request object
+
+    Raises:
+        pytest.fail.Exception: If test configuration suggests external calls
+    """
+    # Check if test is using external API fixtures
+    fixture_names = request.fixturenames
+    has_external_fixtures = any(
+        "external_api_keys" in name or "require_api_keys" in name for name in fixture_names
+    )
+
+    if has_external_fixtures:
+        pytest.fail(
+            f"Integration test '{request.node.name}' uses external test fixtures. "
+            f"Move this test to tests/external/ directory."
+        )
+
+    # Check if test requires external API keys via marker
+    node = request.node
+    for marker in node.iter_markers():
+        if marker.name == "requires_api_keys":
+            pytest.fail(
+                f"Integration test '{request.node.name}' requires external API keys. "
+                f"Move this test to tests/external/ directory and mark with "
+                f"@pytest.mark.external instead."
+            )
+
+
+def _guard_external_test_config(request: pytest.FixtureRequest) -> None:
+    """Guard external tests to ensure proper opt-in and API keys.
+
+    Args:
+        request: pytest request object
+
+    Raises:
+        pytest.skip.Exception: If ALLOW_EXTERNAL_TESTS=1 is not set
+    """
+    # Import here to avoid circular import
+    import os
+
+    opt_in = os.environ.get("ALLOW_EXTERNAL_TESTS", "").lower()
+    if opt_in not in ("1", "true", "yes"):
+        pytest.skip(
+            f"External test '{request.node.name}' requires ALLOW_EXTERNAL_TESTS=1. "
+            f"Run: ALLOW_EXTERNAL_TESTS=1 pytest -m external"
+        )
+
+
+@pytest.fixture(scope="function", autouse=True)
+def _enforce_isolation_guards(request: pytest.FixtureRequest) -> None:
+    """Prevent tests from crossing category boundaries.
+
+    This autouse fixture applies guards based on the test's markers:
+    - Unit tests: Must use HTTP mocking (RESPX)
+    - Integration tests: Cannot use external API fixtures
+    - External tests: Require ALLOW_EXTERNAL_TESTS=1
+
+    Args:
+        request: pytest request object
+    """
+    markers = {m.name for m in request.node.iter_markers()}
+
+    if "unit" in markers:
+        _guard_unit_test_network(request)
+    if "integration" in markers:
+        _guard_integration_test_network(request)
+    if "external" in markers:
+        _guard_external_test_config(request)
+
+    yield
