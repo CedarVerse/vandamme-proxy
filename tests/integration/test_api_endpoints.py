@@ -218,14 +218,14 @@ async def test_connection_test():
 @pytest.mark.asyncio
 async def test_basic_chat():
     """Test basic chat completion with real API."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+    if not os.getenv("ZAIO_API_KEY"):
+        pytest.skip("ZAIO_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "zaio:GLM-4.7",
                 "max_tokens": 20,
                 "messages": [{"role": "user", "content": "Say 'Hello world'"}],
             },
@@ -243,8 +243,8 @@ async def test_basic_chat():
 @pytest.mark.asyncio
 async def test_streaming_chat():
     """Test streaming chat completion with real API."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+    if not os.getenv("ZAIO_API_KEY"):
+        pytest.skip("ZAIO_API_KEY not set")
 
     async with (
         httpx.AsyncClient(timeout=30.0) as client,
@@ -252,7 +252,7 @@ async def test_streaming_chat():
             "POST",
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "claude-3-5-haiku-20241022",
+                "model": "zaio:GLM-4.5-Air",
                 "max_tokens": 50,
                 "messages": [{"role": "user", "content": "Count to 3"}],
                 "stream": True,
@@ -281,14 +281,14 @@ async def test_streaming_chat():
 @pytest.mark.asyncio
 async def test_function_calling():
     """Test function calling with real API."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+    if not os.getenv("ZAIO_API_KEY"):
+        pytest.skip("ZAIO_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "zaio:GLM-4.7",
                 "max_tokens": 200,
                 "messages": [
                     {
@@ -336,14 +336,14 @@ async def test_function_calling():
 @pytest.mark.asyncio
 async def test_with_system_message():
     """Test with system message."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+    if not os.getenv("ZAIO_API_KEY"):
+        pytest.skip("ZAIO_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "zaio:GLM-4.7",
                 "max_tokens": 50,
                 "system": (
                     "You are a helpful assistant that always ends responses with 'over and out'."
@@ -366,8 +366,8 @@ async def test_with_system_message():
 @pytest.mark.asyncio
 async def test_multimodal():
     """Test multimodal input (text + image)."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+    if not os.getenv("ZAIO_API_KEY"):
+        pytest.skip("ZAIO_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Small 1x1 pixel red PNG
@@ -379,7 +379,7 @@ async def test_multimodal():
         response = await client.post(
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "zaio:GLM-4.7",
                 "max_tokens": 50,
                 "messages": [
                     {
@@ -412,21 +412,17 @@ async def test_conversation_with_tool_use():
     """Test a complete conversation with tool use and results.
 
     This test relies on a real upstream call and will timeout if the local proxy
-    is configured with a non-OpenAI default provider.
+    is configured with a non-ZAIO default provider.
     """
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
-    if os.getenv("VDM_DEFAULT_PROVIDER") not in ("openai", "OPENAI"):
-        pytest.skip("VDM_DEFAULT_PROVIDER is not openai")
-    if os.getenv("OPENAI_BASE_URL"):
-        pytest.skip("OPENAI_BASE_URL override set; this test expects direct OpenAI")
+    if not os.getenv("ZAIO_API_KEY"):
+        pytest.skip("ZAIO_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=60.0) as client:
         # First message with tool call
         response1 = await client.post(
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "claude-sonnet-4.5",
+                "model": "zaio:GLM-4.7",
                 "max_tokens": 200,
                 "messages": [{"role": "user", "content": "Calculate 25 * 4"}],
                 "tools": [
@@ -473,7 +469,7 @@ async def test_conversation_with_tool_use():
         response2 = await client.post(
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "zaio:GLM-4.7",
                 "max_tokens": 50,
                 "messages": [
                     {"role": "user", "content": "Calculate 25 * 4"},
@@ -509,14 +505,14 @@ async def test_conversation_with_tool_use():
 @pytest.mark.asyncio
 async def test_token_counting():
     """Test token counting endpoint."""
-    if not os.getenv("OPENAI_API_KEY"):
-        pytest.skip("OPENAI_API_KEY not set")
+    if not os.getenv("ZAIO_API_KEY"):
+        pytest.skip("ZAIO_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{BASE_URL}/v1/messages/count_tokens",
             json={
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "zaio:GLM-4.7",
                 "messages": [
                     {"role": "user", "content": "This is a test message for token counting."}
                 ],
@@ -533,16 +529,14 @@ async def test_token_counting():
 @pytest.mark.asyncio
 async def test_anthropic_passthrough():
     """Test Anthropic API passthrough format with real API."""
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        pytest.skip("ANTHROPIC_API_KEY not set")
-
-    os.environ["ANTHROPIC_API_FORMAT"] = "anthropic"
+    if not os.getenv("ZAI_API_KEY"):
+        pytest.skip("ZAI_API_KEY not set")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{BASE_URL}/v1/messages",
             json={
-                "model": "anthropic:claude-3-5-sonnet-20241022",
+                "model": "zai:GLM-4.7",
                 "max_tokens": 20,
                 "messages": [{"role": "user", "content": "Hello"}],
             },

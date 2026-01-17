@@ -15,6 +15,8 @@ TEST_API_KEYS = {
     "VERTEX": "test-vertex-key",
     "POE": "test-poe-key",
     "CUSTOM": "test-custom-key",
+    "ZAI": "test-zai-key",
+    "ZAIO": "test-zaio-key",
 }
 
 # Test endpoints for various providers
@@ -27,6 +29,8 @@ TEST_ENDPOINTS = {
     "VERTEX": "https://generativelanguage.googleapis.com",
     "POE": "https://poe.com",
     "CUSTOM": "https://api.custom-provider.com",
+    "ZAI": "https://api.z.ai/api/anthropic",
+    "ZAIO": "https://api.z.ai/api/coding/paas/v4",
 }
 
 # Default test configuration
@@ -52,4 +56,6 @@ TEST_MODELS = {
     "OPENAI_GPT4": "openai:gpt-4",
     "OPENAI_GPT35": "openai:gpt-3.5-turbo",
     "ANTHROPIC_CLAUDE": "anthropic:claude-3-5-sonnet-20241022",
+    "ZAI_GLM": "zai:GLM-4.7",
+    "ZAIO_GLM": "zaio:GLM-4.7",
 }
