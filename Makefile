@@ -12,7 +12,7 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-print-directory
 
-.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check .ensure-server-running .ensure-external-opt-in
+.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick test-on-demand coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check .ensure-server-running .ensure-external-opt-in
 
 # ============================================================================
 # Configuration
@@ -31,6 +31,7 @@ PYTHON_FILES := $(SRC_DIR) $(TEST_DIR) start_proxy.py test_cancellation.py
 HOST ?= 0.0.0.0
 PORT ?= 8082
 LOG_LEVEL ?= INFO
+PATTERN ?=
 
 # Nuitka Configuration
 NUITKA := uv run python -m nuitka
@@ -316,6 +317,26 @@ test-external-lenient: ## Run external tests (skipping if keys missing)
 	@printf "$(YELLOW)ℹ️ Tests will skip if their required API keys are missing$(RESET)\n"
 	@$(MAKE) -s .ensure-server-running
 	ALLOW_EXTERNAL_TESTS=1 EXTERNAL_TESTS_SKIP_MISSING=1 $(UV) run $(PYTEST) $(TEST_DIR) -v -m external
+
+test-on-demand: ## Run on-demand external tests by pattern (e.g., make test-on-demand PATTERN=thought)
+	@if [ -z "$(PATTERN)" ]; then \
+		printf "$(YELLOW)⚠ PATTERN is required. Available on-demand tests:$(RESET)\n"; \
+		$(UV) run $(PYTEST) tests/external/on_demand --collect-only --quiet 2>&1 | \
+			grep "::test_" | \
+			sed 's/.*:://' | \
+			while read test_func; do \
+				pattern=$$(echo "$$test_func" | sed 's/test_//' | sed 's/_.*//' | head -n1); \
+				printf "  $(CYAN)%-20s$(RESET) - %s\n" "$$pattern" "$$test_func"; \
+			done | sort -u; \
+		printf "\n"; \
+		printf "Usage: make test-on-demand PATTERN=<test-name-pattern>\n"; \
+		printf "Example: make test-on-demand PATTERN=thought\n"; \
+		exit 1; \
+	fi
+	@printf "$(BOLD)$(CYAN)Running on-demand tests matching '$(PATTERN)'...$(RESET)\n"
+	@printf "$(YELLOW)⚠ These tests make real API calls to expensive providers$(RESET)\n"
+	@$(MAKE) -s .ensure-server-running
+	ALLOW_EXTERNAL_TESTS=1 $(UV) run $(PYTEST) tests/external/on_demand -v -k "$(PATTERN)" -m on_demand
 
 test-e2e: ## DEPRECATED: Use 'test-external' instead. Run external tests with real APIs
 	@printf "$(YELLOW)⚠ WARNING: 'test-e2e' is deprecated. Use 'make test-external' instead.$(RESET)\n"

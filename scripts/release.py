@@ -157,9 +157,13 @@ def main():
 
     elif command == "post-tag":
         print(f"{Colors.BOLD}{Colors.GREEN}✅ Release initiated!{Colors.RESET}")
-        print(f"{Colors.CYAN}→ Tag created, GitHub Actions will publish automatically{Colors.RESET}")
         print(
-            f"{Colors.CYAN}→ Track progress at: https://github.com/elifarley/vandamme-proxy/actions{Colors.RESET}"
+            f"{Colors.CYAN}→ Tag created, GitHub Actions will publish "
+            f"automatically{Colors.RESET}"
+        )
+        print(
+            f"{Colors.CYAN}→ Track progress at: "
+            f"https://github.com/elifarley/vandamme-proxy/actions{Colors.RESET}"
         )
 
     elif command == "full":

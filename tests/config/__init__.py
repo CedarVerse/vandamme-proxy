@@ -1,6 +1,7 @@
 """Test configuration module for Vandamme Proxy tests."""
 
 from .test_config import (
+    DEFAULT_STREAMING_TIMEOUT,
     DEFAULT_TEST_CONFIG,
     TEST_API_KEYS,
     TEST_ENDPOINTS,
@@ -14,4 +15,5 @@ __all__ = [
     "DEFAULT_TEST_CONFIG",
     "TEST_HEADERS",
     "TEST_MODELS",
+    "DEFAULT_STREAMING_TIMEOUT",
 ]

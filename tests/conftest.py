@@ -92,6 +92,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: No external dependencies, all HTTP mocked")
     config.addinivalue_line("markers", "integration: Local server only, no external APIs")
     config.addinivalue_line("markers", "external: Requires real external API calls and API keys")
+    config.addinivalue_line(
+        "markers",
+        "on_demand: Expensive external test run selectively via make test-on-demand",
+    )
     # Legacy support for old e2e marker (will be deprecated)
     config.addinivalue_line(
         "markers",
@@ -107,6 +111,12 @@ def pytest_collection_modifyitems(config, items):
         # Add unit marker to tests in unit/ and middleware/ directories
         if "tests/unit/" in path or "tests/middleware/" in path:
             item.add_marker(pytest.mark.unit)
+
+        # Add on_demand marker to tests in external/on_demand/ directory
+        # (also applies external marker since on_demand tests are external)
+        elif "tests/external/on_demand/" in path:
+            item.add_marker(pytest.mark.on_demand)
+            item.add_marker(pytest.mark.external)
 
         # Add external marker to tests in external/ directory
         elif "tests/external/" in path:

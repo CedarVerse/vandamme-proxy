@@ -4,6 +4,8 @@ This module provides a single source of truth for all test-related constants
 to ensure consistency across the entire test suite.
 """
 
+import os
+
 # Standardized test API keys - used across all test files
 # These are NOT real API keys and should never be used in production
 TEST_API_KEYS = {
@@ -59,3 +61,7 @@ TEST_MODELS = {
     "ZAI_GLM": "zai:GLM-4.7",
     "ZAIO_GLM": "zaio:GLM-4.7",
 }
+
+# Streaming test timeout for external tests (seconds)
+# Gemini function calls can take 30+ seconds, allowing buffer for network delays
+DEFAULT_STREAMING_TIMEOUT = int(os.environ.get("VDM_STREAMING_TEST_TIMEOUT", "120"))
