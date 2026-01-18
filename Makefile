@@ -12,6 +12,10 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-print-directory
 
+# Prevent VIRTUAL_ENV interference with UV-managed project environment
+# If user has a global VIRTUAL_ENV set, it can cause pytest to use wrong venv
+unexport VIRTUAL_ENV
+
 .PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick test-on-demand coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check .ensure-server-running .ensure-external-opt-in
 
 # ============================================================================
@@ -171,6 +175,19 @@ endif
 doctor: ## Run environment health check (read-only, fast)
 	@printf "$(BOLD)$(CYAN)🩺 Doctor - Environment Health Check$(RESET)\n"
 	@printf "\n"
+	@printf "$(BOLD)$(YELLOW)Virtual Environment:$(RESET)\n"
+	@if [ -n "$$VIRTUAL_ENV" ]; then \
+		if [ "$$VIRTUAL_ENV" != "$(PWD)/.venv" ]; then \
+			printf "$(YELLOW)⚠ Warning: VIRTUAL_ENV=$$VIRTUAL_ENV$(RESET)\n"; \
+			printf "$(YELLOW)  This may interfere with UV-managed project environment$(RESET)\n"; \
+			printf "$(CYAN)  Consider: unset VIRTUAL_ENV$(RESET)\n"; \
+		else \
+			printf "  $(GREEN)✓ Using project .venv$(RESET)\n"; \
+		fi; \
+	else \
+		printf "  $(GREEN)✓ No VIRTUAL_ENV set (UV will auto-detect)$(RESET)\n"; \
+	fi
+	@printf "\n"
 	@printf "$(BOLD)$(YELLOW)System Information:$(RESET)\n"
 	@printf "  OS:           $$(uname -s)\n"
 	@printf "  Architecture: $$(uname -m)\n"
@@ -318,23 +335,35 @@ test-external-lenient: ## Run external tests (skipping if keys missing)
 	@$(MAKE) -s .ensure-server-running
 	ALLOW_EXTERNAL_TESTS=1 EXTERNAL_TESTS_SKIP_MISSING=1 $(UV) run $(PYTEST) $(TEST_DIR) -v -m external
 
-test-on-demand: ## Run on-demand external tests by pattern (e.g., make test-on-demand PATTERN=thought)
+test-on-demand: ## Run on-demand external tests by pattern (e.g., make test-on-demand PATTERN=gemini)
 	@if [ -z "$(PATTERN)" ]; then \
 		printf "$(YELLOW)⚠ PATTERN is required. Available on-demand tests:$(RESET)\n"; \
 		$(UV) run $(PYTEST) tests/external/on_demand --collect-only --quiet 2>&1 | \
 			grep "::test_" | \
 			sed 's/.*:://' | \
 			while read test_func; do \
-				pattern=$$(echo "$$test_func" | sed 's/test_//' | sed 's/_.*//' | head -n1); \
-				printf "  $(CYAN)%-20s$(RESET) - %s\n" "$$pattern" "$$test_func"; \
-			done | sort -u; \
+				patterns=$$(echo "$$test_func" | sed 's/test_//' | sed 's/_/ /g'); \
+				printf "  $(CYAN)%-50s$(RESET)\n" "$$test_func"; \
+				printf "    $(CYAN)Patterns:$(RESET) $$(echo $$patterns | tr ' ' '|' | sed 's/|/, /g')\n"; \
+			done; \
 		printf "\n"; \
-		printf "Usage: make test-on-demand PATTERN=<test-name-pattern>\n"; \
-		printf "Example: make test-on-demand PATTERN=thought\n"; \
+		printf "$(CYAN)Usage:$(RESET) make test-on-demand PATTERN=<pattern>\n"; \
+		printf "$(CYAN)  Pattern matches any part of test name (substring search)$(RESET)\n"; \
+		printf "\n"; \
+		printf "$(CYAN)Examples:$(RESET)\n"; \
+		printf "  make test-on-demand PATTERN=gemini      # Match: test_gemini_*$(RESET)\n"; \
+		printf "  make test-on-demand PATTERN=signature   # Match: *signature*$(RESET)\n"; \
 		exit 1; \
 	fi
 	@printf "$(BOLD)$(CYAN)Running on-demand tests matching '$(PATTERN)'...$(RESET)\n"
 	@printf "$(YELLOW)⚠ These tests make real API calls to expensive providers$(RESET)\n"
+	@count=$$($(UV) run $(PYTEST) tests/external/on_demand --collect-only -q -k "$(PATTERN)" -m on_demand 2>&1 | grep -c "::test_" 2>/dev/null || true); \
+	if [ "$$count" -eq "0" ]; then \
+		printf "$(RED)❌ No tests match pattern '$(PATTERN)'$(RESET)\n"; \
+		printf "$(CYAN)Run without PATTERN to see available tests$(RESET)\n"; \
+		exit 1; \
+	fi; \
+	printf "$(CYAN)ℹ️ $$count test(s) will run$(RESET)\n"
 	@$(MAKE) -s .ensure-server-running
 	ALLOW_EXTERNAL_TESTS=1 $(UV) run $(PYTEST) tests/external/on_demand -v -k "$(PATTERN)" -m on_demand
 
