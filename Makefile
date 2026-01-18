@@ -152,7 +152,7 @@ dev: dev-deps-sync ## Sync deps and run server with hot reload
 
 health: ## Check proxy server health
 	@printf "$(BOLD)$(CYAN)Checking server health...$(RESET)\n"
-	@curl -s http://localhost:$(PORT)/health | $(PYTHON) -m json.tool || printf "$(YELLOW)Server not running on port $(PORT)$(RESET)\n"
+	@curl -s --max-time 2 --connect-timeout 1 http://localhost:$(PORT)/health | $(PYTHON) -m json.tool || printf "$(YELLOW)Server not running on port $(PORT)$(RESET)\n"
 
 check-install: ## Verify that installation was successful
 	@printf "$(BOLD)$(BLUE)🔍 Verifying installation...$(RESET)\n"
@@ -288,8 +288,8 @@ test: ## Run all tests except e2e (unit + integration, no API calls)
 	@# First run unit tests
 	@$(UV) run $(PYTEST) $(TEST_DIR)/unit -v
 	@# Then try integration tests if server is running
-	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
-	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
+	@if curl -s --max-time 2 --connect-timeout 1 http://localhost:$(PORT)/health > /dev/null 2>&1 || \
+	   curl -s --max-time 2 --connect-timeout 1 http://localhost:18082/health > /dev/null 2>&1; then \
 		printf "$(YELLOW)Server detected, running integration tests...$(RESET)\n"; \
 		$(UV) run $(PYTEST) $(TEST_DIR)/integration -v || printf "$(YELLOW)⚠ Some integration tests failed$(RESET)\n"; \
 	else \
@@ -306,8 +306,8 @@ test-unit: ## Run unit tests only (fast, no external deps)
 test-integration: ## Run integration tests (requires server, no API calls)
 	@printf "$(BOLD)$(CYAN)Running integration tests...$(RESET)\n"
 	@printf "$(YELLOW)Note: Ensure server is running$(RESET)\n"
-	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
-	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
+	@if curl -s --max-time 2 --connect-timeout 1 http://localhost:$(PORT)/health > /dev/null 2>&1 || \
+	   curl -s --max-time 2 --connect-timeout 1 http://localhost:18082/health > /dev/null 2>&1; then \
 		$(UV) run $(PYTEST) $(TEST_DIR) -v -m "integration and not external"; \
 	else \
 		printf "$(RED)❌ Server not running. Start with 'make dev' first$(RESET)\n"; \
@@ -377,8 +377,8 @@ test-all: ## Run ALL tests including external (requires server and API keys)
 	@# First run unit tests
 	@$(UV) run $(PYTEST) $(TEST_DIR) -v -m unit
 	@# Then check if server is running for integration tests
-	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
-	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
+	@if curl -s --max-time 2 --connect-timeout 1 http://localhost:$(PORT)/health > /dev/null 2>&1 || \
+	   curl -s --max-time 2 --connect-timeout 1 http://localhost:18082/health > /dev/null 2>&1; then \
 		printf "$(YELLOW)Server detected, running integration tests...$(RESET)\n"; \
 		$(UV) run $(PYTEST) $(TEST_DIR) -v -m integration || printf "$(YELLOW)⚠ Some integration tests failed$(RESET)\n"; \
 		printf "$(YELLOW)Running external tests...$(RESET)\n"; \
@@ -397,8 +397,8 @@ coverage: ## Run tests with coverage report
 	@printf "$(CYAN)→ Ensuring pytest-cov is installed...$(RESET)\n"
 	@$(UV) add --group dev pytest-cov 2>/dev/null || true
 	@# Check if server is running, if so run all tests, otherwise run only unit tests
-	@if curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 || \
-	   curl -s http://localhost:18082/health > /dev/null 2>&1; then \
+	@if curl -s --max-time 2 --connect-timeout 1 http://localhost:$(PORT)/health > /dev/null 2>&1 || \
+	   curl -s --max-time 2 --connect-timeout 1 http://localhost:18082/health > /dev/null 2>&1; then \
 		printf "$(YELLOW)Server detected, running coverage on all tests...$(RESET)\n"; \
 		$(UV) run $(PYTEST) $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=html --cov-report=term-missing; \
 	else \
@@ -412,8 +412,8 @@ coverage: ## Run tests with coverage report
 # =============================================================================
 
 .ensure-server-running:
-	@if ! curl -s http://localhost:$(PORT)/health > /dev/null 2>&1 && \
-	   ! curl -s http://localhost:18082/health > /dev/null 2>&1; then \
+	@if ! curl -s --max-time 2 --connect-timeout 1 http://localhost:$(PORT)/health > /dev/null 2>&1 && \
+	   ! curl -s --max-time 2 --connect-timeout 1 http://localhost:18082/health > /dev/null 2>&1; then \
 		printf "$(RED)❌ Server not running on port $(PORT) or 18082$(RESET)\n"; \
 		printf "$(CYAN)Start server with: make dev$(RESET)\n"; \
 		exit 1; \
