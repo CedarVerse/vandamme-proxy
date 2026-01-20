@@ -17,7 +17,6 @@ Architecture:
     - ProviderConfigLoader: Load provider configs from env and TOML
 """
 
-import asyncio
 import hashlib
 import logging
 import os
@@ -133,8 +132,6 @@ class ProviderManager(ProviderClientFactory):
         self._configs: dict[str, ProviderConfig] = {}
         self._loaded = False
         self._load_results: list[ProviderLoadResult] = []
-        self._api_key_locks: dict[str, asyncio.Lock] = {}
-        self._api_key_indices: dict[str, int] = {}
         self.middleware_chain = self._middleware_manager.middleware_chain
         self._middleware_initialized = False
 
@@ -861,6 +858,8 @@ class ProviderManager(ProviderClientFactory):
     async def get_next_provider_api_key(self, provider_name: str) -> str:
         """Return the next provider API key using process-global round-robin.
 
+        Delegates to ApiKeyRotator for thread-safe rotation.
+
         Only valid for providers configured with static keys (not passthrough, not OAuth).
         """
         if not self._loaded:
@@ -875,13 +874,8 @@ class ProviderManager(ProviderClientFactory):
                 f"authentication and has no static keys"
             )
 
-        keys = config.get_api_keys()
-        lock = self._api_key_locks.setdefault(provider_name, asyncio.Lock())
-        async with lock:
-            idx = self._api_key_indices.get(provider_name, 0)
-            key = keys[idx % len(keys)]
-            self._api_key_indices[provider_name] = (idx + 1) % len(keys)
-            return key
+        api_keys = config.get_api_keys()
+        return await self._api_key_rotator.get_next_key(provider_name, api_keys)
 
     def get_provider_config(self, provider_name: str) -> ProviderConfig | None:
         """Get configuration for a specific provider"""
