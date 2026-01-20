@@ -913,7 +913,7 @@ class ProviderManager(ProviderClientFactory):
         Returns:
             Timeout value in seconds, or None if provider not found
         """
-        base_config = self._configs.get(provider_name)
+        base_config = self._registry.get(provider_name) or self._configs.get(provider_name)
         if base_config is None:
             return None
 
@@ -933,7 +933,7 @@ class ProviderManager(ProviderClientFactory):
         Returns:
             Max retry count, or None if provider not found
         """
-        base_config = self._configs.get(provider_name)
+        base_config = self._registry.get(provider_name) or self._configs.get(provider_name)
         if base_config is None:
             return None
 
