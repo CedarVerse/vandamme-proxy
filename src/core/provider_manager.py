@@ -22,7 +22,6 @@ import hashlib
 import logging
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
 from src.core.client import OpenAIClient
@@ -194,29 +193,7 @@ class ProviderManager(ProviderClientFactory):
         # Update legacy attribute for backward compatibility
         self._default_provider = selected
 
-    # ==================== Phase 1: OAuth Token Manager ====================
-
-    def _create_oauth_token_manager(self, provider_name: str) -> Any | None:
-        """Create TokenManager for OAuth providers.
-
-        Args:
-            provider_name: Name of the provider (e.g., "chatgpt", "openai")
-
-        Returns:
-            TokenManager instance if OAuth dependencies are available, None otherwise.
-
-        Raises:
-            ImportError: If oauth dependencies are not installed.
-        """
-        if TokenManager is None or FileSystemAuthStorage is None:
-            raise ImportError(
-                "oauth is required for OAuth providers. Please ensure the dependency is installed."
-            )
-        storage_path = Path.home() / ".vandamme" / "oauth" / provider_name
-        storage = FileSystemAuthStorage(base_path=storage_path)
-        return TokenManager(storage=storage, raise_on_refresh_failure=False)
-
-    # ==================== Phase 5: AliasConfigLoader Singleton ====================
+    # ==================== AliasConfigLoader Singleton ====================
 
     def _get_alias_config_loader(self) -> "AliasConfigLoader":
         """Get or create the singleton AliasConfigLoader instance.
@@ -851,9 +828,15 @@ class ProviderManager(ProviderClientFactory):
     def get_client(
         self,
         provider_name: str,
-        client_api_key: str | None = None,  # Client's API key for passthrough
+        client_api_key: str
+        | None = None,  # Client's API key for passthrough (unused, kept for compat)
     ) -> Union[OpenAIClient, "AnthropicClient"]:
-        """Get or create a client for the specified provider"""
+        """Get or create a client for the specified provider.
+
+        Delegates to ClientFactory for cleaner separation of concerns.
+        The client_api_key parameter is kept for backward compatibility but
+        is no longer used (clients are created with provider's API key).
+        """
         if not self._loaded:
             self.load_provider_configs()
 
@@ -872,45 +855,8 @@ class ProviderManager(ProviderClientFactory):
 
         config = self._configs[provider_name]
 
-        # For passthrough providers, we cache clients without API keys
-        # The actual API key will be provided per request
-        cache_key = provider_name
-
-        # Return cached client or create new one
-        if cache_key not in self._clients:
-            # Create appropriate client based on API format
-            # For passthrough or OAuth providers, pass None as API key
-            api_key_for_init = (
-                None if config.uses_passthrough or config.uses_oauth else config.api_key
-            )
-
-            # Phase 1: Create TokenManager for OAuth providers
-            oauth_token_manager = None
-            if config.uses_oauth:
-                oauth_token_manager = self._create_oauth_token_manager(config.name)
-
-            if config.is_anthropic_format:
-                # Import here to avoid circular imports
-                from src.core.anthropic_client import AnthropicClient
-
-                self._clients[cache_key] = AnthropicClient(
-                    api_key=api_key_for_init,
-                    base_url=config.base_url,
-                    timeout=config.timeout,
-                    custom_headers=config.custom_headers,
-                    oauth_token_manager=oauth_token_manager,  # Phase 1: Add OAuth support
-                )
-            else:
-                self._clients[cache_key] = OpenAIClient(
-                    api_key=api_key_for_init,
-                    base_url=config.base_url,
-                    timeout=config.timeout,
-                    api_version=config.api_version,
-                    custom_headers=config.custom_headers,
-                    oauth_token_manager=oauth_token_manager,  # Phase 1: Add OAuth support
-                )
-
-        return self._clients[cache_key]
+        # Delegate to ClientFactory
+        return self._client_factory.get_or_create_client(config)
 
     async def get_next_provider_api_key(self, provider_name: str) -> str:
         """Return the next provider API key using process-global round-robin.
