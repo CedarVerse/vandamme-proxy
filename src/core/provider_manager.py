@@ -51,7 +51,6 @@ from src.core.provider_config import (
     AuthMode,
     ProviderConfig,
 )
-from src.middleware import ThoughtSignatureMiddleware
 
 if TYPE_CHECKING:
     from src.core.alias_config import AliasConfigLoader
@@ -186,36 +185,14 @@ class ProviderManager(ProviderClientFactory):
         return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
     def _select_default_from_available(self) -> None:
-        """Select a default provider from available providers if original default is unavailable"""
-        if self._default_provider in self._configs:
-            return  # Original default is available
+        """Select a default provider from available providers if original default is unavailable.
 
-        if self._configs:
-            # Select the first available provider
-            original_default = self._default_provider
-            self._default_provider = list(self._configs.keys())[0]
-
-            if self.default_provider_source != "system":
-                # User configured a default but it's not available
-                logger.info(
-                    f"Using '{self._default_provider}' as default provider "
-                    f"(configured '{original_default}' not available)"
-                )
-            else:
-                # No user configuration, just pick the first available
-                logger.debug(
-                    f"Using '{self._default_provider}' as default provider "
-                    f"(first available provider)"
-                )
-        else:
-            # No providers available at all
-            provider_upper = self.default_provider.upper()
-            raise ValueError(
-                f"No providers configured. Please set at least one provider API key "
-                f"(e.g., {provider_upper}_API_KEY).\n"
-                f"Hint: If {provider_upper}_API_KEY is set in your shell, make sure to export it: "
-                f"'export {provider_upper}_API_KEY'"
-            )
+        Delegates to DefaultProviderSelector for cleaner separation of concerns.
+        Also syncs the legacy _default_provider attribute for backward compatibility.
+        """
+        selected = self._default_selector.select(dict(self._configs))  # type: ignore[arg-type]
+        # Update legacy attribute for backward compatibility
+        self._default_provider = selected
 
     # ==================== Phase 1: OAuth Token Manager ====================
 
@@ -450,36 +427,26 @@ class ProviderManager(ProviderClientFactory):
     def _initialize_middleware(self) -> None:
         """Initialize and register middleware based on loaded providers.
 
-        Uses injected middleware_config instead of runtime import to avoid
-        circular dependency with the global config singleton.
+        Delegates to MiddlewareManager for cleaner separation of concerns.
         """
-        if self._middleware_initialized:
-            return
-
-        # Register thought signature middleware if enabled
-        # Use injected config instead of runtime import
-        if self._middleware_config and self._middleware_config.gemini_thought_signatures_enabled:
-            # Create store with configuration options from injected config
-            from src.middleware.thought_signature import ThoughtSignatureStore
-
-            store = ThoughtSignatureStore(
-                max_size=self._middleware_config.thought_signature_max_cache_size,
-                ttl_seconds=self._middleware_config.thought_signature_cache_ttl,
-                cleanup_interval=self._middleware_config.thought_signature_cleanup_interval,
-            )
-            self.middleware_chain.add(ThoughtSignatureMiddleware(store=store))
-
-        self._middleware_initialized = True
+        # Delegate to MiddlewareManager
+        self._middleware_manager.initialize_sync()
+        self._middleware_initialized = self._middleware_manager.is_initialized
 
     async def initialize_middleware(self) -> None:
-        """Asynchronously initialize the middleware chain"""
-        if not self._middleware_initialized:
-            self._initialize_middleware()
-        await self.middleware_chain.initialize()
+        """Asynchronously initialize the middleware chain.
+
+        Delegates to MiddlewareManager for cleaner separation of concerns.
+        """
+        await self._middleware_manager.initialize()
+        self._middleware_initialized = self._middleware_manager.is_initialized
 
     async def cleanup_middleware(self) -> None:
-        """Cleanup middleware resources"""
-        await self.middleware_chain.cleanup()
+        """Cleanup middleware resources.
+
+        Delegates to MiddlewareManager for cleaner separation of concerns.
+        """
+        await self._middleware_manager.cleanup()
 
     def _load_default_provider(self) -> None:
         """Load the default provider configuration"""
