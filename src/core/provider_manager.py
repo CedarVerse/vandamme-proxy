@@ -505,6 +505,8 @@ class ProviderManager(ProviderClientFactory):
         )
 
         self._configs[self.default_provider] = config
+        # Also register to ProviderRegistry for delegation
+        self._registry.register(config)
 
     def _load_additional_providers(self) -> None:
         """Load additional provider configurations from environment variables and TOML"""
@@ -692,6 +694,8 @@ class ProviderManager(ProviderClientFactory):
         )
 
         self._configs[provider_name] = config
+        # Also register to ProviderRegistry for delegation
+        self._registry.register(config)
 
     def _load_provider_config(self, provider_name: str) -> None:
         """Load configuration for a specific provider (legacy method for default provider)"""
@@ -777,6 +781,8 @@ class ProviderManager(ProviderClientFactory):
         )
 
         self._configs[provider_name] = config
+        # Also register to ProviderRegistry for delegation
+        self._registry.register(config)
 
     def _get_provider_custom_headers(self, provider_prefix: str) -> dict[str, str]:
         """Get custom headers for a specific provider"""
@@ -878,16 +884,22 @@ class ProviderManager(ProviderClientFactory):
         return await self._api_key_rotator.get_next_key(provider_name, api_keys)
 
     def get_provider_config(self, provider_name: str) -> ProviderConfig | None:
-        """Get configuration for a specific provider"""
+        """Get configuration for a specific provider.
+
+        Delegates to ProviderRegistry for cleaner separation of concerns.
+        """
         if not self._loaded:
             self.load_provider_configs()
-        return self._configs.get(provider_name)
+        return self._registry.get(provider_name)
 
     def list_providers(self) -> dict[str, ProviderConfig]:
-        """List all configured providers"""
+        """List all configured providers.
+
+        Delegates to ProviderRegistry for cleaner separation of concerns.
+        """
         if not self._loaded:
             self.load_provider_configs()
-        return self._configs.copy()
+        return self._registry.list_all()
 
     def get_effective_timeout(
         self, provider_name: str, profile: "ProfileConfig | None"
