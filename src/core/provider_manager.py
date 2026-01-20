@@ -942,7 +942,10 @@ class ProviderManager(ProviderClientFactory):
         return base_config.max_retries
 
     def print_provider_summary(self) -> None:
-        """Print a summary of loaded providers"""
+        """Print a summary of loaded providers.
+
+        Delegates to ProviderRegistry for config lookups.
+        """
         if not self._loaded:
             self.load_provider_configs()
 
@@ -952,16 +955,19 @@ class ProviderManager(ProviderClientFactory):
         # Check if default provider is already in results
         default_in_results = any(r.name == self.default_provider for r in all_results)
 
-        # If not, add it from _configs
-        if not default_in_results and self.default_provider in self._configs:
-            default_config = self._configs[self.default_provider]
-            default_result = ProviderLoadResult(
-                name=self.default_provider,
-                status="success",
-                api_key_hash=self.get_api_key_hash(default_config.api_key),
-                base_url=default_config.base_url,
+        # If not, add it from registry (with fallback to _configs)
+        if not default_in_results:
+            default_config = self._registry.get(self.default_provider) or self._configs.get(
+                self.default_provider
             )
-            all_results.insert(0, default_result)  # Insert at beginning
+            if default_config:
+                default_result = ProviderLoadResult(
+                    name=self.default_provider,
+                    status="success",
+                    api_key_hash=self.get_api_key_hash(default_config.api_key),
+                    base_url=default_config.base_url,
+                )
+                all_results.insert(0, default_result)  # Insert at beginning
 
         if not all_results:
             return
@@ -978,7 +984,7 @@ class ProviderManager(ProviderClientFactory):
             default_indicator = "  * " if is_default else "    "
 
             # Check if this provider uses OAuth authentication
-            provider_config = self._configs.get(result.name)
+            provider_config = self._registry.get(result.name) or self._configs.get(result.name)
             is_oauth = provider_config and provider_config.uses_oauth
             oauth_indicator = "  🔐" if is_oauth else ""
 
