@@ -201,6 +201,7 @@ class TestAliasManagerFallback:
             mock_loader_instance = mock_config_loader.return_value
             mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
             mock_loader_instance.get_defaults.return_value = {"default-provider": "openai"}
+            mock_loader_instance.get_defaults_aliases.return_value = {}
 
             alias_manager = AliasManager()
 

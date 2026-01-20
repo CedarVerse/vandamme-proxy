@@ -34,6 +34,8 @@ class TestAliasManager:
             with patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader:
                 mock_loader_instance = mock_config_loader.return_value
                 mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
+                mock_loader_instance.get_defaults.return_value = {}
+                mock_loader_instance.get_defaults_aliases.return_value = {}
 
                 alias_manager = AliasManager()
 
@@ -56,6 +58,7 @@ class TestAliasManager:
                 mock_loader_instance = mock_config_loader.return_value
                 mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
                 mock_loader_instance.get_defaults.return_value = {}
+                mock_loader_instance.get_defaults_aliases.return_value = {}
                 alias_manager = AliasManager()
 
             aliases = alias_manager.get_all_aliases()
@@ -75,6 +78,7 @@ class TestAliasManager:
                 mock_loader_instance = mock_config_loader.return_value
                 mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
                 mock_loader_instance.get_defaults.return_value = {}
+                mock_loader_instance.get_defaults_aliases.return_value = {}
                 alias_manager = AliasManager()
 
             assert alias_manager.resolve_alias("haiku") == "poe:grok-4.1-fast"
@@ -168,6 +172,8 @@ class TestAliasManager:
             # Mock empty fallbacks to avoid interference
             mock_loader_instance = mock_config_loader.return_value
             mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
+            mock_loader_instance.get_defaults.return_value = {}
+            mock_loader_instance.get_defaults_aliases.return_value = {}
 
             alias_manager = AliasManager()
 
@@ -187,6 +193,7 @@ class TestAliasManager:
                 mock_loader_instance = mock_config_loader.return_value
                 mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
                 mock_loader_instance.get_defaults.return_value = {}
+                mock_loader_instance.get_defaults_aliases.return_value = {}
                 alias_manager = AliasManager()
 
             # With lazy validation, AliasManager accepts any provider alias.

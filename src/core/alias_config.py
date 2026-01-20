@@ -84,12 +84,18 @@ class AliasConfigLoader:
                     # Extract provider sections (e.g., [poe], [openai])
                     for key, value in config_data.items():
                         if key == "defaults":
-                            # Handle defaults section
+                            # Handle defaults section - preserve both flat and nested structures
                             if isinstance(value, dict):
                                 for default_key, default_value in value.items():
-                                    if isinstance(default_key, str) and isinstance(
+                                    if isinstance(default_value, dict):
+                                        # Nested dict like [defaults.aliases]
+                                        merged_config["defaults"][default_key] = (
+                                            default_value.copy()
+                                        )
+                                    elif isinstance(default_key, str) and isinstance(
                                         default_value, (str, int, float, bool)
                                     ):
+                                        # Flat value like timeout, max-retries
                                         merged_config["defaults"][default_key] = default_value
                         elif isinstance(value, dict):
                             # This is a provider configuration section
@@ -196,6 +202,19 @@ class AliasConfigLoader:
         config = self.load_config()
         defaults = config.get("defaults", {})
         return defaults if isinstance(defaults, dict) else {}  # type: ignore
+
+    def get_defaults_aliases(self) -> dict[str, str]:
+        """Get global aliases from [defaults.aliases].
+
+        Returns:
+            Dictionary of alias name -> target model mappings
+        """
+        config = self.load_config()
+        defaults = config.get("defaults", {})
+        if isinstance(defaults, dict):
+            aliases = defaults.get("aliases", {})
+            return aliases if isinstance(aliases, dict) else {}
+        return {}
 
     def get_provider_config(self, provider_name: str) -> dict[str, Any]:
         """Get provider-specific configuration from TOML.

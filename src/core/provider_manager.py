@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
 from src.core.client import OpenAIClient
+from src.core.exceptions import ConfigurationError
 from src.core.protocols import ProviderClientFactory
 
 # Type ignore for local oauth module which doesn't have py.typed marker
@@ -242,6 +243,116 @@ class ProviderManager(ProviderClientFactory):
 
         return auth_mode
 
+    # ==================== Configuration Fallback Helpers ====================
+
+    @staticmethod
+    def _get_config_with_fallback(
+        toml_config: dict[str, Any],
+        key: str,
+        env_var: str,
+        defaults_section: dict[str, Any],
+        provider_name: str,
+    ) -> int:
+        """Get config value with fallback: env -> provider -> defaults -> fail fast.
+
+        Special values:
+        - 0 means "disabled" (e.g., no timeout, no retries) - valid and respected
+        - None/null is invalid and raises ConfigurationError
+        - If no value is found after checking all sources, raises ConfigurationError
+
+        Args:
+            toml_config: Provider-specific TOML config dict
+            key: Config key to look up (e.g., "timeout", "max-retries")
+            env_var: Environment variable name (e.g., "REQUEST_TIMEOUT")
+            defaults_section: The [defaults] section from TOML
+            provider_name: Name of the provider (for error messages)
+
+        Returns:
+            The resolved integer value
+
+        Raises:
+            ConfigurationError: If value is None/null, negative, or not defined
+        """
+
+        def parse_value(value: str | int | None, source: str) -> int | None:
+            """Parse and validate a config value.
+
+            Args:
+                value: The value to parse (int, str, or None)
+                source: Description of where the value came from (for error messages)
+
+            Returns:
+                The parsed integer value, or None if value is None
+
+            Raises:
+                ConfigurationError: If value is None/null, negative, or invalid
+            """
+            if value is None:
+                return None  # Caller will fall through to next source
+
+            if isinstance(value, int):
+                if value < 0:
+                    raise ConfigurationError(
+                        f"Invalid {key} value in {source}: {value}. "
+                        "Must be a non-negative integer "
+                        "(0 disables the feature, null is an error)."
+                    )
+                return value
+
+            if isinstance(value, str):
+                value = value.strip()
+                if value.lower() == "null":
+                    raise ConfigurationError(
+                        f"Invalid {key} value in {source}: 'null'. "
+                        f"Use 0 to disable {key}, or remove the key to use fallback values."
+                    )
+                try:
+                    int_value = int(value)
+                    if int_value < 0:
+                        raise ConfigurationError(
+                            f"Invalid {key} value in {source}: {int_value}. "
+                            f"Must be a non-negative integer."
+                        )
+                    return int_value
+                except ValueError as e:
+                    raise ConfigurationError(
+                        f"Invalid {key} value in {source}: '{value}'. "
+                        f"Must be an integer (0 to disable, or a positive number)."
+                    ) from e
+
+            return None
+
+        # 1. Environment variable (highest priority)
+        env_value = os.environ.get(env_var)
+        if env_value is not None:
+            result = parse_value(env_value, f"environment variable {env_var}")
+            if result is not None:
+                return result
+
+        # 2. Provider-level TOML config
+        provider_value = toml_config.get(key)
+        if provider_value is not None:
+            result = parse_value(provider_value, f"[{provider_name}] {key}")
+            if result is not None:
+                return result
+
+        # 3. [defaults] section fallback
+        defaults_value = defaults_section.get(key)
+        if defaults_value is not None:
+            result = parse_value(defaults_value, f"[defaults] {key}")
+            if result is not None:
+                return result
+
+        # 4. No value found - fail fast with helpful error
+        raise ConfigurationError(
+            f"Required configuration '{key}' not found for provider '{provider_name}'. "
+            f"Please define it in one of:\n"
+            f"  1. Environment variable: {env_var}\n"
+            f"  2. Provider config: [{provider_name}] {key} = <value>\n"
+            f"  3. Global defaults: [defaults] {key} = <value>\n"
+            f"Use 0 to disable {key}, or a positive integer to enable it."
+        )
+
     def load_provider_configs(self) -> None:
         """Load all provider configurations from environment variables"""
         if self._loaded:
@@ -357,8 +468,20 @@ class ProviderManager(ProviderClientFactory):
             api_keys=api_keys if len(api_keys) > 1 else None,
             base_url=base_url,
             api_version=api_version,
-            timeout=int(os.environ.get("REQUEST_TIMEOUT", "90")),
-            max_retries=int(os.environ.get("MAX_RETRIES", "2")),
+            timeout=self._get_config_with_fallback(
+                toml_config=toml_config,
+                key="timeout",
+                env_var="REQUEST_TIMEOUT",
+                defaults_section=self._get_alias_config_loader().get_defaults(),
+                provider_name=self.default_provider,
+            ),
+            max_retries=self._get_config_with_fallback(
+                toml_config=toml_config,
+                key="max-retries",
+                env_var="MAX_RETRIES",
+                defaults_section=self._get_alias_config_loader().get_defaults(),
+                provider_name=self.default_provider,
+            ),
             custom_headers=self._get_provider_custom_headers(self.default_provider.upper()),
             tool_name_sanitization=bool(
                 self._load_provider_toml_config(self.default_provider).get(
@@ -513,8 +636,22 @@ class ProviderManager(ProviderClientFactory):
         if api_format not in ["openai", "anthropic"]:
             api_format = "openai"  # Default to openai if invalid
 
-        timeout = int(os.environ.get("REQUEST_TIMEOUT", toml_config.get("timeout", "90")))
-        max_retries = int(os.environ.get("MAX_RETRIES", toml_config.get("max-retries", "2")))
+        # Load timeout and max-retries with fallback chain
+        defaults_section = self._get_alias_config_loader().get_defaults()
+        timeout = self._get_config_with_fallback(
+            toml_config=toml_config,
+            key="timeout",
+            env_var="REQUEST_TIMEOUT",
+            defaults_section=defaults_section,
+            provider_name=provider_name,
+        )
+        max_retries = self._get_config_with_fallback(
+            toml_config=toml_config,
+            key="max-retries",
+            env_var="MAX_RETRIES",
+            defaults_section=defaults_section,
+            provider_name=provider_name,
+        )
 
         # Create result for successful configuration
         result = ProviderLoadResult(
@@ -594,8 +731,22 @@ class ProviderManager(ProviderClientFactory):
         if api_format not in ["openai", "anthropic"]:
             api_format = "openai"  # Default to openai if invalid
 
-        timeout = int(os.environ.get("REQUEST_TIMEOUT", toml_config.get("timeout", "90")))
-        max_retries = int(os.environ.get("MAX_RETRIES", toml_config.get("max-retries", "2")))
+        # Load timeout and max-retries with fallback chain
+        defaults_section = self._get_alias_config_loader().get_defaults()
+        timeout = self._get_config_with_fallback(
+            toml_config=toml_config,
+            key="timeout",
+            env_var="REQUEST_TIMEOUT",
+            defaults_section=defaults_section,
+            provider_name=provider_name,
+        )
+        max_retries = self._get_config_with_fallback(
+            toml_config=toml_config,
+            key="max-retries",
+            env_var="MAX_RETRIES",
+            defaults_section=defaults_section,
+            provider_name=provider_name,
+        )
 
         config = ProviderConfig(
             name=provider_name,

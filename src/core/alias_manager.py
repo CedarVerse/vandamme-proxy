@@ -189,6 +189,7 @@ class AliasManager:
         """
         self.aliases: dict[str, dict[str, str]] = {}  # {provider: {alias_name: target_model}}
         self._fallback_aliases: dict[str, dict[str, str]] = {}  # Cached fallback config
+        self._defaults_aliases: dict[str, str] = {}  # Global defaults.aliases from TOML
         self._default_provider: str | None = None  # Lazily loaded
         self._loaded: bool = False  # Track whether loading has occurred
 
@@ -299,7 +300,11 @@ class AliasManager:
         return True
 
     def _load_fallback_aliases(self) -> None:
-        """Load fallback aliases from TOML configuration files."""
+        """Load fallback aliases from TOML configuration files.
+
+        Loads both provider-specific aliases from [provider.aliases] sections
+        and global fallback aliases from [defaults.aliases] section.
+        """
         try:
             from src.core.alias_config import AliasConfigLoader
 
@@ -316,12 +321,22 @@ class AliasManager:
                         fallback_aliases[provider_name] = aliases
 
             self._fallback_aliases = fallback_aliases
+
+            # Load global defaults.aliases
+            self._defaults_aliases = loader.get_defaults_aliases()
+
             if self._fallback_aliases:
                 total_fallback = sum(len(aliases) for aliases in self._fallback_aliases.values())
                 logger.debug(f"Loaded {total_fallback} fallback aliases from configuration")
+            if self._defaults_aliases:
+                logger.debug(
+                    f"Loaded {len(self._defaults_aliases)} global default aliases "
+                    f"from [defaults.aliases]"
+                )
         except ImportError as e:
             logger.debug(f"Could not import AliasConfigLoader: {e}")
             self._fallback_aliases = {}
+            self._defaults_aliases = {}
         except Exception as e:
             # Check if this is a TOML decode error (tomli raises Exception subclass)
             error_type = type(e).__name__
@@ -331,9 +346,11 @@ class AliasManager:
             elif "FileNotFoundError" in error_type or "NotFoundError" in error_type:
                 logger.debug("No fallback config file found, using empty fallbacks")
                 self._fallback_aliases = {}
+                self._defaults_aliases = {}
             else:
                 logger.warning(f"Failed to load fallback aliases: {e}")
                 self._fallback_aliases = {}
+                self._defaults_aliases = {}
 
     def _merge_fallback_aliases(self) -> None:
         """Merge fallback aliases for any missing configurations.
@@ -379,6 +396,22 @@ class AliasManager:
                 if alias not in self.aliases[provider]:
                     self.aliases[provider][alias] = target
                     logger.debug(f"Applied fallback alias: {provider}:{alias} -> {target}")
+
+        # Apply global defaults.aliases to all configured providers
+        # These have the lowest priority: env var > provider fallback > defaults.aliases
+        if self._defaults_aliases:
+            for provider in available_providers:
+                # Initialize provider dict if needed
+                if provider not in self.aliases:
+                    self.aliases[provider] = {}
+
+                # Add default aliases that weren't explicitly configured or in provider fallback
+                for alias, target in self._defaults_aliases.items():
+                    if alias not in self.aliases[provider]:
+                        self.aliases[provider][alias] = target
+                        logger.debug(
+                            f"Applied global default alias: {provider}:{alias} -> {target}"
+                        )
 
     def _recursively_resolve(self, initial_model: str) -> tuple[str, int]:
         """

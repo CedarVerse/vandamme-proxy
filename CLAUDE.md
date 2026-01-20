@@ -369,12 +369,18 @@ Server Settings:
 Performance:
 - `MAX_TOKENS_LIMIT` - Maximum tokens (default: 4096)
 - `MIN_TOKENS_LIMIT` - Minimum tokens (default: 100)
-- `REQUEST_TIMEOUT` - Request timeout in seconds for non-streaming requests (default: 90)
+- `REQUEST_TIMEOUT` - Request timeout in seconds for non-streaming requests
+  - Precedence: env var → provider TOML → `[defaults]` → error
+  - Set to 0 to disable timeout (no wait limit)
+  - Default in `[defaults]` section: 90
 - `STREAMING_READ_TIMEOUT_SECONDS` - Read timeout for streaming SSE requests (default: None/disabled)
   - Set to a high value (e.g., 600) to allow long-running streaming responses
   - If unset, streaming reads have no timeout (recommended for SSE)
 - `STREAMING_CONNECT_TIMEOUT_SECONDS` - Connect timeout for streaming requests (default: 30)
-- `MAX_RETRIES` - Retry attempts (default: 2)
+- `MAX_RETRIES` - Retry attempts
+  - Precedence: env var → provider TOML → `[defaults]` → error
+  - Set to 0 to disable retries (fail immediately)
+  - Default in `[defaults]` section: 2
 
 Middleware Configuration:
 - `GEMINI_THOUGHT_SIGNATURES_ENABLED` - Enable thought signature middleware for Google Gemini (default: true)
@@ -528,13 +534,20 @@ Model aliases provide flexible model selection with case-insensitive substring m
 
    ```toml
    # vandamme-config.toml example
-   [poe]
-   base-url = "https://api.poe.com"
-   timeout = 60
+
+   # Provider-specific aliases (override defaults.aliases)
    [poe.aliases]
    haiku = "my-custom-haiku"
    sonnet = "my-preferred-sonnet"
+
+   # Global fallback aliases (used when provider has no alias)
+   [defaults.aliases]
+   common = "openai:gpt-4o"
+   haiku = "fallback-haiku-model"
    ```
+
+**Precedence order:**
+   `{PROVIDER}_ALIAS_{NAME}` env → `[provider.aliases]` → `[defaults.aliases]` → not found
 
 #### Built-in Fallback Aliases
 

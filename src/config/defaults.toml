@@ -7,9 +7,15 @@
 # Can be overridden by VDM_DEFAULT_PROVIDER environment variable
 default-provider = "poe"
 
-# TODO - Fallback values, in case a key isn't defined at the provider level
+# Global fallback values for providers
+# These are used when a provider doesn't define its own value.
+# Precedence: environment variable > provider config > defaults > error
 timeout = 90
 max-retries = 2
+
+# Global fallback aliases that apply to all providers
+# These are used when a provider doesn't have a provider-specific alias.
+# Precedence: {PROVIDER}_ALIAS_{NAME} env > [provider.aliases] > [defaults.aliases] > not found
 [defaults.aliases]
 per-message = "poe:per-message"
 haiku = "zai:GLM-4.5-Air"
