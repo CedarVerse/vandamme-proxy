@@ -6,6 +6,15 @@ API key rotation.
 
 The ProviderManager implements the ProviderClientFactory protocol for
 clean dependency inversion, eliminating circular imports.
+
+Architecture:
+    ProviderManager is a facade that delegates to focused components:
+    - ProviderRegistry: Store and retrieve provider configurations
+    - ApiKeyRotator: Thread-safe round-robin API key rotation
+    - ClientFactory: Create and cache API client instances
+    - DefaultProviderSelector: Select default provider with fallback
+    - MiddlewareManager: Manage middleware chain lifecycle
+    - ProviderConfigLoader: Load provider configs from env and TOML
 """
 
 import asyncio
@@ -19,6 +28,14 @@ from typing import TYPE_CHECKING, Any, Union
 from src.core.client import OpenAIClient
 from src.core.exceptions import ConfigurationError
 from src.core.protocols import ProviderClientFactory
+from src.core.provider import (  # noqa: F401 (will be used in Phase 1)
+    ApiKeyRotator,
+    ClientFactory,
+    DefaultProviderSelector,
+    MiddlewareManager,
+    ProviderConfigLoader,
+    ProviderRegistry,
+)
 
 # Type ignore for local oauth module which doesn't have py.typed marker
 try:
@@ -34,7 +51,7 @@ from src.core.provider_config import (
     AuthMode,
     ProviderConfig,
 )
-from src.middleware import MiddlewareChain, ThoughtSignatureMiddleware
+from src.middleware import ThoughtSignatureMiddleware
 
 if TYPE_CHECKING:
     from src.core.alias_config import AliasConfigLoader
@@ -61,7 +78,15 @@ class ProviderLoadResult:
 
 
 class ProviderManager(ProviderClientFactory):
-    """Manages multiple OpenAI clients for different providers.
+    """Facade for provider management using focused components.
+
+    This class coordinates the following components:
+    - ProviderRegistry: Stores and retrieves provider configurations
+    - ApiKeyRotator: Manages thread-safe API key rotation
+    - ClientFactory: Creates and caches API client instances
+    - DefaultProviderSelector: Selects default provider with fallback
+    - MiddlewareManager: Manages middleware chain lifecycle
+    - ProviderConfigLoader: Loads provider configs from env and TOML
 
     The provider manager can be configured with an optional MiddlewareConfig
     to avoid circular dependencies with the global config singleton.
@@ -77,30 +102,42 @@ class ProviderManager(ProviderClientFactory):
         middleware_config: "MiddlewareConfig | None" = None,
         profile_manager: "ProfileManager | None" = None,
         provider_resolver: "Any" = None,  # ProviderResolver, but use Any to avoid circular import
+        # Component injection (optional, for testing)
+        registry: "ProviderRegistry | None" = None,
+        api_key_rotator: "ApiKeyRotator | None" = None,
+        client_factory: "ClientFactory | None" = None,
+        default_selector: "DefaultProviderSelector | None" = None,
+        middleware_manager: "MiddlewareManager | None" = None,
+        config_loader: "ProviderConfigLoader | None" = None,
     ) -> None:
-        # Use provided default_provider or fall back to "openai" for backward compatibility
-        self._default_provider = default_provider if default_provider is not None else "openai"
-        self.default_provider_source = default_provider_source or "system"
+        # Store dependencies
+        self._profile_manager = profile_manager
+        self._provider_resolver = provider_resolver
+
+        # Initialize components (or inject for testing)
+        self._registry = registry or ProviderRegistry()
+        self._api_key_rotator = api_key_rotator or ApiKeyRotator()
+        self._client_factory = client_factory or ClientFactory()
+        self._middleware_manager = middleware_manager or MiddlewareManager(middleware_config)
+        self._config_loader = config_loader or ProviderConfigLoader()
+
+        # Default provider selection
+        default = default_provider if default_provider is not None else "openai"
+        self._default_selector = default_selector or DefaultProviderSelector(
+            default_provider=default,
+            source=default_provider_source or "system",
+        )
+
+        # Legacy state (kept for backward compatibility during refactoring)
+        # TODO: Remove after Phase 2 when all methods delegate to components
+        self._default_provider = default  # Compatibility shim
         self._clients: dict[str, OpenAIClient | AnthropicClient] = {}
         self._configs: dict[str, ProviderConfig] = {}
         self._loaded = False
         self._load_results: list[ProviderLoadResult] = []
-
-        # Process-global API key rotation state (per provider)
         self._api_key_locks: dict[str, asyncio.Lock] = {}
         self._api_key_indices: dict[str, int] = {}
-
-        # Store middleware config explicitly (dependency injection)
-        self._middleware_config = middleware_config
-
-        # Store profile manager reference
-        self._profile_manager = profile_manager
-
-        # Store provider resolver for delegated operations
-        self._provider_resolver = provider_resolver
-
-        # Initialize middleware chain
-        self.middleware_chain = MiddlewareChain()
+        self.middleware_chain = self._middleware_manager.middleware_chain
         self._middleware_initialized = False
 
     @property
@@ -111,7 +148,23 @@ class ProviderManager(ProviderClientFactory):
         It can be modified internally by _select_default_from_available()
         but appears read-only to external code.
         """
-        return self._default_provider
+        return self._default_selector.actual_default or self._default_selector.configured_default
+
+    @property
+    def default_provider_source(self) -> str:
+        """Get the source of the default provider configuration.
+
+        This is a compatibility property during refactoring.
+        """
+        return self._default_selector._source
+
+    @property
+    def _middleware_config(self) -> "Any | None":  # MiddlewareConfig | None
+        """Get middleware config (compatibility shim).
+
+        This is a compatibility property during refactoring.
+        """
+        return self._middleware_manager._config
 
     @property
     def profile_manager(self) -> "ProfileManager | None":
