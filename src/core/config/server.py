@@ -22,11 +22,13 @@ class ServerConfig:
         host: Server host address to bind to
         port: Server port number
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        strict_profile_validation: Fail startup on profile validation errors
     """
 
     host: str
     port: int
     log_level: str
+    strict_profile_validation: bool
 
 
 class ServerSettings:
@@ -52,4 +54,5 @@ class ServerSettings:
             host=load_env_var(ConfigSchema.HOST),
             port=load_env_var(ConfigSchema.PORT),
             log_level=load_env_var(ConfigSchema.LOG_LEVEL),
+            strict_profile_validation=load_env_var(ConfigSchema.VDM_STRICT_PROFILE_VALIDATION),
         )

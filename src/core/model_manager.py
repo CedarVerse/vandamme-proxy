@@ -14,6 +14,7 @@ from src.core.protocols import ConfigProvider, ModelResolver
 
 if TYPE_CHECKING:
     from src.core.alias_manager import AliasManager
+    from src.core.profile_config import ProfileConfig
 
 logger = logging.getLogger(__name__)
 
@@ -52,19 +53,36 @@ class ModelManager(ModelResolver):
         """Resolve model name to (provider, actual_model)
 
         Resolution process:
-        1. Determine provider context (from explicit prefix or default provider)
-        2. Apply alias resolution scoped to that provider (if aliases are configured)
-        3. Parse provider prefix from resolved value
-        4. Return provider and actual model name
+        1. Check for profile prefix (profiles take precedence over providers)
+        2. If profile prefix, use profile's aliases for resolution
+        3. Otherwise, use existing alias resolution logic
+        4. Parse provider prefix from resolved value
+        5. Return provider and actual model name
 
         Returns:
             Tuple[str, str]: (provider_name, actual_model_name)
         """
         logger.debug(f"Starting model resolution for: '{model}'")
 
+        # NEW: Check for profile prefix FIRST (before provider)
+        profile: ProfileConfig | None = None
+        if ":" in model:
+            potential_profile, model_part = model.split(":", 1)
+            profile_manager = getattr(self.provider_manager, "profile_manager", None)
+            if profile_manager and profile_manager.is_profile(potential_profile):
+                profile = profile_manager.get_profile(potential_profile)
+                logger.debug(f"Using profile '{profile.name}' for model resolution")
+                # Continue with model_part for alias resolution
+                model = model_part
+
         # Apply alias resolution if available
         resolved_model = model
-        if self.alias_manager and self.alias_manager.has_aliases():
+
+        # NEW: Check profile aliases first if a profile is active
+        if profile and model.lower() in profile.aliases:
+            resolved_model = profile.aliases[model.lower()]
+            logger.debug(f"[ModelManager] Profile alias resolved: '{model}' -> '{resolved_model}'")
+        elif self.alias_manager and self.alias_manager.has_aliases():
             # Literal model names (prefixed with '!') must bypass alias matching.
             # Still allow AliasManager to normalize into provider:model form when needed.
             if model.startswith("!"):

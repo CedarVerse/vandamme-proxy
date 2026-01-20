@@ -39,6 +39,8 @@ class TestModelManager:
         mock_provider_manager.parse_model_name.side_effect = lambda model: (
             (model.split(":", 1)[0], model.split(":", 1)[1]) if ":" in model else ("poe", model)
         )
+        # Explicitly set profile_manager to None for tests that don't use profiles
+        mock_provider_manager.profile_manager = None
 
         mock_alias_manager = Mock()
         mock_alias_manager.has_aliases.return_value = True

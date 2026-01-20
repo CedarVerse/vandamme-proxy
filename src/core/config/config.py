@@ -79,6 +79,10 @@ class Config:
     def log_level(self) -> str:
         return self._server.log_level
 
+    @property
+    def strict_profile_validation(self) -> bool:
+        return self._server.strict_profile_validation
+
     # Provider settings
     @property
     def default_provider(self) -> str:

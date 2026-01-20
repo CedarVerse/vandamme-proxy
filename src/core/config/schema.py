@@ -72,6 +72,13 @@ class ConfigSchema:
         validator=lambda x: x.upper() in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
     )
 
+    VDM_STRICT_PROFILE_VALIDATION = EnvVarSpec(
+        name="VDM_STRICT_PROFILE_VALIDATION",
+        default=True,
+        type_hint=bool,
+        description="Fail startup on profile validation errors (default: true)",
+    )
+
     # === Provider Settings ===
 
     VDM_DEFAULT_PROVIDER = EnvVarSpec(

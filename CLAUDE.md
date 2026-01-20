@@ -653,6 +653,33 @@ You can specify which provider to use per request:
    VDM_DEFAULT_PROVIDER=anthropic claude
    ```
 
+### Profile-Provider Name Collision (Intentional Feature)
+
+When a profile name matches a provider name (case-insensitive), **the profile takes precedence**. This is intentional behavior that allows custom provider overrides.
+
+**How it works:**
+- TOML uses `["#profile-name"]` syntax for visual distinction
+- The `#` is stripped during parsing (profile name stored without it)
+- Profile resolution happens BEFORE provider resolution
+- Request `name:model` checks if `name` is a profile first
+
+**Example:**
+
+```toml
+# vandamme-config.toml
+["#openai"]
+timeout = 120
+max-retries = 5
+["#openai".aliases]
+haiku = "anthropic:claude-3-5-haiku-20241022"  # Override to use Anthropic
+```
+
+With this profile:
+- `openai:haiku` → uses profile's alias → `anthropic:claude-3-5-haiku-20241022`
+- Direct `openai` provider access still works via `provider:openai:model` syntax if needed
+
+**Detection:** The proxy logs a message when profile names collide with provider names (INFO level).
+
 ### Testing Endpoints
 
 ```bash

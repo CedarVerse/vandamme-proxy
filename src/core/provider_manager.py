@@ -40,6 +40,8 @@ if TYPE_CHECKING:
     from src.core.alias_config import AliasConfigLoader
     from src.core.anthropic_client import AnthropicClient
     from src.core.config.middleware import MiddlewareConfig
+    from src.core.profile_config import ProfileConfig
+    from src.core.profile_manager import ProfileManager
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,7 @@ class ProviderManager(ProviderClientFactory):
         default_provider: str | None = None,
         default_provider_source: str | None = None,
         middleware_config: "MiddlewareConfig | None" = None,
+        profile_manager: "ProfileManager | None" = None,
     ) -> None:
         # Use provided default_provider or fall back to "openai" for backward compatibility
         self._default_provider = default_provider if default_provider is not None else "openai"
@@ -89,6 +92,9 @@ class ProviderManager(ProviderClientFactory):
         # Store middleware config explicitly (dependency injection)
         self._middleware_config = middleware_config
 
+        # Store profile manager reference
+        self._profile_manager = profile_manager
+
         # Initialize middleware chain
         self.middleware_chain = MiddlewareChain()
         self._middleware_initialized = False
@@ -102,6 +108,15 @@ class ProviderManager(ProviderClientFactory):
         but appears read-only to external code.
         """
         return self._default_provider
+
+    @property
+    def profile_manager(self) -> "ProfileManager | None":
+        """Get the profile manager instance.
+
+        Returns:
+            ProfileManager or None if not set
+        """
+        return self._profile_manager
 
     @staticmethod
     def get_api_key_hash(api_key: str) -> str:
@@ -899,6 +914,46 @@ class ProviderManager(ProviderClientFactory):
         if not self._loaded:
             self.load_provider_configs()
         return self._configs.copy()
+
+    def get_effective_timeout(
+        self, provider_name: str, profile: "ProfileConfig | None"
+    ) -> int | None:
+        """Get timeout for a provider, optionally overridden by profile.
+
+        Args:
+            provider_name: Provider to get config for
+            profile: Active profile (optional)
+
+        Returns:
+            Timeout value in seconds, or None if provider not found
+        """
+        base_config = self._configs.get(provider_name)
+        if base_config is None:
+            return None
+
+        if profile is not None and profile.timeout is not None:
+            return profile.timeout
+        return base_config.timeout
+
+    def get_effective_max_retries(
+        self, provider_name: str, profile: "ProfileConfig | None"
+    ) -> int | None:
+        """Get max-retries for a provider, optionally overridden by profile.
+
+        Args:
+            provider_name: Provider to get config for
+            profile: Active profile (optional)
+
+        Returns:
+            Max retry count, or None if provider not found
+        """
+        base_config = self._configs.get(provider_name)
+        if base_config is None:
+            return None
+
+        if profile is not None and profile.max_retries is not None:
+            return profile.max_retries
+        return base_config.max_retries
 
     def print_provider_summary(self) -> None:
         """Print a summary of loaded providers"""

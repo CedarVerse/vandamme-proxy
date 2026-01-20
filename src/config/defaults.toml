@@ -2,6 +2,60 @@
 # This file contains default configuration values and fallback aliases
 # These are used when users haven't explicitly configured them via environment variables
 
+# ============================================================================
+# PROFILES
+# ============================================================================
+# Profiles are reusable configuration presets that bundle timeout, retry, and
+# alias settings. Use profile prefix in requests: "profile-name:model"
+#
+# Profile syntax uses # prefix for visual distinction in TOML (quoted)
+# External reference omits the #: VDM_DEFAULT_PROVIDER="webdev-good"
+#
+# === PROFILE-PROVIDER COLLISION IS INTENTIONAL BEHAVIOR ===
+# When a profile name matches a provider name (case-insensitive), the profile
+# takes precedence for requests using "name:model" prefix.
+#
+# Example:
+#   TOML defines ["#openai"] profile with aliases
+#   Provider named "openai" also exists
+#   Request "openai:haiku" uses the PROFILE's aliases, not the provider's
+#
+# This allows creating custom provider overrides without changing underlying
+# provider configuration. The # prefix in TOML makes this visually distinct.
+# ============================================================================
+
+# ============================================================================
+# See https://swe-rebench.com/?insight=dec_2025 to help choose your models
+# ============================================================================
+
+
+["#webdev-good"]
+# Optimized for web development tasks
+timeout = 105
+max-retries = 4
+["#webdev-good".aliases]
+haiku = "zai:haiku"
+sonnet = "poe:gpt-5.1-codex-mini"
+opus = "nanogpt:opus"
+
+["#coding-fast"]
+# Optimized for quick coding iterations
+timeout = 60
+max-retries = 1
+["#coding-fast".aliases]
+haiku = "openai:gpt-5.1-mini"
+sonnet = "openai:gpt-5.1-codex"
+opus = "openai:gpt-5.2"
+
+["#research-deep"]
+# Optimized for deep research and reasoning
+timeout = 180
+max-retries = 5
+["#research-deep".aliases]
+haiku = "anthropic:claude-3-5-haiku-20241022"
+sonnet = "anthropic:claude-3-5-sonnet-20241022"
+opus = "anthropic:claude-3-opus-20240229"
+
 [defaults]
 # Default provider to use when not specified via environment variable
 # Can be overridden by VDM_DEFAULT_PROVIDER environment variable
@@ -94,10 +148,14 @@ base-url = "https://nano-gpt.com/api/v1"
 api-format = "openai"
 [nanogpt.aliases]
 minimax = "minimax/minimax-m2.1"
+ds = "deepseek-v3.2-thinking-original"
 kimi = "moonshotai/Kimi-K2-Instruct-0905"
+gemini-flash = "google/gemini-3-flash-preview-thinking"
 haiku = "zai-org/glm-4.7-flash-original:thinking"
 sonnet = "kimi"
 opus = "zai-org/glm-4.7-original:thinking"
+opus-e = "gemini-flash"
+docs = "ds"
 
 [agentrouter]
 base-url = "https://agentrouter.org/v1"
@@ -105,7 +163,9 @@ api-format = "openai"
 timeout = 90
 max-retries = 2
 [agentrouter.aliases]
+ds = "deepseek-v3.2"
 glm = "glm-4.6"
+docs = "ds"
 haiku = "glm"
 sonnet = "glm"
 opus = "claude-opus-4-5-20251101"

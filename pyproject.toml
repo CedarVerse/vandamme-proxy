@@ -18,7 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.115.11",
     "uvicorn>=0.34.0",

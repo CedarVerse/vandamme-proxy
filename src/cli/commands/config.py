@@ -1,5 +1,6 @@
 """Configuration management commands."""
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -99,6 +100,28 @@ def env() -> None:
             width=100,
         )
     )
+
+
+@app.command(name="reload-profiles")
+def reload_profiles_cmd() -> None:
+    """Reload profile configurations from TOML files.
+
+    Allows hot-reloading profiles without restarting the server.
+    """
+    console = Console()
+
+    async def do_reload() -> None:
+        try:
+            console.print("[dim]Reloading profiles...[/dim]")
+            from src.core.dependencies import reload_profiles
+
+            await reload_profiles()
+            console.print("[green]Profiles reloaded successfully[/green]")
+        except RuntimeError as e:
+            console.print(f"[red]Error reloading profiles: {e}[/red]")
+            raise SystemExit(1) from None
+
+    asyncio.run(do_reload())
 
 
 @app.command()

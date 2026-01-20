@@ -47,6 +47,7 @@ class AliasConfigLoader:
         Returns:
             Merged configuration dictionary with sections:
             - 'providers': {provider_name: {config_key: value, "aliases": {alias: target}}}
+            - 'profiles': {profile_name: {timeout, max-retries, aliases, source}}
             - 'defaults': {default_key: value}
         """
         global _config_cache, _configuration_logged
@@ -72,7 +73,7 @@ class AliasConfigLoader:
             )
             sys.exit(1)
 
-        merged_config: dict[str, Any] = {"providers": {}, "defaults": {}}
+        merged_config: dict[str, Any] = {"providers": {}, "profiles": {}, "defaults": {}}
 
         # Load from lowest priority to highest (so later files override earlier ones)
         for config_path in reversed(self._config_paths):
@@ -98,35 +99,74 @@ class AliasConfigLoader:
                                         # Flat value like timeout, max-retries
                                         merged_config["defaults"][default_key] = default_value
                         elif isinstance(value, dict):
-                            # This is a provider configuration section
-                            provider_name = key.lower()
+                            # Check for profile sections first (["#profile-name"])
+                            if key.startswith("#"):
+                                # Profile section: ["#webdev-good"]
+                                profile_name = key[1:]  # Strip # for storage
+                                merged_config["profiles"][profile_name] = {}
 
-                            # Initialize provider config if not exists
-                            if provider_name not in merged_config["providers"]:
-                                merged_config["providers"][provider_name] = {}
+                                profile_config = merged_config["profiles"][profile_name]
 
-                            # Extract aliases from provider.aliases section
-                            if "aliases" in value and isinstance(value["aliases"], dict):
-                                aliases_dict = merged_config["providers"][provider_name].setdefault(
-                                    "aliases", {}
-                                )
-                                for alias, target in value["aliases"].items():
-                                    if isinstance(alias, str) and isinstance(target, str):
-                                        aliases_dict[alias.lower()] = target
-
-                                # Remove aliases from provider config for cleaner structure
-                                provider_config = {k: v for k, v in value.items() if k != "aliases"}
-                            else:
-                                provider_config = value
-
-                            # Merge provider configuration (higher priority overrides)
-                            for config_key, config_value in provider_config.items():
-                                if isinstance(config_key, str) and isinstance(
-                                    config_value, (str, int, float, bool)
+                                # Copy source info (for logging/debugging)
+                                if config_path == Path.cwd() / "vandamme-config.toml":
+                                    profile_config["source"] = "local"
+                                elif (
+                                    config_path
+                                    == Path.home()
+                                    / ".config"
+                                    / "vandamme-proxy"
+                                    / "vandamme-config.toml"
                                 ):
-                                    merged_config["providers"][provider_name][config_key] = (
-                                        config_value
-                                    )
+                                    profile_config["source"] = "user"
+                                else:
+                                    profile_config["source"] = "package"
+
+                                # Extract timeout and max-retries (only if present)
+                                for setting_key in ["timeout", "max-retries"]:
+                                    if setting_key in value:
+                                        profile_config[setting_key] = value[setting_key]
+
+                                # Extract aliases from ["#profile".aliases]
+                                if "aliases" in value and isinstance(value["aliases"], dict):
+                                    profile_config["aliases"] = {
+                                        alias.lower(): target
+                                        for alias, target in value["aliases"].items()
+                                        if isinstance(alias, str) and isinstance(target, str)
+                                    }
+                                else:
+                                    profile_config["aliases"] = {}
+                            else:
+                                # This is a provider configuration section
+                                provider_name = key.lower()
+
+                                # Initialize provider config if not exists
+                                if provider_name not in merged_config["providers"]:
+                                    merged_config["providers"][provider_name] = {}
+
+                                # Extract aliases from provider.aliases section
+                                if "aliases" in value and isinstance(value["aliases"], dict):
+                                    aliases_dict = merged_config["providers"][
+                                        provider_name
+                                    ].setdefault("aliases", {})
+                                    for alias, target in value["aliases"].items():
+                                        if isinstance(alias, str) and isinstance(target, str):
+                                            aliases_dict[alias.lower()] = target
+
+                                    # Remove aliases from provider config for cleaner structure
+                                    provider_config = {
+                                        k: v for k, v in value.items() if k != "aliases"
+                                    }
+                                else:
+                                    provider_config = value
+
+                                # Merge provider configuration (higher priority overrides)
+                                for config_key, config_value in provider_config.items():
+                                    if isinstance(config_key, str) and isinstance(
+                                        config_value, (str, int, float, bool)
+                                    ):
+                                        merged_config["providers"][provider_name][config_key] = (
+                                            config_value
+                                        )
 
                     # Log which file we loaded
                     if config_path == Path.cwd() / "vandamme-config.toml":
