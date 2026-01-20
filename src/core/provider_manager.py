@@ -1,8 +1,8 @@
 """Provider management for multi-provider API support.
 
-This module provides the ProviderManager class which manages multiple
-OpenAI clients for different providers with automatic failover and
-API key rotation.
+This module provides the ProviderManager class which serves as a facade
+for managing multiple OpenAI/Anthropic clients for different providers
+with automatic failover and API key rotation.
 
 The ProviderManager implements the ProviderClientFactory protocol for
 clean dependency inversion, eliminating circular imports.
@@ -15,6 +15,9 @@ Architecture:
     - DefaultProviderSelector: Select default provider with fallback
     - MiddlewareManager: Manage middleware chain lifecycle
     - ProviderConfigLoader: Load provider configs from env and TOML
+
+Note: Configuration loading (~400 lines) remains in ProviderManager until
+ProviderConfigLoader is enhanced to support [defaults] section fallback.
 """
 
 import hashlib
@@ -26,7 +29,7 @@ from typing import TYPE_CHECKING, Any, Union
 from src.core.client import OpenAIClient
 from src.core.exceptions import ConfigurationError
 from src.core.protocols import ProviderClientFactory
-from src.core.provider import (  # noqa: F401 (will be used in Phase 1)
+from src.core.provider import (
     ApiKeyRotator,
     ClientFactory,
     DefaultProviderSelector,
@@ -34,15 +37,6 @@ from src.core.provider import (  # noqa: F401 (will be used in Phase 1)
     ProviderConfigLoader,
     ProviderRegistry,
 )
-
-# Type ignore for local oauth module which doesn't have py.typed marker
-try:
-    from src.core.oauth.storage import FileSystemAuthStorage  # type: ignore[import-untyped]
-    from src.core.oauth.tokens import TokenManager  # type: ignore[import-untyped]
-except ImportError:
-    TokenManager = None  # type: ignore[assignment, misc]
-    FileSystemAuthStorage = None  # type: ignore[assignment, misc]
-
 from src.core.provider_config import (
     OAUTH_SENTINEL,
     PASSTHROUGH_SENTINEL,
@@ -51,6 +45,8 @@ from src.core.provider_config import (
 )
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from src.core.alias_config import AliasConfigLoader
     from src.core.anthropic_client import AnthropicClient
     from src.core.config.middleware import MiddlewareConfig
@@ -59,7 +55,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded singleton for AliasConfigLoader (Phase 5)
+# Lazy-loaded singleton for AliasConfigLoader
 _alias_config_loader: "AliasConfigLoader | None" = None
 
 
@@ -160,6 +156,16 @@ class ProviderManager(ProviderClientFactory):
         This is a compatibility property during refactoring.
         """
         return self._middleware_manager._config
+
+    @property
+    def _api_key_indices(self) -> dict[str, int]:
+        """Get API key indices (compatibility shim for tests).
+
+        This is a compatibility property during refactoring.
+        Returns a copy from the internal ApiKeyRotator.
+        """
+        # Return the internal state from ApiKeyRotator for test compatibility
+        return self._api_key_rotator._indices.copy()
 
     @property
     def profile_manager(self) -> "ProfileManager | None":
