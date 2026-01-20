@@ -76,6 +76,7 @@ class ProviderManager(ProviderClientFactory):
         default_provider_source: str | None = None,
         middleware_config: "MiddlewareConfig | None" = None,
         profile_manager: "ProfileManager | None" = None,
+        provider_resolver: "Any" = None,  # ProviderResolver, but use Any to avoid circular import
     ) -> None:
         # Use provided default_provider or fall back to "openai" for backward compatibility
         self._default_provider = default_provider if default_provider is not None else "openai"
@@ -94,6 +95,9 @@ class ProviderManager(ProviderClientFactory):
 
         # Store profile manager reference
         self._profile_manager = profile_manager
+
+        # Store provider resolver for delegated operations
+        self._provider_resolver = provider_resolver
 
         # Initialize middleware chain
         self.middleware_chain = MiddlewareChain()
@@ -806,9 +810,19 @@ class ProviderManager(ProviderClientFactory):
     def parse_model_name(self, model: str) -> tuple[str, str]:
         """Parse 'provider:model' into (provider, model)
 
+        Delegates to ProviderResolver for consistency when available.
+
         Returns:
             Tuple[str, str]: (provider_name, actual_model_name)
         """
+        # Delegate to ProviderResolver if available (from dependency injection)
+        if self._provider_resolver is not None:
+            provider, actual_model = self._provider_resolver.parse_provider_prefix(model)
+            if provider is None:
+                provider = self.default_provider
+            return provider, actual_model
+
+        # Fallback to legacy implementation for backward compatibility
         if ":" in model:
             provider, actual_model = model.split(":", 1)
             return provider.lower(), actual_model

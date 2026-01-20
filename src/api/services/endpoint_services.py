@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from src.api.models.endpoint_requests import ModelsListRequest, TopModelsRequest
 from src.api.utils.yaml_formatter import format_health_yaml
 from src.core.config import Config
+from src.core.dependencies import get_provider_resolver
 from src.models.cache import ModelsDiskCache
 
 # Type alias for fetch function
@@ -119,6 +120,8 @@ class ModelsListService:
         self._config = config
         self._cache = models_cache
         self._fetch_fn = fetch_fn
+        # Get ProviderResolver from dependencies
+        self._resolver = get_provider_resolver()
 
     async def execute(
         self,
@@ -181,21 +184,28 @@ class ModelsListService:
         )
 
     def _resolve_provider(self, candidate: str | None) -> str:
-        """Resolve provider name from candidate or default."""
-        if candidate:
-            return candidate.lower()
-        return self._config.provider_manager.default_provider
+        """Resolve provider name from candidate or default.
+
+        Delegates to ProviderResolver for consistency.
+        """
+        return self._resolver.get_provider_or_default(candidate)
 
     def _validate_provider_exists(self, provider_name: str) -> None:
-        """Validate provider exists, raise 404 if not."""
+        """Validate provider exists, raise 404 if not.
+
+        Uses ProviderResolver for validation.
+        """
         all_providers = self._config.provider_manager.list_providers()
-        if provider_name not in all_providers:
+        try:
+            self._resolver.validate_provider_exists(provider_name, all_providers)
+        except ValueError as e:
+            # Convert ValueError to HTTPStatusError for API layer
             available = ", ".join(sorted(all_providers.keys()))
             raise httpx.HTTPStatusError(
                 message=f"Provider '{provider_name}' not found. Available providers: {available}",
                 request=None,  # type: ignore[arg-type]
                 response=None,  # type: ignore[arg-type]
-            )
+            ) from e
 
     def _infer_format(self, format_requested: str | None, anthropic_version: str | None) -> str:
         """Infer response format from parameters and headers."""

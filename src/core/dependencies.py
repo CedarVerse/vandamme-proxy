@@ -20,7 +20,7 @@ Usage:
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.api.services.alias_service import AliasService
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from src.core.model_manager import ModelManager
     from src.core.profile_manager import ProfileManager
     from src.core.provider_manager import ProviderManager
+    from src.core.provider_resolver import ProviderResolver
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ _provider_manager: "ProviderManager | None" = None
 _alias_manager: "AliasManager | None" = None
 _model_manager: "ModelManager | None" = None
 _alias_service: "AliasService | None" = None
+# ProviderResolver initialized after ProfileManager, before ProviderManager
+_provider_resolver: "Any" = None  # Will be ProviderResolver
 
 # Lock for thread-safe profile reloading
 _profile_reload_lock = asyncio.Lock()
@@ -68,7 +71,8 @@ def initialize_app() -> None:
         _provider_manager, \
         _alias_manager, \
         _model_manager, \
-        _alias_service
+        _alias_service, \
+        _provider_resolver
 
     # Guard against double initialization
     if _config is not None:
@@ -92,6 +96,15 @@ def initialize_app() -> None:
     _profile_manager.load_profiles(toml_config.get("profiles", {}))
     logger.debug("ProfileManager initialized")
 
+    # Step 2.5: Initialize ProviderResolver (depends on ProfileManager)
+    from src.core.provider_resolver import ProviderResolver
+
+    _provider_resolver = ProviderResolver(
+        default_provider=_config.default_provider,
+        profile_manager=_profile_manager,
+    )
+    logger.debug("ProviderResolver initialized")
+
     # Step 3: Initialize ProviderManager (depends on Config and ProfileManager)
     from src.core.config.middleware import MiddlewareConfig
     from src.core.provider_manager import ProviderManager
@@ -109,6 +122,7 @@ def initialize_app() -> None:
         default_provider_source=_config.default_provider_source,
         middleware_config=middleware_dto,
         profile_manager=_profile_manager,  # Pass ProfileManager
+        provider_resolver=_provider_resolver,  # Pass ProviderResolver for delegated operations
     )
     _provider_manager.load_provider_configs()
     logger.debug("ProviderManager initialized")
@@ -252,6 +266,21 @@ def get_alias_service() -> "AliasService":
     if _alias_service is None:
         raise RuntimeError("AliasService not initialized. Call initialize_app() first.")
     return _alias_service
+
+
+def get_provider_resolver() -> "ProviderResolver":
+    """Get the global ProviderResolver instance.
+
+    Returns:
+        The ProviderResolver singleton.
+
+    Raises:
+        RuntimeError: If initialize_app() has not been called.
+    """
+    if _provider_resolver is None:
+        raise RuntimeError("ProviderResolver not initialized. Call initialize_app() first.")
+    # Cast needed because _provider_resolver is typed as Any to avoid circular import
+    return _provider_resolver  # type: ignore[no-any-return]
 
 
 async def reload_profiles() -> None:

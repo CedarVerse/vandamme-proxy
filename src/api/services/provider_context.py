@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException
 
 from src.core.config import Config
+from src.core.dependencies import get_provider_resolver
 from src.core.model_manager import ModelManager
 from src.core.provider_config import ProviderConfig
 
@@ -44,6 +45,14 @@ async def resolve_provider_context(
 
     provider_config = config.provider_manager.get_provider_config(provider_name)
     if provider_config is None:
+        # Use ProviderResolver for consistent error messaging
+        resolver = get_provider_resolver()
+        available = config.provider_manager.list_providers()
+        try:
+            resolver.validate_provider_exists(provider_name, available)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from None
+        # Should not reach here, but just in case
         raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found")
 
     if provider_config.uses_passthrough and not client_api_key:

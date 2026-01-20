@@ -40,6 +40,36 @@ class ChatCompletionsHandler(ABC):
     ) -> JSONResponse | StreamingResponse:
         """Handle a chat completions request.
 
+        TODO: Refactor handle() to use context objects (parameter explosion).
+        Current: 13 parameters
+        Target: 2 parameters (ctx: ChatCompletionsContext, metrics_ctx: MetricsContext)
+
+        Proposed design:
+            @dataclass(frozen=True)
+            class ChatCompletionsContext:
+                openai_request: dict[str, Any]
+                resolved_model: str
+                provider_name: str
+                provider_config: Any
+                provider_api_key: str | None
+                client_api_key: str | None
+                config: Any
+                openai_client: Any
+                request_id: str
+                http_request: Any
+
+            @dataclass(frozen=True)
+            class MetricsContext:
+                is_enabled: bool
+                metrics: Any
+                tracker: Any
+
+        Deferred to Phase 2 to minimize risk in initial refactoring.
+        Requires changes to:
+        - RequestOrchestrator (context creation)
+        - All handler implementations (signature change)
+        - Tests (context creation helpers)
+
         Args:
             openai_request: The OpenAI-format request dict
             resolved_model: The resolved model name

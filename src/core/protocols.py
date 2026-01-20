@@ -166,3 +166,30 @@ class MetricsCollector(Protocol):
     async def finalize_metrics(
         self, metrics: Any, response: Any, error: Exception | None
     ) -> None: ...
+
+
+@runtime_checkable
+class ProviderResolverProtocol(Protocol):
+    """Protocol for provider name resolution and validation.
+
+    Centralizes provider-related operations to eliminate duplication.
+    """
+
+    def parse_provider_prefix(self, model: str) -> tuple[str | None, str]: ...
+
+    def resolve_provider(
+        self,
+        model: str,
+        available_providers: dict[str, object],
+    ) -> tuple[str, str]: ...
+
+    def validate_provider_exists(
+        self,
+        provider_name: str,
+        available_providers: dict[str, object],
+    ) -> None: ...
+
+    def get_provider_or_default(
+        self,
+        provider_candidate: str | None,
+    ) -> str: ...
