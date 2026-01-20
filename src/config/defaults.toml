@@ -7,19 +7,9 @@
 # Can be overridden by VDM_DEFAULT_PROVIDER environment variable
 default-provider = "poe"
 
-# ChatGPT provider defaults (OAuth authentication)
-[chatgpt]
-base-url = "https://api.openai.com/v1"
-api-format = "openai"
-auth-mode = "oauth"
+# TODO - Fallback values, in case a key isn't defined at the provider level
 timeout = 90
 max-retries = 2
-[chatgpt.aliases]
-haiku = "gpt-5-mini-2025-08-07"
-sonnet = "gpt-5.2-codex"
-opus = "gpt-5.2-2025-12-11"
-
-# TODO - Fallback aliases, in case an alias isn't defined at the provider level
 [defaults.aliases]
 per-message = "poe:per-message"
 haiku = "zai:GLM-4.5-Air"
@@ -35,6 +25,18 @@ haiku = "gpt-5.1-mini"
 sonnet = "gpt-5.1-codex"
 opus = "gpt-5.2"
 extract = "gpt-4o"
+
+# ChatGPT provider defaults (OAuth authentication)
+[chatgpt]
+base-url = "https://api.openai.com/v1"
+api-format = "openai"
+auth-mode = "oauth"
+timeout = 90
+max-retries = 2
+[chatgpt.aliases]
+haiku = "gpt-5-mini-2025-08-07"
+sonnet = "gpt-5.2-codex"
+opus = "gpt-5.2-2025-12-11"
 
 # Poe provider defaults
 [poe]
@@ -61,7 +63,6 @@ extract4 = "mistral-small-3.1"
 summary = "gpt-5"
 summary2 = "gpt-5-nano"
 
-
 # OpenRouter provider defaults
 [openrouter]
 base-url = "https://openrouter.ai/api/v1"
@@ -81,6 +82,37 @@ cheap1 = "xiaomi/mimo-v2-flash:free"
 cheap2 = "openai/gpt-oss-120b:free"
 cheap3 = "qwen/qwen3-coder:free"
 top = "openai/gpt-5.2"
+
+[nanogpt]
+base-url = "https://nano-gpt.com/api/v1"
+api-format = "openai"
+[nanogpt.aliases]
+minimax = "minimax/minimax-m2.1"
+kimi = "moonshotai/Kimi-K2-Instruct-0905"
+haiku = "zai-org/glm-4.7-flash-original:thinking"
+sonnet = "kimi"
+opus = "zai-org/glm-4.7-original:thinking"
+
+[agentrouter]
+base-url = "https://agentrouter.org/v1"
+api-format = "openai"
+timeout = 90
+max-retries = 2
+[agentrouter.aliases]
+glm = "glm-4.6"
+haiku = "glm"
+sonnet = "glm"
+opus = "claude-opus-4-5-20251101"
+
+[agentroutera]
+base-url = "https://agentrouter.org"
+api-format = "anthropic"
+timeout = 90
+max-retries = 2
+[agentroutera.aliases]
+haiku = "claude-haiku-4-5-20251001"
+sonnet = "claude-sonnet-4-5-20250929"
+opus = "claude-opus-4-5-20251101"
 
 # Z.AI provider defaults (Anthropic-compatible)
 [zai]
@@ -115,6 +147,27 @@ tool-name-sanitization = true
 haiku = "kimi-k2-thinking-turbo"
 sonnet = "kimi-k2-thinking-turbo"
 opus = "kimi-k2-thinking-turbo"
+
+[deepseek]
+base-url = "https://api.deepseek.com"
+api-format = "openai"
+timeout = 90
+max-retries = 2
+[deepseek.aliases]
+haiku = "deepseek-chat"
+sonnet = "deepseek-reasoner"
+opus = "deepseek-reasoner"
+
+[longcat]
+base-url = "https://api.longcat.chat/openai/v1"
+api-format = "openai"
+# Anthropic: base-url = "https://api.longcat.chat/anthropic"
+timeout = 90
+max-retries = 2
+[longcat.aliases]
+haiku = "LongCat-Flash-Chat"
+sonnet = "LongCat-Flash-Thinking"
+opus = "LongCat-Flash-Thinking"
 
 # Anthropic provider defaults
 [anthropic]
