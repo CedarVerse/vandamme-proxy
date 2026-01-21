@@ -1,9 +1,12 @@
 """Profile management for reusable configuration presets."""
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.core.profile_config import ProfileConfig
+
+if TYPE_CHECKING:
+    from src.cli.presenters.profiles import ProfileSummary
 
 logger = logging.getLogger(__name__)
 
@@ -122,3 +125,27 @@ class ProfileManager:
                 collisions.append(msg)
 
         return collisions
+
+    def get_profile_summary(self) -> "ProfileSummary":
+        """Get structured profile summary for presentation.
+
+        Returns:
+            ProfileSummary with all display data (no formatting).
+        """
+        from src.cli.presenters.profiles import ProfileInfo, ProfileSummary
+
+        profiles_info = []
+        for name in self.list_profiles():
+            profile = self.get_profile(name)
+            if profile:
+                profiles_info.append(
+                    ProfileInfo(
+                        name=profile.name,
+                        timeout=profile.timeout,
+                        max_retries=profile.max_retries,
+                        alias_count=len(profile.aliases),
+                        source=profile.source,
+                    )
+                )
+
+        return ProfileSummary(total_profiles=len(profiles_info), profiles=tuple(profiles_info))

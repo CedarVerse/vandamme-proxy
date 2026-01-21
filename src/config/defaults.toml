@@ -28,44 +28,16 @@
 # See https://swe-rebench.com/?insight=dec_2025 to help choose your models
 # ============================================================================
 
-
-["#webdev-good"]
-# Optimized for web development tasks
-timeout = 105
-max-retries = 4
-["#webdev-good".aliases]
-haiku = "zai:haiku"
-sonnet = "poe:gpt-5.1-codex-mini"
-opus = "nanogpt:opus"
-
-["#coding-fast"]
-# Optimized for quick coding iterations
-timeout = 60
-max-retries = 1
-["#coding-fast".aliases]
-haiku = "openai:gpt-5.1-mini"
-sonnet = "openai:gpt-5.1-codex"
-opus = "openai:gpt-5.2"
-
-["#research-deep"]
-# Optimized for deep research and reasoning
-timeout = 180
-max-retries = 5
-["#research-deep".aliases]
-haiku = "anthropic:claude-3-5-haiku-20241022"
-sonnet = "anthropic:claude-3-5-sonnet-20241022"
-opus = "anthropic:claude-3-opus-20240229"
-
 [defaults]
 # Default provider to use when not specified via environment variable
 # Can be overridden by VDM_DEFAULT_PROVIDER environment variable
-default-provider = "poe"
+default-provider = "top"
 
 # Global fallback values for providers
 # These are used when a provider doesn't define its own value.
 # Precedence: environment variable > provider config > defaults > error
 timeout = 90
-max-retries = 2
+max-retries = 3
 
 # Global fallback aliases that apply to all providers
 # These are used when a provider doesn't have a provider-specific alias.
@@ -73,6 +45,31 @@ max-retries = 2
 [defaults.aliases]
 per-message = "poe:per-message"
 haiku = "zai:GLM-4.5-Air"
+docs = "!poe:ds"
+
+# ============================================================================
+# Profiles
+# ============================================================================
+
+["#main"]
+timeout = 100
+["#main".aliases]
+haiku = "zai:haiku"
+sonnet = "poe:gemini-flash"
+opus = "agentrouter:opus"
+
+["#top"]
+# Optimized for quick coding iterations
+timeout = 120
+max-retries = 4
+["#top".aliases]
+haiku = "zai:opus"
+sonnet = "poe:gemini-flash"
+opus = "agentrouter:opus"
+
+# ============================================================================
+# Providers
+# ============================================================================
 
 # OpenAI provider defaults
 [openai]
@@ -113,6 +110,9 @@ opus = "gpt-5.1-codex-max"
 cheap = "grok-4.1-fast-reasoning"
 fast = "grok-4.1-fast-non-reasoning"
 top = "gpt-5.2"
+gemini-flash = "gemini-3-flash"
+ds = "deepseek-v3.2"
+docs = "ds"
 per-message = "glm-4.7"
 # https://www.prollm.ai/leaderboard/entity-extraction
 extract  = "claude-sonnet-4"

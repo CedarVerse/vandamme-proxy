@@ -59,13 +59,21 @@ def start(
         # Show provider summary
         cfg.provider_manager.print_provider_summary()
 
+        # Show profile summary
+        profile_manager = cfg.provider_manager.profile_manager
+        if profile_manager:
+            from src.cli.presenters.profiles import ProfileSummaryPresenter
+
+            profile_presenter = ProfileSummaryPresenter(console=console)
+            profile_presenter.present_summary(profile_manager.get_profile_summary())
+
         # Show alias summary using presenter pattern
         if cfg.alias_service:
             from src.cli.presenters.aliases import AliasSummaryPresenter
 
             summary = cfg.alias_service.get_alias_summary(cfg.default_provider)
-            presenter = AliasSummaryPresenter(console=console)
-            presenter.present_summary(summary)
+            alias_presenter = AliasSummaryPresenter(console=console)
+            alias_presenter.present_summary(summary)
 
     if daemon:
         _start_daemon(server_host, server_port, pid_file)
