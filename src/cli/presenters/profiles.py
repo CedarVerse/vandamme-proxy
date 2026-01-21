@@ -37,8 +37,17 @@ class ProfileSummaryPresenter:
     def __init__(self, console: Console | None = None):
         self.console = console or Console()
 
-    def present_summary(self, summary: ProfileSummary) -> None:
-        """Display profile summary with color formatting."""
+    def present_summary(
+        self,
+        summary: ProfileSummary,
+        active_profile_name: str | None = None,
+    ) -> None:
+        """Display profile summary with color formatting.
+
+        Args:
+            summary: ProfileSummary data with all profiles to display
+            active_profile_name: Name of the active/default profile, if any
+        """
         if summary.total_profiles == 0:
             return
 
@@ -52,6 +61,16 @@ class ProfileSummaryPresenter:
         table.add_column("Source", width=10)
 
         for profile in summary.profiles:
+            # Determine if this is the active profile
+            is_active = (
+                active_profile_name is not None
+                and profile.name.lower() == active_profile_name.lower()
+            )
+            active_indicator = "* " if is_active else "  "
+
+            # Format name with active indicator
+            name_display = f"{active_indicator}{profile.name}"
+
             timeout_display = f"{profile.timeout}s" if profile.timeout else "[dim]inherited[/dim]"
             retries_display = (
                 str(profile.max_retries) if profile.max_retries else "[dim]inherited[/dim]"
@@ -61,7 +80,7 @@ class ProfileSummaryPresenter:
             source_display = f"{source_color}{profile.source}{source_reset}"
 
             table.add_row(
-                profile.name,
+                name_display,
                 timeout_display,
                 retries_display,
                 str(profile.alias_count),
