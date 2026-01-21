@@ -34,6 +34,8 @@ def test_profile_summary_with_active_profile_indicator():
     assert re.search(r"\*\s*top", output, re.IGNORECASE), "Active profile should have * indicator"
     assert "chatgpt" in output
     assert "openai" in output
+    # Legend should be present
+    assert "* = active" in output or "* = default" in output, "Legend should explain * indicator"
 
 
 @pytest.mark.unit
@@ -61,6 +63,10 @@ def test_profile_summary_without_active_profile():
     # No * indicator should be present in profile names
     assert "*chatgpt" not in output
     assert "*openai" not in output
+    # No legend should be present when there's no active profile
+    assert "* = active" not in output and "* = default" not in output, (
+        "Legend should not appear when no active profile"
+    )
 
 
 @pytest.mark.unit

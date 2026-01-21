@@ -88,3 +88,7 @@ class ProfileSummaryPresenter:
             )
 
         self.console.print(table)
+
+        # Add legend if there's an active profile
+        if active_profile_name is not None:
+            self.console.print("  * = active/default profile")
