@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from datetime import datetime
 from typing import Any, cast
 
 from fastapi import HTTPException
@@ -53,6 +54,9 @@ class OpenAIClient(OAuthClientMixin):
         # Store OAuth token manager for OAuth providers
         self._oauth_token_manager = oauth_token_manager
 
+        # Track OAuth token expiry for cache invalidation
+        self._oauth_token_expiry: datetime | None = None
+
         # Don't initialize the client yet - we'll create it per request
         # This allows us to use different API keys per request
         self._client_cache: dict[str, AsyncOpenAI | AsyncAzureOpenAI] = {}
@@ -62,6 +66,18 @@ class OpenAIClient(OAuthClientMixin):
         """Get or create a client for the specific API key"""
         # For OAuth mode, use a special cache key since API key is dynamically fetched
         cache_key = "oauth" if self._oauth_token_manager else api_key
+
+        # For OAuth: invalidate cache if token has expired
+        if (
+            self._oauth_token_manager
+            and cache_key in self._client_cache
+            and (
+                self._oauth_token_expiry is None
+                or datetime.utcnow() >= self._oauth_token_expiry.replace(tzinfo=None)
+            )
+        ):
+            # Token expired or unknown - invalidate cache
+            del self._client_cache[cache_key]
 
         # Use cache to avoid recreating clients for the same API key
         if cache_key not in self._client_cache:
@@ -175,14 +191,15 @@ class OpenAIClient(OAuthClientMixin):
             return cast(dict[str, Any], response_dict)
 
         # Use provided API key or fall back to default
-        effective_api_key = api_key or self.default_api_key
-
-        # For OAuth providers, use a placeholder value since auth is via Bearer token headers
-        # injected by _get_client(). The actual API key is fetched dynamically by OAuthClientMixin.
-        if not effective_api_key and self._oauth_token_manager:
-            effective_api_key = "oauth"
-        elif not effective_api_key:
+        effective_api_key = api_key or self._effective_api_key
+        if not effective_api_key:
             raise ValueError("No API key available for request")
+
+        # For OAuth providers, skip key rotation entirely
+        # OAuth tokens auto-refresh via TokenManager, and there's no key rotation
+        if self._oauth_token_manager:
+            # No rotation for OAuth - make single attempt
+            return await attempt_with_key(effective_api_key)
 
         attempted_keys: set[str] = set()
         while True:
@@ -244,14 +261,65 @@ class OpenAIClient(OAuthClientMixin):
         """Send streaming chat completion to OpenAI API with cancellation support."""
 
         # Use provided API key or fall back to default
-        effective_api_key = api_key or self.default_api_key
-
-        # For OAuth providers, use a placeholder value since auth is via Bearer token headers
-        # injected by _get_client(). The actual API key is fetched dynamically by OAuthClientMixin.
-        if not effective_api_key and self._oauth_token_manager:
-            effective_api_key = "oauth"
-        elif not effective_api_key:
+        effective_api_key = api_key or self._effective_api_key
+        if not effective_api_key:
             raise ValueError("No API key available for request")
+
+        # For OAuth providers, skip key rotation entirely
+        # OAuth tokens auto-refresh via TokenManager, and there's no key rotation
+        if self._oauth_token_manager:
+            # No rotation for OAuth - make single attempt
+            client = self._get_client(effective_api_key)
+
+            # Create cancellation token if request_id provided
+            if request_id:
+                cancel_event = asyncio.Event()
+                self.active_requests[request_id] = cancel_event
+
+            try:
+                # Ensure stream is enabled
+                request["stream"] = True
+                if "stream_options" not in request:
+                    request["stream_options"] = {}
+                request["stream_options"]["include_usage"] = True
+
+                # Create the streaming completion
+                streaming_completion = await client.chat.completions.create(**request)
+
+                async for chunk in streaming_completion:
+                    # Check for cancellation before yielding each chunk
+                    if (
+                        request_id
+                        and request_id in self.active_requests
+                        and self.active_requests[request_id].is_set()
+                    ):
+                        raise HTTPException(status_code=499, detail="Request cancelled by client")
+
+                    # Convert chunk to SSE format matching original HTTP client format
+                    chunk_dict = chunk.model_dump()
+                    chunk_json = json.dumps(chunk_dict, ensure_ascii=False)
+                    yield f"data: {chunk_json}"
+
+                # Success: exit rotation loop
+                yield "data: [DONE]"
+                return
+
+            except HTTPException:
+                raise
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                # Let timeout and cancellation errors propagate for SSE wrapper handling
+                logger.debug("Timeout/cancellation in streaming, propagating to SSE wrapper")
+                raise
+            except Exception as unexpected:
+                # Any other exception is truly unexpected and should be logged
+                logger.error(
+                    f"Unexpected error in streaming: {type(unexpected).__name__}: {unexpected}"
+                )
+                raise
+            finally:
+                # Clean up active request tracking
+                if request_id and request_id in self.active_requests:
+                    del self.active_requests[request_id]
 
         attempted_keys: set[str] = set()
 

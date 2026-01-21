@@ -9,6 +9,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -52,6 +53,9 @@ class AnthropicClient(OAuthClientMixin):
 
         # Store OAuth token manager for OAuth providers
         self._oauth_token_manager = oauth_token_manager
+
+        # Track OAuth token expiry for cache invalidation
+        self._oauth_token_expiry: datetime | None = None
 
         # Get streaming timeout config (None means no read timeout for SSE)
         _config = config or Config()
@@ -101,6 +105,18 @@ class AnthropicClient(OAuthClientMixin):
         cache_base = "oauth" if self._oauth_token_manager else api_key
         cache_key = f"{cache_base}_streaming" if for_streaming else cache_base
 
+        # For OAuth: invalidate cache if token has expired
+        if (
+            self._oauth_token_manager
+            and cache_key in self._client_cache
+            and (
+                self._oauth_token_expiry is None
+                or datetime.utcnow() >= self._oauth_token_expiry.replace(tzinfo=None)
+            )
+        ):
+            # Token expired or unknown - invalidate cache
+            del self._client_cache[cache_key]
+
         if cache_key not in self._client_cache:
             # Build headers for this specific API key
             headers = {
@@ -133,16 +149,77 @@ class AnthropicClient(OAuthClientMixin):
         """Send chat completion to Anthropic API with passthrough."""
         start_time = time.time()
 
-        effective_api_key = api_key or self.default_api_key
-
-        # For OAuth providers, use a placeholder value since auth is via Bearer token headers
-        # injected by _get_client(). The actual API key is fetched dynamically by OAuthClientMixin.
-        if not effective_api_key and self._oauth_token_manager:
-            effective_api_key = "oauth"
-        elif not effective_api_key:
+        effective_api_key = api_key or self._effective_api_key
+        if not effective_api_key:
             raise ValueError("No API key available for request")
 
-        attempted_keys: set[str] = set()
+        # For OAuth providers, skip key rotation entirely
+        # OAuth tokens auto-refresh via TokenManager, and there's no key rotation
+        if self._oauth_token_manager:
+            # No rotation for OAuth - make single attempt
+            attempted_keys: set[str] = {effective_api_key}
+
+            # Get client for this specific API key
+            client = self._get_client(effective_api_key)
+
+            # Log the request with API key hash (skip for OAuth)
+            if log_request_metrics():
+                conversation_logger.debug(
+                    f"📤 ANTHROPIC REQUEST | Model: {request.get('model', 'unknown')}"
+                )
+                conversation_logger.debug(f"🔑 OAUTH AUTHENTICATION @ {self.base_url}")
+
+            try:
+                # Direct API call to Anthropic-compatible endpoint
+                response = await client.post(
+                    f"{self.base_url}/v1/messages",
+                    json=request,
+                )
+
+                response.raise_for_status()
+
+                # Parse response
+                data: dict[str, Any] = response.json()
+
+                # Log timing
+                if log_request_metrics():
+                    duration_ms = (time.time() - start_time) * 1000
+                    conversation_logger.debug(
+                        f"📥 ANTHROPIC RESPONSE | Duration: {duration_ms:.0f}ms"
+                    )
+
+                return data
+
+            except httpx.HTTPStatusError as e:
+                # Try to extract structured error from JSON response
+                error_detail = "Unknown error"
+
+                # First attempt: parse as JSON
+                try:
+                    if e.response.content:
+                        error_detail = e.response.json()
+                except (json.JSONDecodeError, ValueError, TypeError) as parse_error:
+                    # Fallback: use text content
+                    logger.debug(f"Failed to parse error response as JSON: {parse_error}")
+                    try:
+                        if hasattr(e.response, "text"):
+                            error_detail = e.response.text
+                    except (AttributeError, OSError) as text_error:
+                        # Final fallback: string representation
+                        logger.warning(f"Failed to extract error response text: {text_error}")
+                        error_detail = str(e)
+
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=error_detail
+                ) from None
+
+            except HTTPException:
+                raise
+
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Anthropic API error: {str(e)}") from e
+
+        attempted_keys = set()
         while True:
             attempted_keys.add(effective_api_key)
 
@@ -226,16 +303,79 @@ class AnthropicClient(OAuthClientMixin):
     ) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to Anthropic API with SSE passthrough."""
 
-        effective_api_key = api_key or self.default_api_key
-
-        # For OAuth providers, use a placeholder value since auth is via Bearer token headers
-        # injected by _get_client(). The actual API key is fetched dynamically by OAuthClientMixin.
-        if not effective_api_key and self._oauth_token_manager:
-            effective_api_key = "oauth"
-        elif not effective_api_key:
+        effective_api_key = api_key or self._effective_api_key
+        if not effective_api_key:
             raise ValueError("No API key available for request")
 
-        attempted_keys: set[str] = set()
+        # For OAuth providers, skip key rotation entirely
+        # OAuth tokens auto-refresh via TokenManager, and there's no key rotation
+        if self._oauth_token_manager:
+            # No rotation for OAuth - make single attempt
+            attempted_keys: set[str] = {effective_api_key}
+
+            # Get streaming client for this specific API key
+            client = self._get_client(effective_api_key, for_streaming=True)
+
+            if log_request_metrics():
+                conversation_logger.debug(
+                    f"📤 ANTHROPIC STREAM | Model: {request.get('model', 'unknown')}"
+                )
+                conversation_logger.debug(f"🔑 OAUTH AUTHENTICATION @ {self.base_url}")
+
+            try:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/v1/messages",
+                    json=request,
+                ) as response:
+                    response.raise_for_status()
+
+                    # Pass through SSE events directly.
+                    # IMPORTANT: preserve line boundaries. Some downstream consumers buffer
+                    # `event:` and `data:` lines separately.
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            yield f"data: {line}\n"
+
+                    # Success: end stream and exit rotation loop
+                    yield "data: [DONE]\n"
+                    return
+
+            except httpx.HTTPStatusError as e:
+                # Try to extract structured error from JSON response
+                try:
+                    content = e.response.read()
+                    error_detail = json.loads(content.decode("utf-8")) if content else str(e)
+                except (
+                    json.JSONDecodeError,
+                    ValueError,
+                    TypeError,
+                    UnicodeDecodeError,
+                    OSError,
+                ) as parse_err:
+                    # Failed to parse error response - use string representation
+                    logger.debug(f"Failed to parse streaming error response: {parse_err}")
+                    error_detail = str(e)
+
+                raise HTTPException(
+                    status_code=e.response.status_code, detail=error_detail
+                ) from None
+
+            except HTTPException:
+                raise
+
+            # Note: Timeouts and other streaming errors should NOT be converted to
+            # HTTPException here - they will be caught by the SSE error handler wrapper
+            # in streaming.py and converted to graceful error events.
+            except Exception:
+                # Let streaming-specific errors (ReadTimeout, etc.) propagate
+                # so they can be handled by the SSE error wrapper
+                # We catch Exception broadly here because we want to preserve
+                # the original exception type for the SSE wrapper to handle
+                logger.debug("Streaming error propagating to SSE wrapper")
+                raise
+
+        attempted_keys = set()
         while True:
             attempted_keys.add(effective_api_key)
 

@@ -723,29 +723,12 @@ class TestConnectionService:
                     },
                 )
 
-            # For OAuth providers, verify authentication exists before testing
-            if provider_config and provider_config.uses_oauth:
-                # Check if OAuth token is available by triggering token retrieval
-                try:
-                    default_client = self._config.provider_manager.get_client(default_provider)
-                    # Trigger OAuth token check by accessing the token
-                    if hasattr(default_client, "_get_oauth_token"):
-                        default_client._get_oauth_token()
-                except ValueError as e:
-                    return TestConnectionResult(
-                        status=401,
-                        content={
-                            "status": "failed",
-                            "message": f"OAuth not configured for {default_provider}: {str(e)}",
-                            "provider": default_provider,
-                            "auth_mode": "oauth",
-                            "error": str(e),
-                            "suggestion": f"Run 'vdm oauth login {default_provider}' first",
-                            "timestamp": datetime.now().isoformat(),
-                        },
-                    )
-            else:
-                default_client = self._config.provider_manager.get_client(default_provider)
+            # For OAuth providers, tokens will be refreshed automatically
+            # by the client's TokenManager during the actual request.
+            # No pre-flight check needed - avoids race condition where
+            # token verified at line 733 but used at line 757 creates
+            # an expiry window for false negatives.
+            default_client = self._config.provider_manager.get_client(default_provider)
 
             # Minimal test request to verify API connectivity
             test_response = await default_client.create_chat_completion(
