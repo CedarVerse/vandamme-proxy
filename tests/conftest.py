@@ -182,6 +182,10 @@ def setup_test_environment_for_unit_tests():
             "POE_API_KEY": TEST_API_KEYS["POE"],
             "GLM_API_KEY": TEST_API_KEYS["GLM"],
             "KIMI_API_KEY": "test-kimi-key",
+            # Additional providers needed for profile validation in defaults.toml
+            # Note: 'top' is a profile name (#top), not a provider - no TOP_API_KEY needed
+            "ZAI_API_KEY": "test-zai-key",
+            "AGENTROUTER_API_KEY": "test-agentrouter-key",
             "VDM_DEFAULT_PROVIDER": DEFAULT_TEST_CONFIG["DEFAULT_PROVIDER"],
             "LOG_LEVEL": DEFAULT_TEST_CONFIG["LOG_LEVEL"],
             "LOG_REQUEST_METRICS": "true",
@@ -199,6 +203,7 @@ def setup_test_environment_for_unit_tests():
             "src.core.dependencies",
             "src.core.provider_manager",
             "src.core.provider_config",
+            "src.core.provider.client_factory",  # Needed for isinstance tests after module reload
             "src.core.client",
             "src.core.anthropic_client",
             "src.core.alias_manager",

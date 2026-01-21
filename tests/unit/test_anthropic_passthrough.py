@@ -82,12 +82,18 @@ def test_anthropic_client_selection():
         os.environ["ANTHROPIC_BASE_URL"] = "https://api.anthropic.com"
         os.environ["ANTHROPIC_API_FORMAT"] = "anthropic"
 
-        # Clear module cache and reset config
-        for module in ["src.core.provider_manager", "src.core.config"]:
+        # Clear module cache for all client-related modules to ensure fresh imports
+        for module in [
+            "src.core.provider_manager",
+            "src.core.config",
+            "src.core.client",
+            "src.core.anthropic_client",
+            "src.core.provider.client_factory",
+        ]:
             if module in sys.modules:
                 del sys.modules[module]
 
-        # Import fresh modules
+        # Import fresh modules AFTER clearing
         from src.core.provider_manager import ProviderManager
 
         manager = ProviderManager()
@@ -95,15 +101,15 @@ def test_anthropic_client_selection():
 
         # Should return OpenAI client for openai provider
         openai_client = manager.get_client("openai")
-        from src.core.client import OpenAIClient
-
-        assert isinstance(openai_client, OpenAIClient)
+        # Use duck typing instead of isinstance to avoid module reload issues
+        assert hasattr(openai_client, "create_chat_completion")
+        assert openai_client.__class__.__name__ == "OpenAIClient"
 
         # Should return Anthropic client for anthropic provider
         anthropic_client = manager.get_client("anthropic")
-        from src.core.anthropic_client import AnthropicClient
-
-        assert isinstance(anthropic_client, AnthropicClient)
+        # AnthropicClient also uses create_chat_completion for unified API
+        assert hasattr(anthropic_client, "create_chat_completion")
+        assert anthropic_client.__class__.__name__ == "AnthropicClient"
 
     finally:
         # Restore original environment
@@ -147,8 +153,14 @@ def test_models_endpoint_openai_format():
     # Store config on app.state
     app.state.config = mock_config
 
-    # Mock the fetch_models_unauthenticated function
-    with patch("src.api.endpoints.fetch_models_unauthenticated") as mock_fetch:
+    # Mock the fetch_models_unauthenticated function and ProviderResolver dependency
+    with (
+        patch("src.api.endpoints.fetch_models_unauthenticated") as mock_fetch,
+        patch("src.api.services.endpoint_services.get_provider_resolver") as mock_resolver,
+    ):
+        from src.core.provider_resolver import ProviderResolver
+
+        mock_resolver.return_value = MagicMock(spec=ProviderResolver)
         mock_fetch.return_value = {
             "object": "list",
             "data": [
