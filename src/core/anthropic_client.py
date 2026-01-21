@@ -134,7 +134,12 @@ class AnthropicClient(OAuthClientMixin):
         start_time = time.time()
 
         effective_api_key = api_key or self.default_api_key
-        if not effective_api_key:
+
+        # For OAuth providers, use a placeholder value since auth is via Bearer token headers
+        # injected by _get_client(). The actual API key is fetched dynamically by OAuthClientMixin.
+        if not effective_api_key and self._oauth_token_manager:
+            effective_api_key = "oauth"
+        elif not effective_api_key:
             raise ValueError("No API key available for request")
 
         attempted_keys: set[str] = set()
@@ -222,7 +227,12 @@ class AnthropicClient(OAuthClientMixin):
         """Send streaming chat completion to Anthropic API with SSE passthrough."""
 
         effective_api_key = api_key or self.default_api_key
-        if not effective_api_key:
+
+        # For OAuth providers, use a placeholder value since auth is via Bearer token headers
+        # injected by _get_client(). The actual API key is fetched dynamically by OAuthClientMixin.
+        if not effective_api_key and self._oauth_token_manager:
+            effective_api_key = "oauth"
+        elif not effective_api_key:
             raise ValueError("No API key available for request")
 
         attempted_keys: set[str] = set()

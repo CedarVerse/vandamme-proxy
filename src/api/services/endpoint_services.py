@@ -705,7 +705,47 @@ class TestConnectionService:
         """
         try:
             default_provider = self._config.provider_manager.default_provider
-            default_client = self._config.provider_manager.get_client(default_provider)
+            provider_config = self._config.provider_manager.get_provider_config(default_provider)
+
+            # Skip connectivity test for passthrough providers (they forward client key)
+            if provider_config and provider_config.uses_passthrough:
+                return TestConnectionResult(
+                    status=200,
+                    content={
+                        "status": "skipped",
+                        "message": (
+                            f"Provider {default_provider} uses passthrough mode - "
+                            "connectivity cannot be tested without client API key"
+                        ),
+                        "provider": default_provider,
+                        "auth_mode": "passthrough",
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
+
+            # For OAuth providers, verify authentication exists before testing
+            if provider_config and provider_config.uses_oauth:
+                # Check if OAuth token is available by triggering token retrieval
+                try:
+                    default_client = self._config.provider_manager.get_client(default_provider)
+                    # Trigger OAuth token check by accessing the token
+                    if hasattr(default_client, "_get_oauth_token"):
+                        default_client._get_oauth_token()
+                except ValueError as e:
+                    return TestConnectionResult(
+                        status=401,
+                        content={
+                            "status": "failed",
+                            "message": f"OAuth not configured for {default_provider}: {str(e)}",
+                            "provider": default_provider,
+                            "auth_mode": "oauth",
+                            "error": str(e),
+                            "suggestion": f"Run 'vdm oauth login {default_provider}' first",
+                            "timestamp": datetime.now().isoformat(),
+                        },
+                    )
+            else:
+                default_client = self._config.provider_manager.get_client(default_provider)
 
             # Minimal test request to verify API connectivity
             test_response = await default_client.create_chat_completion(
@@ -725,6 +765,7 @@ class TestConnectionService:
                         "message": f"Provider {default_provider} returned None response",
                         "provider": default_provider,
                         "error": "None response from provider",
+                        "timestamp": datetime.now().isoformat(),
                     },
                 )
 
@@ -747,19 +788,21 @@ class TestConnectionService:
             KeyError,
             AttributeError,
             TypeError,
+            ValueError,  # Catch ValueError for OAuth and other configuration issues
         ) as e:
             logger.debug(f"Connection test failed: {type(e).__name__}: {e}")
             return TestConnectionResult(
                 status=503,
                 content={
                     "status": "failed",
-                    "error_type": "API Error",
+                    "error_type": type(e).__name__,
                     "message": str(e),
                     "timestamp": datetime.now().isoformat(),
                     "suggestions": [
                         "Check your OPENAI_API_KEY is valid",
                         "Verify your API key has the necessary permissions",
                         "Check if you have reached rate limits",
+                        "For OAuth providers, run 'vdm oauth login <provider>'",
                     ],
                 },
             )
