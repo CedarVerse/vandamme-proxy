@@ -44,28 +44,32 @@ def start(
         configure_root_logging(use_systemd=False)
         console = Console()
 
+        # Detect if default_provider is a profile
+        is_default_profile = False
+        active_profile_name = None
+        profile_manager = cfg.provider_manager.profile_manager
+
+        if profile_manager and profile_manager.is_profile(cfg.default_provider):
+            is_default_profile = True
+            active_profile_name = cfg.default_provider
+
         # Show configuration only when not using systemd
         table = Table(title="Vandamme Proxy Configuration")
         table.add_column("Setting", style="cyan")
         table.add_column("Value", style="green")
 
         table.add_row("Server URL", f"http://{server_host}:{server_port}")
-        table.add_row("Default Provider", cfg.default_provider)
-        table.add_row(f"{cfg.default_provider.title()} Base URL", cfg.base_url)
-        table.add_row(f"{cfg.default_provider.title()} API Key", cfg.api_key_hash)
+
+        if is_default_profile:
+            # Show "Default Profile" instead of "Default Provider"
+            table.add_row("Default Profile", cfg.default_provider)
+        else:
+            # Show "Default Provider" with base_url and api_key
+            table.add_row("Default Provider", cfg.default_provider)
+            table.add_row(f"{cfg.default_provider.title()} Base URL", cfg.base_url)
+            table.add_row(f"{cfg.default_provider.title()} API Key", cfg.api_key_hash)
 
         console.print(table)
-
-        # Show provider summary
-        cfg.provider_manager.print_provider_summary()
-
-        # Show profile summary
-        profile_manager = cfg.provider_manager.profile_manager
-        if profile_manager:
-            from src.cli.presenters.profiles import ProfileSummaryPresenter
-
-            profile_presenter = ProfileSummaryPresenter(console=console)
-            profile_presenter.present_summary(profile_manager.get_profile_summary())
 
         # Show alias summary using presenter pattern
         if cfg.alias_service:
@@ -74,6 +78,19 @@ def start(
             summary = cfg.alias_service.get_alias_summary(cfg.default_provider)
             alias_presenter = AliasSummaryPresenter(console=console)
             alias_presenter.present_summary(summary)
+
+        # Show profile summary
+        if profile_manager:
+            from src.cli.presenters.profiles import ProfileSummaryPresenter
+
+            profile_presenter = ProfileSummaryPresenter(console=console)
+            profile_presenter.present_summary(
+                profile_manager.get_profile_summary(),
+                active_profile_name=active_profile_name,
+            )
+
+        # Show provider summary
+        cfg.provider_manager.print_provider_summary(is_default_profile=is_default_profile)
 
     if daemon:
         _start_daemon(server_host, server_port, pid_file)
