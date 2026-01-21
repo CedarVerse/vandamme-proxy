@@ -47,6 +47,8 @@ from src.core.provider_config import (
 if TYPE_CHECKING:
     from typing import Any
 
+    from rich.console import Console
+
     from src.core.alias_config import AliasConfigLoader
     from src.core.anthropic_client import AnthropicClient
     from src.core.config.middleware import MiddlewareConfig
@@ -947,11 +949,23 @@ class ProviderManager(ProviderClientFactory):
             return profile.max_retries
         return base_config.max_retries
 
-    def print_provider_summary(self) -> None:
+    def print_provider_summary(
+        self, console: "Console | None" = None, is_default_profile: bool = False
+    ) -> None:
         """Print a summary of loaded providers.
+
+        Args:
+            console: Rich Console instance for output. If None, creates a new one.
+            is_default_profile: True if the default is a profile (not a provider).
+                When True, no provider is marked with the default * indicator.
 
         Delegates to ProviderRegistry for config lookups.
         """
+        if console is None:
+            from rich.console import Console
+
+            console = Console()
+
         if not self._loaded:
             self.load_provider_configs()
 
@@ -985,8 +999,8 @@ class ProviderManager(ProviderClientFactory):
         success_count = 0
 
         for result in all_results:
-            # Check if this is the default provider
-            is_default = result.name == self.default_provider
+            # Check if this is the default provider (only when not a profile default)
+            is_default = not is_default_profile and result.name == self.default_provider
             default_indicator = "  * " if is_default else "    "
 
             # Check if this provider uses OAuth authentication
@@ -1027,7 +1041,10 @@ class ProviderManager(ProviderClientFactory):
                     print(format_str)
 
         print(f"\n{success_count} provider{'s' if success_count != 1 else ''} ready for requests")
-        print("  * = default provider")
+        if is_default_profile:
+            print("  * = default provider (profile active, no default provider)")
+        else:
+            print("  * = default provider")
         print("  🔐 = OAuth authentication")
 
     def get_load_results(self) -> list[ProviderLoadResult]:
