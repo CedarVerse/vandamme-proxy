@@ -53,24 +53,6 @@ def start(
             is_default_profile = True
             active_profile_name = cfg.default_provider
 
-        # Show configuration only when not using systemd
-        table = Table(title="Vandamme Proxy Configuration")
-        table.add_column("Setting", style="cyan")
-        table.add_column("Value", style="green")
-
-        table.add_row("Server URL", f"http://{server_host}:{server_port}")
-
-        if is_default_profile:
-            # Show "Default Profile" instead of "Default Provider"
-            table.add_row("Default Profile", cfg.default_provider)
-        else:
-            # Show "Default Provider" with base_url and api_key
-            table.add_row("Default Provider", cfg.default_provider)
-            table.add_row(f"{cfg.default_provider.title()} Base URL", cfg.base_url)
-            table.add_row(f"{cfg.default_provider.title()} API Key", cfg.api_key_hash)
-
-        console.print(table)
-
         # Show alias summary using presenter pattern
         if cfg.alias_service:
             from src.cli.presenters.aliases import AliasSummaryPresenter
@@ -91,6 +73,24 @@ def start(
 
         # Show provider summary
         cfg.provider_manager.print_provider_summary(is_default_profile=is_default_profile)
+
+        # Show configuration table (moved to end)
+        table = Table(title="Vandamme Proxy Configuration")
+        table.add_column("Setting", style="cyan")
+        table.add_column("Value", style="green")
+
+        table.add_row("Server URL", f"http://{server_host}:{server_port}")
+
+        if is_default_profile:
+            # Show "Default Profile" instead of "Default Provider"
+            table.add_row("Default Profile", cfg.default_provider)
+        else:
+            # Show "Default Provider" with base_url and api_key
+            table.add_row("Default Provider", cfg.default_provider)
+            table.add_row(f"{cfg.default_provider.title()} Base URL", cfg.base_url)
+            table.add_row(f"{cfg.default_provider.title()} API Key", cfg.api_key_hash)
+
+        console.print(table)
 
     if daemon:
         _start_daemon(server_host, server_port, pid_file)
