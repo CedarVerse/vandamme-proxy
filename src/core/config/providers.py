@@ -160,12 +160,9 @@ class ProviderSettings:
         provider, source = ProviderSettings.resolve_default_provider()
         api_key = ProviderSettings.get_provider_api_key(provider)
 
-        # Warn if explicitly configured provider has no API key
-        if not api_key and source != "system":
-            env_var = ProviderSettings._get_provider_api_key_env_var(provider)
-            logger.warning(
-                f"{env_var} not found in environment. {provider} provider will not be available."
-            )
+        # Note: Warning about missing API key is deferred to
+        # ProviderManager._load_default_provider() where ProfileManager.is_profile()
+        # is available to avoid false positives for profile names
 
         return ProviderConfig(
             default_provider=provider,

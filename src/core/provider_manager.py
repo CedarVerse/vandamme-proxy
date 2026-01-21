@@ -456,8 +456,12 @@ class ProviderManager(ProviderClientFactory):
         if not api_key:
             # For OAuth mode, empty API key is allowed
             if auth_mode != AuthMode.OAUTH:
-                # Only warn if this was explicitly configured by the user
-                if self.default_provider_source != "system":
+                # Check if this is actually a profile name before warning about provider API key
+                is_profile = self._profile_manager is not None and self._profile_manager.is_profile(
+                    self.default_provider
+                )
+                # Only warn if this was explicitly configured by the user AND is not a profile
+                if self.default_provider_source != "system" and not is_profile:
                     logger.warning(
                         f"Configured default provider '{self.default_provider}' API key not found. "
                         f"Set {provider_prefix}API_KEY to use it as default. "
