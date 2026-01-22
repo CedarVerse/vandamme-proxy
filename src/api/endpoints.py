@@ -404,6 +404,138 @@ async def fetch_models_unauthenticated(
         return response.json()  # type: ignore[no-any-return]
 
 
+# In-memory cache of providers that require authentication
+# Keys are provider names, cleared on server restart
+_providers_requiring_auth: set[str] = set()
+
+
+async def _fetch_models_authenticated(
+    base_url: str,
+    custom_headers: dict[str, str],
+    provider_config: Any,
+) -> dict[str, Any]:
+    """Fetch models from endpoint using provider's authentication.
+
+    Handles three auth modes:
+    - API_KEY: Static key from provider config
+    - OAUTH: Bearer token from TokenManager
+    - PASSTHROUGH: Not supported (raises ValueError)
+
+    Args:
+        base_url: Provider base URL
+        custom_headers: Custom headers from provider config
+        provider_config: Provider configuration with auth details
+
+    Returns:
+        Models response (dict or list)
+
+    Raises:
+        httpx.HTTPStatusError: On HTTP errors
+        ValueError: On authentication failures or unsupported mode
+    """
+    from pathlib import Path
+
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "claude-proxy/1.0.0",
+        **custom_headers,
+    }
+
+    # PASSTHROUGH mode: Can't authenticate server-side
+    if provider_config.uses_passthrough:
+        raise ValueError(
+            f"Provider '{provider_config.name}' uses passthrough mode - "
+            "model listing requires client API key. "
+            "Configure a static API key to enable server-side model listing."
+        )
+
+    # OAUTH mode: Inject Bearer token
+    if provider_config.uses_oauth:
+        from src.core.oauth.storage.file_storage import FileSystemAuthStorage
+        from src.core.oauth.tokens import TokenManager
+
+        # Create provider-specific storage path
+        storage_path = Path.home() / ".vandamme" / "oauth" / provider_config.name
+        storage = FileSystemAuthStorage(base_path=storage_path)
+        token_manager = TokenManager(storage=storage)
+
+        try:
+            access_token, _ = token_manager.get_access_token()
+            headers["Authorization"] = f"Bearer {access_token}"
+        except ValueError as oauth_error:
+            raise ValueError(
+                f"Provider '{provider_config.name}' requires OAuth authentication. "
+                f"Run 'vdm oauth login {provider_config.name}' first."
+            ) from oauth_error
+
+    # API_KEY mode: Inject appropriate header
+    else:
+        api_key = provider_config.api_key
+        if provider_config.is_anthropic_format:
+            headers["x-api-key"] = api_key
+        else:
+            # OpenAI-compatible format
+            headers["Authorization"] = f"Bearer {api_key}"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(f"{base_url}/models", headers=headers)
+        response.raise_for_status()
+        return response.json()  # type: ignore[no-any-return]
+
+
+async def fetch_models_with_auth_fallback(
+    base_url: str,
+    custom_headers: dict[str, str],
+    provider_config: Any,
+) -> dict[str, Any]:
+    """Fetch models from endpoint with automatic authentication fallback.
+
+    Uses in-memory cache to remember which providers require authentication:
+    - First request to unknown provider: Try unauthenticated, 401 → retry with auth
+    - Subsequent requests: Use cached knowledge (skip 401 for known auth providers)
+
+    Args:
+        base_url: Provider base URL
+        custom_headers: Custom headers from provider config
+        provider_config: Provider configuration with auth details
+
+    Returns:
+        Models response (dict or list)
+    """
+    provider_name = provider_config.name
+
+    # Fast path: Known auth-required providers skip unauthenticated attempt
+    if provider_name in _providers_requiring_auth:
+        logger.debug(f"Using authenticated fetch for {provider_name} (cached)")
+        return await _fetch_models_authenticated(
+            base_url=base_url,
+            custom_headers=custom_headers,
+            provider_config=provider_config,
+        )
+
+    # Try unauthenticated first (for public providers like Poe/OpenRouter)
+    try:
+        return await fetch_models_unauthenticated(base_url, custom_headers)
+    except httpx.HTTPStatusError as e:
+        # Only retry on auth failures; propagate other errors
+        if e.response.status_code not in (401, 403):
+            raise
+
+        # Cache this provider as requiring auth for future requests
+        _providers_requiring_auth.add(provider_name)
+        logger.debug(
+            f"Unauthenticated fetch failed for {provider_name} "
+            f"({e.response.status_code}), caching and retrying with authentication"
+        )
+
+    # Retry with authentication
+    return await _fetch_models_authenticated(
+        base_url=base_url,
+        custom_headers=custom_headers,
+        provider_config=provider_config,
+    )
+
+
 @router.get("/v1/models")
 async def list_models(
     request: ModelsListRequest = Depends(ModelsListRequest.from_fastapi),
@@ -412,11 +544,26 @@ async def list_models(
 ) -> Response:
     """List available models from the specified provider or default provider.
 
-    This endpoint does not require authentication as it only exposes publicly
-    available model names and is used by the dashboard for model discovery.
+    Tries unauthenticated fetch first (fast for public providers),
+    then retries with authentication if provider requires it.
     """
+
+    # Create fetch function with auth fallback
+    async def fetch_fn(
+        base_url: str,
+        custom_headers: dict[str, str],
+        p_config: Any,
+    ) -> dict[str, Any] | list[Any]:
+        return await fetch_models_with_auth_fallback(
+            base_url=base_url,
+            custom_headers=custom_headers,
+            provider_config=p_config,
+        )
+
     service = ModelsListService(
-        config=cfg, models_cache=models_cache, fetch_fn=fetch_models_unauthenticated
+        config=cfg,
+        models_cache=models_cache,
+        fetch_fn=fetch_fn,
     )
     result = await service.execute_with_request(request)
     return result.to_response()
@@ -437,6 +584,43 @@ async def list_aliases(
     service = AliasesListService(config=cfg)
     result = await service.execute()
     return result.to_response()
+
+
+@router.get("/profiles")
+async def list_profiles(cfg: Config = Depends(get_config)) -> Response:
+    """List all configured profiles with metadata.
+
+    Profiles are reusable configuration presets that can include aliases,
+    timeout settings, and retry policies.
+    """
+    pm = cfg.provider_manager.profile_manager
+    if pm is None:
+        return JSONResponse(
+            status_code=200,
+            content={"object": "list", "data": []},
+        )
+
+    summary = pm.get_profile_summary()
+
+    profiles = [
+        {
+            "name": p.name,
+            "timeout": p.timeout,
+            "max_retries": p.max_retries,
+            "alias_count": p.alias_count,
+            "aliases": p.aliases,
+            "source": p.source,
+        }
+        for p in summary.profiles
+    ]
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "object": "list",
+            "data": profiles,
+        },
+    )
 
 
 @router.get("/top-models")

@@ -29,7 +29,8 @@ from src.core.dependencies import get_provider_resolver
 from src.models.cache import ModelsDiskCache
 
 # Type alias for fetch function - can return dict or list
-FetchModelsFunc = Callable[[str, dict[str, str]], Awaitable[dict[str, Any] | list[Any]]]
+# Takes base_url, custom_headers, and provider_config for authentication
+FetchModelsFunc = Callable[[str, dict[str, str], Any], Awaitable[dict[str, Any] | list[Any]]]
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +263,7 @@ class ModelsListService:
         # Fetch from upstream
         try:
             if self._fetch_fn:
-                raw = await self._fetch_fn(base_url, custom_headers)
+                raw = await self._fetch_fn(base_url, custom_headers, provider_config)
             else:
                 raw = await self._default_fetch(base_url, custom_headers)
 
