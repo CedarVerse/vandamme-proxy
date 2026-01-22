@@ -144,6 +144,7 @@ class ProfileManager:
                         timeout=profile.timeout,
                         max_retries=profile.max_retries,
                         alias_count=len(profile.aliases),
+                        aliases=profile.aliases,
                         source=profile.source,
                     )
                 )

@@ -2,9 +2,6 @@
 
 from dataclasses import dataclass
 
-from rich.console import Console
-from rich.table import Table
-
 
 @dataclass(frozen=True)
 class ProfileInfo:
@@ -14,6 +11,7 @@ class ProfileInfo:
     timeout: int | None
     max_retries: int | None
     alias_count: int
+    aliases: dict[str, str]
     source: str
 
 
@@ -34,15 +32,16 @@ class ProfileSummaryPresenter:
         "package": "[dim]",
     }
 
-    def __init__(self, console: Console | None = None):
-        self.console = console or Console()
+    def __init__(self) -> None:
+        """Initialize presenter without console (uses print for Active Providers style)."""
+        pass
 
     def present_summary(
         self,
         summary: ProfileSummary,
         active_profile_name: str | None = None,
     ) -> None:
-        """Display profile summary with color formatting.
+        """Display profile summary (Active Providers style).
 
         Args:
             summary: ProfileSummary data with all profiles to display
@@ -51,14 +50,9 @@ class ProfileSummaryPresenter:
         if summary.total_profiles == 0:
             return
 
-        self.console.print(f"\n🔧 Profiles ({summary.total_profiles} configured):")
-
-        table = Table(show_header=True, box=None, pad_edge=False)
-        table.add_column("Name", style="bold", width=15)
-        table.add_column("Timeout", width=12)
-        table.add_column("Max Retries", width=12)
-        table.add_column("Aliases", width=8)
-        table.add_column("Source", width=10)
+        print(f"\n🔧 Profiles ({summary.total_profiles} configured):")
+        print(f"   {'Name':<12} {'Timeout':<12} {'Max Retries':<12} {'Aliases':<8} {'Source':<10}")
+        print(f"   {'-' * 12} {'-' * 12} {'-' * 12} {'-' * 8} {'-' * 10}")
 
         for profile in summary.profiles:
             # Determine if this is the active profile
@@ -71,24 +65,47 @@ class ProfileSummaryPresenter:
             # Format name with active indicator
             name_display = f"{active_indicator}{profile.name}"
 
-            timeout_display = f"{profile.timeout}s" if profile.timeout else "[dim]inherited[/dim]"
-            retries_display = (
-                str(profile.max_retries) if profile.max_retries else "[dim]inherited[/dim]"
-            )
-            source_color = self.SOURCE_COLORS.get(profile.source, "")
-            source_reset = "[/]" if source_color else ""
-            source_display = f"{source_color}{profile.source}{source_reset}"
+            timeout_display = f"{profile.timeout}s" if profile.timeout else "inherited"
+            retries_display = str(profile.max_retries) if profile.max_retries else "inherited"
 
-            table.add_row(
-                name_display,
-                timeout_display,
-                retries_display,
-                str(profile.alias_count),
-                source_display,
-            )
-
-        self.console.print(table)
+            # Color the active profile name
+            if is_active:
+                print(
+                    f"   \033[92m{name_display:<12}\033[0m {timeout_display:<12} "
+                    f"{retries_display:<12} {profile.alias_count:<8} {profile.source:<10}"
+                )
+            else:
+                print(
+                    f"   {name_display:<12} {timeout_display:<12} "
+                    f"{retries_display:<12} {profile.alias_count:<8} {profile.source:<10}"
+                )
 
         # Add legend if there's an active profile
         if active_profile_name is not None:
-            self.console.print("  * = active/default profile")
+            print("  * = active/default profile")
+
+    def present_active_profile_aliases(
+        self,
+        summary: ProfileSummary,
+        active_profile_name: str,
+    ) -> None:
+        """Display aliases for the active/default profile (Active Providers style).
+
+        Args:
+            summary: ProfileSummary with all profiles
+            active_profile_name: Name of the active profile to show aliases for
+        """
+        # Find the active profile
+        active_profile = next(
+            (p for p in summary.profiles if p.name.lower() == active_profile_name.lower()),
+            None,
+        )
+        if not active_profile or not active_profile.aliases:
+            return
+
+        print(f"\n✨ Active Profile Aliases ({active_profile.name}):")
+        print(f"   {'Alias':<20} {'Target Model'}")
+        print(f"   {'-' * 20} {'-' * 50}")
+
+        for alias, target in sorted(active_profile.aliases.items()):
+            print(f"   {alias:<20} {target}")

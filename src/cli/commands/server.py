@@ -65,9 +65,18 @@ def start(
         if profile_manager:
             from src.cli.presenters.profiles import ProfileSummaryPresenter
 
-            profile_presenter = ProfileSummaryPresenter(console=console)
+            profile_presenter = ProfileSummaryPresenter()
+            profile_summary = profile_manager.get_profile_summary()
+
+            # Show active profile aliases if applicable (before profiles table)
+            if active_profile_name:
+                profile_presenter.present_active_profile_aliases(
+                    profile_summary,
+                    active_profile_name,
+                )
+
             profile_presenter.present_summary(
-                profile_manager.get_profile_summary(),
+                profile_summary,
                 active_profile_name=active_profile_name,
             )
 
