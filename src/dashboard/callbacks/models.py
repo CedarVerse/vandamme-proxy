@@ -21,28 +21,29 @@ def register_models_callbacks(
     run: Any,
 ) -> None:
     @app.callback(
-        Output("vdm-models-grid", "rowData"),
-        Output("vdm-models-provider", "options"),
-        Output("vdm-models-provider", "value"),
+        Output("vdm-models-provider-grid", "rowData"),
+        Output("vdm-models-provider-dropdown", "options"),
+        Output("vdm-models-provider-dropdown", "value"),
         Output("vdm-models-provider-hint", "children"),
         Input("vdm-models-poll", "n_intervals"),
         Input("vdm-models-refresh", "n_clicks"),
-        Input("vdm-models-provider", "value"),
+        Input("vdm-models-provider-dropdown", "value"),
         prevent_initial_call=False,
     )
-    def refresh_models(
+    def refresh_provider_models(
         _n: int,
         _clicks: int | None,
         provider_value: str | None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]], str | None, Any]:
+        """Fetch and update provider models tab."""
         try:
-            from src.dashboard.services.models import build_models_view
+            from src.dashboard.services.models import build_provider_models_view
 
-            view = run(build_models_view(cfg=cfg, provider_value=provider_value))
+            view = run(build_provider_models_view(cfg=cfg, provider_value=provider_value))
             return view.row_data, view.provider_options, view.provider_value, view.hint
 
         except Exception:
-            logger.exception("dashboard.models: refresh failed")
+            logger.exception("dashboard.models: provider refresh failed")
             return (
                 [],
                 [],
@@ -51,15 +52,48 @@ def register_models_callbacks(
             )
 
     @app.callback(
+        Output("vdm-models-profile-grid", "rowData"),
+        Output("vdm-models-profile-dropdown", "options"),
+        Output("vdm-models-profile-dropdown", "value"),
+        Output("vdm-models-profile-hint", "children"),
+        Input("vdm-models-poll", "n_intervals"),
+        Input("vdm-models-refresh", "n_clicks"),
+        Input("vdm-models-profile-dropdown", "value"),
+        prevent_initial_call=False,
+    )
+    def refresh_profile_models(
+        _n: int,
+        _clicks: int | None,
+        profile_value: str | None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], str | None, Any]:
+        """Fetch and update profile models tab."""
+        try:
+            from src.dashboard.services.models import build_profile_models_view
+
+            view = run(build_profile_models_view(cfg=cfg, profile_value=profile_value))
+            return view.row_data, view.profile_options, view.profile_value, view.hint
+
+        except Exception:
+            logger.exception("dashboard.models: profile refresh failed")
+            return (
+                [],
+                [],
+                None,
+                html.Span("Failed to load profiles", className="text-muted"),
+            )
+
+    @app.callback(
         Output("vdm-models-detail-store", "data"),
         Output("vdm-model-details-drawer", "is_open"),
-        Input("vdm-models-grid", "selectedRows"),
+        Input("vdm-models-provider-grid", "selectedRows"),
+        Input("vdm-models-profile-grid", "selectedRows"),
         Input("vdm-model-details-close", "n_clicks"),
         State("vdm-model-details-drawer", "is_open"),
         prevent_initial_call=True,
     )
     def set_model_details_state(
-        selected_rows: list[dict[str, Any]] | None,
+        provider_selected_rows: list[dict[str, Any]] | None,
+        profile_selected_rows: list[dict[str, Any]] | None,
         _close_clicks: int | None,
         _is_open: bool,
     ) -> tuple[Any, bool]:
@@ -67,6 +101,14 @@ def register_models_callbacks(
 
         if trigger == "vdm-model-details-close":
             return None, False
+
+        # Determine which grid triggered the callback based on trigger_id
+        if trigger == "vdm-models-provider-grid":
+            selected_rows = provider_selected_rows
+        elif trigger == "vdm-models-profile-grid":
+            selected_rows = profile_selected_rows
+        else:
+            selected_rows = None
 
         rows = selected_rows or []
         if not rows:

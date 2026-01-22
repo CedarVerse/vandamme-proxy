@@ -428,18 +428,26 @@ def models_table(
     sort_field: str = "id",
     sort_desc: bool = False,
     show_provider: bool = True,
+    grid_id: str = "vdm-models-grid",
 ) -> dag.AgGrid:
     """Create an AG-Grid table for models with advanced features.
 
     This function now returns an AG-Grid component instead of a Bootstrap table.
     The sort_field and sort_desc parameters are kept for backward compatibility
     but AG-Grid handles sorting internally through column headers.
+
+    Args:
+        models: List of model dictionaries
+        sort_field: Legacy parameter (sorting now handled by AG-Grid)
+        sort_desc: Legacy parameter (sorting now handled by AG-Grid)
+        show_provider: Whether to show provider column
+        grid_id: Unique ID for the grid component (for multi-grid pages)
     """
     from src.dashboard.components.ag_grid import models_ag_grid
 
     # Return AG-Grid component - sorting is now handled by clicking column headers
     # Note: grid_id is also used for selection/copy callbacks.
-    return models_ag_grid(models=models, grid_id="vdm-models-grid")
+    return models_ag_grid(models=models, grid_id=grid_id)
 
 
 def model_details_modal() -> dbc.Modal:

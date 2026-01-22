@@ -359,3 +359,16 @@ async def fetch_all_providers(*, cfg: DashboardConfigProtocol) -> list[str]:
         return [p for p in providers if isinstance(p, str)]
 
     return []
+
+
+async def fetch_profiles(*, cfg: DashboardConfigProtocol) -> dict[str, Any]:
+    """Fetch configured profiles from the API."""
+    url = f"{cfg.api_base_url}/profiles"
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        data: dict[str, Any] = resp.json()
+
+    if not isinstance(data.get("data"), list):
+        raise DashboardDataError("Unexpected /profiles JSON shape")
+    return data

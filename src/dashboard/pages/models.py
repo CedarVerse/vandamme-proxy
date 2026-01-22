@@ -6,6 +6,72 @@ from dash import dcc, html
 from src.dashboard.components.ui import model_details_drawer, models_table
 
 
+def _provider_tab_content() -> list:
+    """Content for provider models tab."""
+    return [
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.Stack(
+                        [
+                            dbc.Label("Provider", className="text-muted small mb-0"),
+                            dcc.Dropdown(
+                                id="vdm-models-provider-dropdown",
+                                options=[],
+                                value=None,
+                                placeholder="Provider",
+                                clearable=False,
+                            ),
+                        ],
+                        gap=1,
+                    ),
+                )
+            ]
+        ),
+        html.Div(id="vdm-models-provider-hint", className="text-muted small mb-2"),
+        models_table(
+            [],
+            sort_field="id",
+            sort_desc=False,
+            show_provider=True,
+            grid_id="vdm-models-provider-grid",
+        ),
+    ]
+
+
+def _profile_tab_content() -> list:
+    """Content for profile models tab."""
+    return [
+        dbc.Row(
+            [
+                dbc.Col(
+                    dbc.Stack(
+                        [
+                            dbc.Label("Profile", className="text-muted small mb-0"),
+                            dcc.Dropdown(
+                                id="vdm-models-profile-dropdown",
+                                options=[],
+                                value=None,
+                                placeholder="Profile",
+                                clearable=False,
+                            ),
+                        ],
+                        gap=1,
+                    ),
+                )
+            ]
+        ),
+        html.Div(id="vdm-models-profile-hint", className="text-muted small mb-2"),
+        models_table(
+            [],
+            sort_field="id",
+            sort_desc=False,
+            show_provider=True,
+            grid_id="vdm-models-profile-grid",
+        ),
+    ]
+
+
 def models_layout() -> dbc.Container:
     """Layout for the Models page.
 
@@ -17,23 +83,6 @@ def models_layout() -> dbc.Container:
             dbc.Row(
                 [
                     dbc.Col(html.H2("Available Models"), md=6),
-                    dbc.Col(
-                        dbc.Stack(
-                            [
-                                dbc.Label("Provider", className="text-muted small mb-0"),
-                                dcc.Dropdown(
-                                    id="vdm-models-provider",
-                                    options=[],
-                                    value=None,
-                                    placeholder="Provider",
-                                    clearable=False,
-                                    style={"minWidth": "14rem"},
-                                ),
-                            ],
-                            gap=1,
-                        ),
-                        md=3,
-                    ),
                     dbc.Col(
                         dbc.ButtonGroup(
                             [
@@ -54,7 +103,7 @@ def models_layout() -> dbc.Container:
                             ],
                             size="sm",
                         ),
-                        md=3,
+                        md=6,
                         className="text-end",
                     ),
                 ],
@@ -100,28 +149,29 @@ def models_layout() -> dbc.Container:
             dbc.Row(
                 [
                     dbc.Col(
-                        html.Div(
-                            id="vdm-models-provider-hint",
-                            className="text-muted small",
-                        ),
-                        md=12,
-                        className="mb-2",
-                    ),
-                ]
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        html.Div(
+                        dbc.Card(
                             [
-                                models_table(
-                                    [],
-                                    sort_field="id",
-                                    sort_desc=False,
-                                    show_provider=True,
-                                )
-                            ],
-                            id="vdm-models-content",
+                                dbc.CardBody(
+                                    [
+                                        dbc.Tabs(
+                                            [
+                                                dbc.Tab(
+                                                    _provider_tab_content(),
+                                                    label="Provider Models",
+                                                    tab_id="provider-tab",
+                                                ),
+                                                dbc.Tab(
+                                                    _profile_tab_content(),
+                                                    label="Profile Models",
+                                                    tab_id="profile-tab",
+                                                ),
+                                            ],
+                                            id="vdm-models-tabs",
+                                            active_tab="provider-tab",
+                                        ),
+                                    ]
+                                ),
+                            ]
                         ),
                         md=12,
                     ),
