@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.core.provider.client_factory import ClientFactory
 from src.core.provider_config import AuthMode, ProviderConfig
 
 
@@ -29,6 +28,8 @@ class TestOAuthFlow:
             patch("src.core.provider.client_factory.TokenManager") as mock_token_mgr_class,
             patch("src.core.provider.client_factory.FileSystemAuthStorage") as mock_storage_class,
         ):
+            from src.core.provider.client_factory import ClientFactory
+
             mock_storage = MagicMock()
             mock_storage_class.return_value = mock_storage
             mock_token_mgr = MagicMock()
@@ -63,6 +64,8 @@ class TestOAuthFlow:
             patch("src.core.provider.client_factory.TokenManager") as mock_token_mgr_class,
             patch("src.core.provider.client_factory.FileSystemAuthStorage"),
         ):
+            from src.core.provider.client_factory import ClientFactory
+
             mock_token_mgr = MagicMock()
             mock_token_mgr_class.return_value = mock_token_mgr
 
@@ -87,6 +90,8 @@ class TestOAuthFlow:
         )
 
         with patch("src.core.provider.client_factory.TokenManager") as mock_token_mgr_class:
+            from src.core.provider.client_factory import ClientFactory
+
             factory = ClientFactory()
             factory.get_or_create_client(config)
 
@@ -105,6 +110,8 @@ class TestOAuthFlow:
         )
 
         with patch("src.core.provider.client_factory.TokenManager") as mock_token_mgr_class:
+            from src.core.provider.client_factory import ClientFactory
+
             factory = ClientFactory()
             factory.get_or_create_client(config)
 
@@ -124,8 +131,10 @@ class TestOAuthFlow:
 
         with (
             patch("src.core.provider.client_factory.TokenManager") as mock_token_mgr_class,
-            patch("src.core.provider.client_factory.FileSystemAuthStorage"),
+            patch("src.core.provider.client_factory.FileSystemAuthStorage") as mock_storage_class,
         ):
+            from src.core.provider.client_factory import ClientFactory
+
             mock_token_mgr = MagicMock()
             mock_token_mgr_class.return_value = mock_token_mgr
 
@@ -137,10 +146,7 @@ class TestOAuthFlow:
 
             # Verify storage path is provider-specific
             expected_path = Path.home() / ".vandamme" / "oauth" / "anthropic-oauth"
-
-            from src.core.provider.client_factory import FileSystemAuthStorage
-
-            FileSystemAuthStorage.assert_called_once_with(base_path=expected_path)
+            mock_storage_class.assert_called_once_with(base_path=expected_path)
 
     def test_multiple_oauth_providers_have_separate_storage(self):
         """Test that multiple OAuth providers use separate storage paths."""
@@ -164,6 +170,8 @@ class TestOAuthFlow:
             patch("src.core.provider.client_factory.TokenManager"),
             patch("src.core.provider.client_factory.FileSystemAuthStorage") as mock_storage_class,
         ):
+            from src.core.provider.client_factory import ClientFactory
+
             factory = ClientFactory()
 
             expected_paths = [
@@ -196,6 +204,8 @@ class TestOAuthFlow:
             patch("src.core.provider.client_factory.TokenManager") as mock_token_mgr_class,
             patch("src.core.provider.client_factory.FileSystemAuthStorage"),
         ):
+            from src.core.provider.client_factory import ClientFactory
+
             mock_token_mgr = MagicMock()
             mock_token_mgr_class.return_value = mock_token_mgr
 
@@ -225,6 +235,8 @@ class TestOAuthFlow:
             patch("src.core.provider.client_factory.TokenManager", None),
             patch("src.core.provider.client_factory.FileSystemAuthStorage", None),
         ):
+            from src.core.provider.client_factory import ClientFactory
+
             factory = ClientFactory()
 
             with pytest.raises(ImportError) as exc_info:

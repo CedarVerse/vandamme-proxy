@@ -227,7 +227,7 @@ class ModelsListService:
         provider_config = self._config.provider_manager.get_provider_config(provider_name)
         client = self._config.provider_manager.get_client(provider_name)
         base_url = client.base_url
-        custom_headers = provider_config.custom_headers if provider_config else {}
+        custom_headers = provider_config.custom_headers
 
         # Try fresh cache first
         if not refresh and self._cache:
@@ -370,22 +370,20 @@ class HealthCheckService:
                 provider_config = self._config.provider_manager.get_provider_config(provider_name)
 
                 # Determine auth mode indicator
-                auth_mode = "unknown"
-                if provider_config:
-                    if provider_config.uses_oauth:
-                        auth_mode = "oauth"
-                    elif provider_config.uses_passthrough:
-                        auth_mode = "passthrough"
-                    else:
-                        auth_mode = "api_key"
+                if provider_config.uses_oauth:
+                    auth_mode = "oauth"
+                elif provider_config.uses_passthrough:
+                    auth_mode = "passthrough"
+                else:
+                    auth_mode = "api_key"
 
                 providers[provider_name] = {
-                    "api_format": (provider_config.api_format if provider_config else "unknown"),
-                    "base_url": provider_config.base_url if provider_config else None,
+                    "api_format": provider_config.api_format,
+                    "base_url": provider_config.base_url,
                     "auth_mode": auth_mode,
                     "api_key_hash": (
                         f"sha256:{self._config.provider_manager.get_api_key_hash(provider_config.api_key)}"
-                        if provider_config and provider_config.api_key
+                        if provider_config.api_key
                         else "<not set>"
                     ),
                 }
@@ -460,7 +458,7 @@ class TokenCountService:
             provider_config = self._config.provider_manager.get_provider_config(provider_name)
 
             # Try Anthropic-compatible API token counting first
-            if provider_config and provider_config.is_anthropic_format:
+            if provider_config.is_anthropic_format:
                 api_tokens = await self._try_provider_token_count(actual_model, system, messages)
                 if api_tokens is not None:
                     return TokenCountResult(status=200, content={"input_tokens": api_tokens})
@@ -708,7 +706,7 @@ class TestConnectionService:
             provider_config = self._config.provider_manager.get_provider_config(default_provider)
 
             # Skip connectivity test for passthrough providers (they forward client key)
-            if provider_config and provider_config.uses_passthrough:
+            if provider_config.uses_passthrough:
                 return TestConnectionResult(
                     status=200,
                     content={

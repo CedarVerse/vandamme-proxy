@@ -123,7 +123,11 @@ def _build_initial_context(
     from src.core.dependencies import get_config
 
     cfg = get_config()
-    provider_config = cfg.provider_manager.get_provider_config(provider_name)
+    try:
+        provider_config = cfg.provider_manager.get_provider_config(provider_name)
+    except ValueError:
+        # Provider not found, skip sanitization
+        provider_config = None
 
     # Build tool name maps if sanitization is enabled
     tool_name_map, tool_name_map_inverse = build_tool_name_maps_if_enabled(

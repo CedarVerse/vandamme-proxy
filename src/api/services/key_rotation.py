@@ -32,11 +32,10 @@ def make_next_provider_key_fn(*, provider_name: str, config: Config) -> NextApiK
 
     async def _next_provider_key(exclude: set[str]) -> str:
         # Fetch provider config fresh to get current api_keys
-        provider_config = config.provider_manager.get_provider_config(provider_name)
-        if provider_config is None:
-            raise HTTPException(
-                status_code=500, detail=f"Provider '{provider_name}' not configured"
-            )
+        try:
+            provider_config = config.provider_manager.get_provider_config(provider_name)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from None
 
         api_keys = provider_config.get_api_keys()
 

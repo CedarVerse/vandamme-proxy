@@ -861,14 +861,13 @@ class ProviderManager(ProviderClientFactory):
         if not self._middleware_initialized:
             self._initialize_middleware()
 
-        # Check if provider exists
-        if provider_name not in self._configs:
+        # Check if provider exists in registry (single source of truth)
+        config = self._registry.get(provider_name)
+        if config is None:
             raise ValueError(
                 f"Provider '{provider_name}' not configured. "
-                f"Available providers: {list(self._configs.keys())}"
+                f"Available providers: {list(self._registry.list_all().keys())}"
             )
-
-        config = self._configs[provider_name]
 
         # Delegate to ClientFactory
         return self._client_factory.get_or_create_client(config)
@@ -895,14 +894,29 @@ class ProviderManager(ProviderClientFactory):
         api_keys = config.get_api_keys()
         return await self._api_key_rotator.get_next_key(provider_name, api_keys)
 
-    def get_provider_config(self, provider_name: str) -> ProviderConfig | None:
+    def get_provider_config(self, provider_name: str) -> ProviderConfig:
         """Get configuration for a specific provider.
 
         Delegates to ProviderRegistry for cleaner separation of concerns.
+
+        Args:
+            provider_name: The name of the provider
+
+        Returns:
+            The ProviderConfig
+
+        Raises:
+            ValueError: If provider not found (for consistency with get_client)
         """
         if not self._loaded:
             self.load_provider_configs()
-        return self._registry.get(provider_name)
+        config = self._registry.get(provider_name)
+        if config is None:
+            raise ValueError(
+                f"Provider '{provider_name}' not configured. "
+                f"Available providers: {list(self._registry.list_all().keys())}"
+            )
+        return config
 
     def list_providers(self) -> dict[str, ProviderConfig]:
         """List all configured providers.
