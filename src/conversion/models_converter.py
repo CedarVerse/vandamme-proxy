@@ -11,15 +11,24 @@ def _extract_openai_models_list(raw: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def raw_to_openai_models(raw: dict[str, Any]) -> dict[str, Any]:
-    """Convert raw upstream payload to OpenAI-style models list response."""
+def raw_to_openai_models(raw: dict[str, Any] | list[Any]) -> dict[str, Any]:
+    """Convert raw upstream payload to OpenAI-style models list response.
+
+    Handles both dict payloads (OpenAI standard) and bare lists.
+    """
+    # Handle bare list case (some providers return lists directly)
+    if isinstance(raw, list):
+        return {
+            "object": "list",
+            "data": [m for m in raw if isinstance(m, dict)],
+        }
     return {
         "object": "list",
         "data": _extract_openai_models_list(raw),
     }
 
 
-def raw_to_anthropic_models(raw: dict[str, Any]) -> dict[str, Any]:
+def raw_to_anthropic_models(raw: dict[str, Any] | list[Any]) -> dict[str, Any]:
     """Convert raw upstream payload to Anthropic Models List schema.
 
     Anthropic schema (per docs):
@@ -32,7 +41,11 @@ def raw_to_anthropic_models(raw: dict[str, Any]) -> dict[str, Any]:
 
     We derive this from the upstream OpenAI-style list when available.
     """
-    openai_models = _extract_openai_models_list(raw)
+    # Handle bare list case (some providers return lists directly)
+    if isinstance(raw, list):
+        openai_models = [m for m in raw if isinstance(m, dict)]
+    else:
+        openai_models = _extract_openai_models_list(raw)
 
     data: list[dict[str, Any]] = []
     for m in openai_models:

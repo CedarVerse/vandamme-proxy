@@ -28,8 +28,8 @@ from src.core.config import Config
 from src.core.dependencies import get_provider_resolver
 from src.models.cache import ModelsDiskCache
 
-# Type alias for fetch function
-FetchModelsFunc = Callable[[str, dict[str, str]], Awaitable[dict[str, Any]]]
+# Type alias for fetch function - can return dict or list
+FetchModelsFunc = Callable[[str, dict[str, str]], Awaitable[dict[str, Any] | list[Any]]]
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,12 @@ class ModelsListService:
         """
         try:
             provider_name = self._resolve_provider(provider_candidate)
+
+            # Check if it's a profile (marked with "#" prefix)
+            if provider_name.startswith("#"):
+                profile_name = provider_name[1:]  # Remove "#" prefix
+                return self._get_profile_aliases_as_models(profile_name)
+
             self._validate_provider_exists(provider_name)
 
             format_type = self._infer_format(format_requested, anthropic_version)
@@ -155,15 +161,29 @@ class ModelsListService:
 
             return self._convert_to_format(raw, format_type)
 
-        except (httpx.HTTPStatusError, ValueError, KeyError) as e:
-            # Expected errors: HTTP errors, validation errors, missing keys
-            return self._error_response(str(e))
+        except httpx.HTTPStatusError as e:
+            # HTTP errors from upstream - preserve status
+            status = e.response.status_code if hasattr(e, "response") and e.response else 502
+            logger.debug(
+                f"ModelsListService HTTP error: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            return self._error_response(str(e), status=status)
+        except ValueError as e:
+            # Validation errors - check if it's "not found"
+            if "not found" in str(e).lower():
+                return self._error_response(str(e), status=404)
+            return self._error_response(str(e), status=400)
+        except KeyError as e:
+            # Missing keys - client error
+            return self._error_response(str(e), status=400)
         except Exception as unexpected:
             # Truly unexpected errors
             logger.error(
-                f"Unexpected error in ModelsListService: {type(unexpected).__name__}: {unexpected}"
+                f"ModelsListService unexpected error: {type(unexpected).__name__}: {unexpected}",
+                exc_info=True,
             )
-            return self._error_response(str(unexpected))
+            return self._error_response(str(unexpected), status=500)
 
     async def execute_with_request(self, request: ModelsListRequest) -> ModelsListResult:
         """Execute using ModelsListRequest DTO.
@@ -246,6 +266,10 @@ class ModelsListService:
             else:
                 raw = await self._default_fetch(base_url, custom_headers)
 
+            # Normalize bare list to dict for consistent caching
+            if isinstance(raw, list):
+                raw = {"object": "list", "data": raw}
+
             if self._cache and raw:
                 self._cache.write_response(
                     provider=provider_name,
@@ -269,7 +293,10 @@ class ModelsListService:
             raise
 
     async def _default_fetch(self, base_url: str, custom_headers: dict[str, str]) -> dict[str, Any]:
-        """Default fetch implementation using httpx."""
+        """Default fetch implementation using httpx.
+
+        Normalizes bare list responses to OpenAI format for consistent caching.
+        """
         headers = {
             "Content-Type": "application/json",
             "User-Agent": "claude-proxy/1.0.0",
@@ -279,10 +306,21 @@ class ModelsListService:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(f"{base_url}/models", headers=headers)
             response.raise_for_status()
-            return response.json()  # type: ignore[no-any-return]
+            raw: dict[str, Any] | list[Any] = response.json()
 
-    def _convert_to_format(self, raw: dict[str, Any], format_type: str) -> ModelsListResult:
-        """Convert raw response to requested format."""
+            # Normalize bare list to OpenAI format for consistent caching
+            if isinstance(raw, list):
+                return {"object": "list", "data": raw}
+            return raw
+
+    def _convert_to_format(
+        self, raw: dict[str, Any] | list[Any], format_type: str
+    ) -> ModelsListResult:
+        """Convert raw response to requested format.
+
+        Handles both dict payloads (standard OpenAI format) and bare lists
+        (some providers return lists directly).
+        """
         from src.conversion.models_converter import (
             raw_to_anthropic_models,
             raw_to_openai_models,
@@ -294,16 +332,61 @@ class ModelsListService:
         # Default: anthropic
         return ModelsListResult(status=200, content=raw_to_anthropic_models(raw))
 
-    def _error_response(self, error_message: str) -> ModelsListResult:
-        """Generate error response."""
+    def _error_response(self, error_message: str, status: int = 500) -> ModelsListResult:
+        """Generate error response.
+
+        Args:
+            error_message: Error message to return
+            status: HTTP status code (default: 500)
+        """
         return ModelsListResult(
-            status=500,
+            status=status,
             content={
                 "type": "error",
                 "error": {
                     "type": "api_error",
                     "message": f"Failed to list models: {error_message}",
                 },
+            },
+        )
+
+    def _get_profile_aliases_as_models(self, profile_name: str) -> ModelsListResult:
+        """Return profile aliases as a models list.
+
+        When provider is a profile, return its aliases as "models" with provider prefixes.
+
+        Args:
+            profile_name: Name of the profile (without # prefix)
+
+        Returns:
+            ModelsListResult with profile aliases as model entries
+        """
+        if not self._resolver._profile_manager:
+            return self._error_response("Profile manager not available", status=500)
+
+        profile = self._resolver._profile_manager.get_profile(profile_name)
+        if not profile:
+            return self._error_response(f"Profile '{profile_name}' not found", status=404)
+
+        models_data = []
+        for alias_name, target_model in profile.aliases.items():
+            # target_model is already in "provider:model" format
+            provider_part = target_model.split(":", 1)[0] if ":" in target_model else "unknown"
+            models_data.append(
+                {
+                    "id": target_model,
+                    "alias": alias_name,
+                    "object": "model",
+                    "created": None,
+                    "owned_by": provider_part,
+                }
+            )
+
+        return ModelsListResult(
+            status=200,
+            content={
+                "object": "list",
+                "data": models_data,
             },
         )
 
@@ -351,14 +434,18 @@ class HealthCheckService:
         """Gather health data from all providers."""
         providers = self._gather_provider_info()
 
+        # Get both configured and actual defaults for better visibility
+        pm = self._config.provider_manager
+        configured = getattr(pm, "configured_default", "unknown")
+        actual = getattr(pm, "actual_default", None)
+
         return {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "api_key_valid": self._config.validate_api_key(),
             "client_api_key_validation": bool(self._config.proxy_api_key),
-            "default_provider": getattr(
-                self._config.provider_manager, "default_provider", "unknown"
-            ),
+            "default_provider": configured,  # What user configured
+            "active_provider": actual or configured,  # What's actually being used
             "providers": providers,
         }
 

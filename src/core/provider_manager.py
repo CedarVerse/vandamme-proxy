@@ -144,6 +144,24 @@ class ProviderManager(ProviderClientFactory):
         return self._default_selector.actual_default or self._default_selector.configured_default
 
     @property
+    def configured_default(self) -> str:
+        """Get the configured default provider name (from env/TOML).
+
+        This is the default provider as configured by the user, without
+        any fallback logic applied.
+        """
+        return self._default_selector.configured_default
+
+    @property
+    def actual_default(self) -> str | None:
+        """Get the actual default provider being used (after fallback).
+
+        This may differ from configured_default if the configured default
+        provider is not available and a fallback was selected.
+        """
+        return self._default_selector.actual_default
+
+    @property
     def default_provider_source(self) -> str:
         """Get the source of the default provider configuration.
 

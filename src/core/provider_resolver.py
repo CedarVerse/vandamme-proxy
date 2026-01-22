@@ -143,9 +143,24 @@ class ProviderResolver:
 
         Returns:
             Normalized provider name (lowercased) or default_provider
+
+        Note:
+            If provider_candidate is a profile name, returns it with a "#" prefix
+            to distinguish it from actual provider names (consistent with TOML syntax).
+            The calling code can then handle profiles specially (e.g., return profile
+            aliases as models).
         """
         if provider_candidate:
+            # Check if it's a profile name - mark it for special handling
+            if self._profile_manager and self._profile_manager.is_profile(provider_candidate):
+                # Return with "#" prefix to indicate it's a profile (consistent with TOML)
+                return f"#{provider_candidate.lower()}"
             return provider_candidate.lower()
+
+        # If no candidate and default_provider is also a profile, mark it
+        if self._profile_manager and self._profile_manager.is_profile(self._default_provider):
+            return f"#{self._default_provider.lower()}"
+
         return self._default_provider
 
     def _validate_and_return(

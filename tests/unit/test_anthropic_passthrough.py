@@ -160,7 +160,12 @@ def test_models_endpoint_openai_format():
     ):
         from src.core.provider_resolver import ProviderResolver
 
-        mock_resolver.return_value = MagicMock(spec=ProviderResolver)
+        # Create a properly mocked ProviderResolver with _profile_manager=None
+        mock_provider_resolver = MagicMock(spec=ProviderResolver)
+        mock_provider_resolver._profile_manager = None  # Set explicitly
+        # Mock get_provider_or_default to return 'openai' (not a profile name)
+        mock_provider_resolver.get_provider_or_default.return_value = "openai"
+        mock_resolver.return_value = mock_provider_resolver
         mock_fetch.return_value = {
             "object": "list",
             "data": [

@@ -409,9 +409,12 @@ async def list_models(
     request: ModelsListRequest = Depends(ModelsListRequest.from_fastapi),
     cfg: Config = Depends(get_config),
     models_cache: ModelsDiskCache | None = Depends(get_models_cache),
-    _: None = Depends(validate_api_key),
 ) -> Response:
-    """List available models from the specified provider or default provider."""
+    """List available models from the specified provider or default provider.
+
+    This endpoint does not require authentication as it only exposes publicly
+    available model names and is used by the dashboard for model discovery.
+    """
     service = ModelsListService(
         config=cfg, models_cache=models_cache, fetch_fn=fetch_models_unauthenticated
     )
