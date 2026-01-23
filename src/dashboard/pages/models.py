@@ -29,6 +29,7 @@ def _provider_tab_content() -> list:
             ]
         ),
         html.Div(id="vdm-models-provider-hint", className="text-muted small mb-2"),
+        html.Div(id="vdm-models-provider-docs-link", className="mb-3"),
         models_table(
             [],
             sort_field="id",
