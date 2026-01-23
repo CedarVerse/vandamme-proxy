@@ -90,6 +90,7 @@ api-format = "openai"
 auth-mode = "oauth"
 timeout = 90
 max-retries = 2
+models-url = "https://platform.openai.com/docs/models"
 [chatgpt.aliases]
 haiku = "gpt-5-mini-2025-08-07"
 sonnet = "gpt-5.2-codex"
@@ -241,6 +242,7 @@ base-url = "https://api.anthropic.com"
 api-format = "anthropic"
 timeout = 90
 max-retries = 2
+models-url = "https://docs.anthropic.com/en/docs/about-claude/models"
 [anthropic.aliases]
 haiku = "claude-3-5-haiku-20241022"
 sonnet = "claude-3-5-sonnet-20241022"
