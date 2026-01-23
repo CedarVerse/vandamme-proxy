@@ -37,6 +37,7 @@ class ProviderConfig:
     api_format: str = "openai"  # "openai" or "anthropic"
     tool_name_sanitization: bool = False
     auth_mode: str = AuthMode.API_KEY  # Authentication mode: api_key, passthrough, or oauth
+    models_url: str | None = None  # Provider models documentation URL
 
     @property
     def is_azure(self) -> bool:
