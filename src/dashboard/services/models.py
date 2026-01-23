@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +14,8 @@ from src.dashboard.data_sources import (
     fetch_models,
     fetch_profiles,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -69,8 +72,28 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
         else html.Span("(no providers)", className="text-muted"),
     ]
 
-    models_data = await fetch_models(cfg=cfg, provider=selected_provider or None)
-    models = models_data.get("data", [])
+    # Get models_url from health endpoint
+    providers_dict = health.get("providers", {})
+    provider_info = (
+        providers_dict.get(selected_provider, {}) if isinstance(providers_dict, dict) else {}
+    )
+    models_url = provider_info.get("models_url") if isinstance(provider_info, dict) else None
+
+    # Fetch models with error handling
+    try:
+        models_data = await fetch_models(cfg=cfg, provider=selected_provider or None)
+        models = models_data.get("data", [])
+    except Exception as e:
+        # On error, return view with models_url and error message
+        logger.debug(f"Failed to fetch models for {selected_provider}: {e}")
+        return ProviderModelsView(
+            row_data=[],
+            provider_options=provider_options,
+            provider_value=selected_provider or None,
+            hint=hint,
+            models_url=models_url,
+            error_message=str(e),
+        )
 
     inferred_provider = selected_provider or default_provider or "multiple"
     for model in models:
@@ -83,6 +106,8 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
             provider_options=provider_options,
             provider_value=selected_provider or None,
             hint=hint,
+            models_url=models_url,
+            error_message=None,
         )
 
     return ProviderModelsView(
@@ -90,6 +115,8 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
         provider_options=provider_options,
         provider_value=selected_provider or None,
         hint=hint,
+        models_url=models_url,
+        error_message=None,
     )
 
 
