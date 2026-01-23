@@ -196,6 +196,9 @@ class ProviderConfigLoader:
         timeout = int(os.environ.get("REQUEST_TIMEOUT", toml_config.get("timeout", "90")))
         max_retries = int(os.environ.get("MAX_RETRIES", toml_config.get("max-retries", "2")))
 
+        # Models documentation URL
+        models_url = os.environ.get(f"{provider_upper}_MODELS_URL") or toml_config.get("models-url")
+
         return ProviderConfig(
             name=provider_name,
             api_key=api_key,
@@ -209,6 +212,7 @@ class ProviderConfigLoader:
             api_format=api_format,
             tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
             auth_mode=auth_mode,
+            models_url=models_url,
         )
 
     def load_provider_with_result(self, provider_name: str) -> ProviderLoadResult | None:
