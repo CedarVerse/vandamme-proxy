@@ -21,6 +21,8 @@ class ProviderModelsView:
     provider_options: list[dict[str, str]]
     provider_value: str | None
     hint: Any
+    models_url: str | None = None
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)
