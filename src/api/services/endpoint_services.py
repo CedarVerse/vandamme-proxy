@@ -469,6 +469,7 @@ class HealthCheckService:
                     "api_format": provider_config.api_format,
                     "base_url": provider_config.base_url,
                     "auth_mode": auth_mode,
+                    "models_url": provider_config.models_url,
                     "api_key_hash": (
                         f"sha256:{self._config.provider_manager.get_api_key_hash(provider_config.api_key)}"
                         if provider_config.api_key
