@@ -25,6 +25,7 @@ def register_models_callbacks(
         Output("vdm-models-provider-dropdown", "options"),
         Output("vdm-models-provider-dropdown", "value"),
         Output("vdm-models-provider-hint", "children"),
+        Output("vdm-models-provider-docs-link", "children"),
         Input("vdm-models-poll", "n_intervals"),
         Input("vdm-models-refresh", "n_clicks"),
         Input("vdm-models-provider-dropdown", "value"),
@@ -34,13 +35,20 @@ def register_models_callbacks(
         _n: int,
         _clicks: int | None,
         provider_value: str | None,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], str | None, Any]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], str | None, Any, Any]:
         """Fetch and update provider models tab."""
         try:
             from src.dashboard.services.models import build_provider_models_view
 
             view = run(build_provider_models_view(cfg=cfg, provider_value=provider_value))
-            return view.row_data, view.provider_options, view.provider_value, view.hint
+
+            docs_link = _build_docs_link_component(
+                models_url=view.models_url,
+                error_message=view.error_message,
+                has_models=bool(view.row_data),
+            )
+
+            return view.row_data, view.provider_options, view.provider_value, view.hint, docs_link
 
         except Exception:
             logger.exception("dashboard.models: provider refresh failed")
@@ -49,6 +57,7 @@ def register_models_callbacks(
                 [],
                 None,
                 html.Span("Failed to load providers", className="text-muted"),
+                html.Div(),
             )
 
     @app.callback(
@@ -318,3 +327,59 @@ def register_models_callbacks(
         )
 
         return header, body
+
+
+def _build_docs_link_component(
+    models_url: str | None,
+    error_message: str | None,
+    has_models: bool,
+) -> Any:
+    """Build documentation link component based on context.
+
+    Shows:
+    - Nothing if models loaded successfully
+    - Documentation link + error explanation if fetch failed and URL available
+    - Error message only if no URL available
+    """
+    if has_models:
+        return html.Div()
+
+    if not models_url:
+        if error_message:
+            return dbc.Alert(
+                f"Could not load models: {error_message}",
+                color="warning",
+                className="small",
+            )
+        return html.Div()
+
+    # Build helpful alert with documentation link
+    message_parts = [
+        html.P("Models list is not available for this provider.", className="mb-2 small"),
+        html.P(
+            [
+                "View available models at: ",
+                dbc.Button(
+                    "Open documentation",
+                    href=models_url,
+                    target="_blank",
+                    external_link=True,
+                    color="info",
+                    size="sm",
+                    className="ms-2",
+                ),
+            ],
+            className="mb-0 small",
+        ),
+    ]
+
+    if error_message:
+        message_parts.insert(
+            1,
+            html.P(
+                f"Reason: {error_message}",
+                className="text-muted small mb-2",
+            ),
+        )
+
+    return dbc.Alert(message_parts, color="info", className="small")
