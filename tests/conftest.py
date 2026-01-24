@@ -81,7 +81,7 @@ def integration_test_port():
     return int(os.environ.get("VDM_TEST_PORT", "8082"))
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def base_url(integration_test_port):
     """Base URL for integration tests."""
     return f"http://localhost:{integration_test_port}"
@@ -121,6 +121,10 @@ def pytest_collection_modifyitems(config, items):
         # Add external marker to tests in external/ directory
         elif "tests/external/" in path:
             item.add_marker(pytest.mark.external)
+
+        # Add e2e marker to tests in e2e/ directory (Playwright UI tests)
+        elif "tests/e2e/" in path:
+            item.add_marker(pytest.mark.e2e)
 
         # Add integration marker to tests in integration/ directory
         elif "tests/integration/" in path:
@@ -400,11 +404,17 @@ def _enforce_isolation_guards(request: pytest.FixtureRequest) -> None:
     - Unit tests: Must use HTTP mocking (RESPX)
     - Integration tests: Cannot use external API fixtures
     - External tests: Require ALLOW_EXTERNAL_TESTS=1
+    - E2E tests (UI/browser): No guards, tests against local dashboard
 
     Args:
         request: pytest request object
     """
     markers = {m.name for m in request.node.iter_markers()}
+
+    # Skip guards for E2E tests (Playwright UI tests against local dashboard)
+    if "e2e" in markers:
+        yield
+        return
 
     if "unit" in markers:
         _guard_unit_test_network(request)

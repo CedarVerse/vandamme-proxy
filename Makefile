@@ -16,7 +16,7 @@ MAKEFLAGS += --no-print-directory
 # If user has a global VIRTUAL_ENV set, it can cause pytest to use wrong venv
 unexport VIRTUAL_ENV
 
-.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick test-on-demand coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check .ensure-server-running .ensure-external-opt-in
+.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick test-on-demand coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check playwright-install test-ui .ensure-server-running .ensure-external-opt-in
 
 # ============================================================================
 # Configuration
@@ -96,7 +96,7 @@ help: ## Show this help message
 	@grep -E '^coverage.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Development:$(RESET)\n"
-	@grep -E '^(run|dev|health|clean|watch|doctor):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(run|dev|health|clean|watch|doctor|playwright-install):.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
 	@printf "\n"
 	@printf "$(BOLD)Docker:$(RESET)\n"
 	@grep -E '^docker-.*:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(BLUE)%-20s$(RESET) %s\n", $$1, $$2}'
@@ -213,6 +213,16 @@ clean: ## Clean temporary files and caches
 	@rm -rf build/ dist/ 2>/dev/null || true
 	@$(MAKE) clean-binaries
 	@printf "$(GREEN)✓ Cleaned successfully$(RESET)\n"
+
+playwright-install: ## Install Playwright browsers (required for UI tests)
+	@printf "$(BOLD)$(CYAN)Installing Playwright browsers...$(RESET)\n"
+	$(UV) run playwright install chromium
+	@printf "$(GREEN)✓ Playwright browsers installed$(RESET)\n"
+
+test-ui: ## Run Playwright UI/browser tests (requires dashboard server)
+	@printf "$(BOLD)$(CYAN)Running Playwright UI tests...$(RESET)\n"
+	@$(MAKE) -s .ensure-server-running
+	$(UV) run pytest $(TEST_DIR)/e2e -v -m e2e
 
 # ============================================================================
 # Code Quality
