@@ -162,6 +162,24 @@ class ModelsListService:
 
             return self._convert_to_format(raw, format_type)
 
+        except httpx.TimeoutException as e:
+            # Timeout errors - 504 Gateway Timeout
+            exc_type = type(e).__name__
+            logger.warning(f"ModelsListService: Timeout for provider '{provider_name}': {exc_type}")
+            return self._error_response(
+                f"Timeout connecting to provider '{provider_name}': {exc_type}",
+                status=504,
+                error_type="upstream_timeout",
+            )
+        except httpx.NetworkError as e:
+            # Connection errors - 502 Bad Gateway
+            exc_type = type(e).__name__
+            logger.warning(f"ModelsListService: Connection error for '{provider_name}': {exc_type}")
+            return self._error_response(
+                f"Connection error for provider '{provider_name}': {exc_type}",
+                status=502,
+                error_type="upstream_error",
+            )
         except httpx.HTTPStatusError as e:
             # HTTP errors from upstream - preserve status
             status = e.response.status_code if hasattr(e, "response") and e.response else 502
@@ -333,19 +351,25 @@ class ModelsListService:
         # Default: anthropic
         return ModelsListResult(status=200, content=raw_to_anthropic_models(raw))
 
-    def _error_response(self, error_message: str, status: int = 500) -> ModelsListResult:
+    def _error_response(
+        self,
+        error_message: str,
+        status: int = 500,
+        error_type: str = "api_error",
+    ) -> ModelsListResult:
         """Generate error response.
 
         Args:
             error_message: Error message to return
             status: HTTP status code (default: 500)
+            error_type: Error type classification (default: "api_error")
         """
         return ModelsListResult(
             status=status,
             content={
                 "type": "error",
                 "error": {
-                    "type": "api_error",
+                    "type": error_type,
                     "message": f"Failed to list models: {error_message}",
                 },
             },
