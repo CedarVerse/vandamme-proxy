@@ -129,11 +129,12 @@ async def test_running_totals_endpoint():
             # NOTE: Integration tests assume the running server is the code under test.
             # If you're running an older server binary, these assertions will fail.
             assert "providers:" in yaml_content
-            assert "rollup:" in yaml_content
-            assert "models:" in yaml_content
-
-            # Streaming split keys
-            assert "total:" in yaml_content
+            # rollup: and models: only appear when providers have data
+            if "providers: {}" not in yaml_content:
+                assert "rollup:" in yaml_content
+                assert "models:" in yaml_content
+                # Streaming split keys
+                assert "total:" in yaml_content
 
             # Nested mirrored metric keys
             assert "requests:" in yaml_content
@@ -201,17 +202,43 @@ async def test_running_totals_endpoint():
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_connection_test():
-    """Test connection test endpoint."""
+    """Test connection test endpoint.
+
+    This test verifies the /test-connection endpoint responds correctly,
+    regardless of whether the upstream API is actually reachable.
+
+    The endpoint may return:
+    - 200 with status="success" if API is reachable
+    - 200 with status="skipped" for passthrough providers
+    - 503 with status="failed" if API is unreachable
+    - 429 if rate limited by upstream provider
+    """
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/test-connection")
 
-        assert response.status_code == 200
+        # Endpoint should respond with 200 (success/skipped), 503 (failed), or 429 (rate limited)
+        assert response.status_code in (200, 503, 429)
+
+        # 429 responses have a different structure (FastAPI rate limiting)
+        if response.status_code == 429:
+            data = response.json()
+            assert "detail" in data
+            return
+
         data = response.json()
-        # Check for success response structure
+
+        # Verify response structure
         assert "status" in data
-        assert data["status"] == "success"
-        assert "provider" in data
-        assert "message" in data
+        assert data["status"] in ("success", "failed", "skipped")
+
+        # Common fields across all response types
+        assert "provider" in data or "error_type" in data
+
+        if data["status"] == "success":
+            assert "message" in data
+            assert "response_id" in data
+        elif data["status"] == "failed":
+            assert "message" in data or "error_type" in data
 
 
 # ZAIO provider tests moved to tests/external/test_zaio_provider.py

@@ -118,7 +118,7 @@ def create_hierarchical_structure(
     }
 
     # Add provider breakdown
-    if provider_data:
+    if provider_data is not None:
         structure["# Provider Breakdown"] = None
         providers_dict: dict[str, Any] = {}
 
