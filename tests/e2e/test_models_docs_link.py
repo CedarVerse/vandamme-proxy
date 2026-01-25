@@ -15,7 +15,7 @@ from playwright.async_api import expect
 
 
 @pytest.mark.e2e
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_docs_link_hidden_when_no_provider_selected(dashboard_page, page_wait_timeout):
     """Verify documentation link is hidden initially when no provider is selected."""
     page = dashboard_page
@@ -32,10 +32,15 @@ async def test_docs_link_hidden_when_no_provider_selected(dashboard_page, page_w
 
 
 @pytest.mark.e2e
-@pytest.mark.asyncio
-async def test_docs_link_appears_on_provider_selection(dashboard_page, page_wait_timeout):
-    """Verify documentation link appears when a provider is selected."""
+@pytest.mark.asyncio(loop_scope="session")
+async def test_docs_link_appears_on_provider_selection(
+    dashboard_page,
+    page_wait_timeout,
+    provider_with_models_url,
+):
+    """Verify documentation link appears when a provider with models_url is selected."""
     page = dashboard_page
+    provider_name = provider_with_models_url  # Use the fixture result
 
     # Click the provider dropdown
     await page.click("#vdm-models-provider-dropdown")
@@ -43,10 +48,10 @@ async def test_docs_link_appears_on_provider_selection(dashboard_page, page_wait
     # Wait for dropdown options to appear
     await page.wait_for_selector('[role="option"]', timeout=page_wait_timeout)
 
-    # Select the first available provider (usually "openai" or first in list)
-    first_option = page.locator('[role="option"]').first
-    await first_option.inner_text()
-    await first_option.click()
+    # Find the specific provider option by text
+    option = page.locator('[role="option"]').filter(has_text=provider_name)
+    await expect(option).to_be_visible()
+    await option.click()
 
     # Wait for docs link to appear
     docs_button = page.locator("#vdm-models-provider-docs-link a[href]")
@@ -65,15 +70,23 @@ async def test_docs_link_appears_on_provider_selection(dashboard_page, page_wait
 
 
 @pytest.mark.e2e
-@pytest.mark.asyncio
-async def test_docs_link_persists_after_models_load(dashboard_page, page_wait_timeout):
+@pytest.mark.asyncio(loop_scope="session")
+async def test_docs_link_persists_after_models_load(
+    dashboard_page,
+    page_wait_timeout,
+    provider_with_models_url,
+):
     """Verify documentation link remains visible after models grid loads."""
     page = dashboard_page
+    provider_name = provider_with_models_url
 
-    # Select a provider
+    # Select the specific provider
     await page.click("#vdm-models-provider-dropdown")
     await page.wait_for_selector('[role="option"]', timeout=page_wait_timeout)
-    await page.locator('[role="option"]').first.click()
+
+    option = page.locator('[role="option"]').filter(has_text=provider_name)
+    await expect(option).to_be_visible()
+    await option.click()
 
     # Wait for docs link to appear
     docs_button = page.locator("#vdm-models-provider-docs-link a[href]")
@@ -91,36 +104,56 @@ async def test_docs_link_persists_after_models_load(dashboard_page, page_wait_ti
 
 
 @pytest.mark.e2e
-@pytest.mark.asyncio
-async def test_docs_link_updates_on_provider_change(dashboard_page, page_wait_timeout):
+@pytest.mark.asyncio(loop_scope="session")
+async def test_docs_link_updates_on_provider_change(
+    dashboard_page,
+    page_wait_timeout,
+    health_data,
+):
     """Verify documentation link updates when switching providers."""
     page = dashboard_page
+
+    # Find providers with models_url configured
+    providers_with_docs = [
+        name
+        for name, config in health_data.get("providers", {}).items()
+        if config.get("models_url")
+    ]
+
+    # Need at least 2 providers with models_url for this test
+    if len(providers_with_docs) < 2:
+        pytest.skip(
+            "Test requires at least 2 providers with models_url configured. "
+            f"Found {len(providers_with_docs)}: {providers_with_docs}"
+        )
+
+    first_provider = providers_with_docs[0]
+    second_provider = providers_with_docs[1]
 
     # Select first provider
     await page.click("#vdm-models-provider-dropdown")
     await page.wait_for_selector('[role="option"]', timeout=page_wait_timeout)
 
-    options = page.locator('[role="option"]')
-    count = await options.count()
+    option = page.locator('[role="option"]').filter(has_text=first_provider)
+    await expect(option).to_be_visible()
+    await option.click()
 
-    # Need at least 2 providers for this test
-    if count < 2:
-        pytest.skip("Test requires at least 2 configured providers")
-
-    # Get first provider's URL
-    await options.nth(0).click()
     docs_button = page.locator("#vdm-models-provider-docs-link a[href]")
     await expect(docs_button).to_be_visible(timeout=page_wait_timeout)
-    await docs_button.get_attribute("href")
+    first_href = await docs_button.get_attribute("href")
 
     # Switch to second provider
     await page.click("#vdm-models-provider-dropdown")
     await page.wait_for_selector('[role="option"]', timeout=page_wait_timeout)
-    await options.nth(1).click()
+
+    option = page.locator('[role="option"]').filter(has_text=second_provider)
+    await expect(option).to_be_visible()
+    await option.click()
 
     # Verify docs link updates (new URL)
     await expect(docs_button).to_be_visible(timeout=page_wait_timeout)
     second_href = await docs_button.get_attribute("href")
 
-    # URLs should be different (or at least the test verifies the link updates)
+    # URLs should be different
     assert second_href is not None
+    assert first_href != second_href, "Documentation URLs should differ between providers"

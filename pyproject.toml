@@ -60,10 +60,10 @@ vdm = "src.cli.main:app"
 [dependency-groups]
 dev = [
     "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
+    "pytest-asyncio>=0.26.0",
     "pytest-cov>=7.0.0",
     "pytest-mock>=3.15.0",
-    "pytest-playwright>=0.5.0",
+    "pytest-playwright-asyncio>=0.1.0",
     "playwright>=1.40.0",
     "respx>=0.22.0",
     "ruff>=0.6.0",
@@ -136,6 +136,7 @@ include = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
@@ -148,6 +149,9 @@ markers = [
 addopts = [
     "--strict-markers",
     "--disable-warnings",
+]
+filterwarnings = [
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.mypy]
