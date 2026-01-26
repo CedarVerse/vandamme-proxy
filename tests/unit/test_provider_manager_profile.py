@@ -29,15 +29,14 @@ class TestProviderManagerProfileIntegration:
         )
 
         provider_mgr = ProviderManager(profile_manager=profile_mgr)
-        provider_mgr._configs = {
-            "openai": ProviderConfig(
-                name="openai",
-                api_key="sk-test",
-                base_url="https://api.openai.com/v1",
-                timeout=90,  # Base config has 90
-                max_retries=2,
-            )
-        }
+        config = ProviderConfig(
+            name="openai",
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            timeout=90,  # Base config has 90
+            max_retries=2,
+        )
+        provider_mgr._registry.register(config)
 
         profile = profile_mgr.get_profile("test")
         timeout = provider_mgr.get_effective_timeout("openai", profile)
@@ -48,15 +47,14 @@ class TestProviderManagerProfileIntegration:
     def test_get_effective_timeout_without_profile(self):
         """Test get_effective_timeout uses base config when no profile."""
         provider_mgr = ProviderManager()
-        provider_mgr._configs = {
-            "openai": ProviderConfig(
-                name="openai",
-                api_key="sk-test",
-                base_url="https://api.openai.com/v1",
-                timeout=90,
-                max_retries=2,
-            )
-        }
+        config = ProviderConfig(
+            name="openai",
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            timeout=90,
+            max_retries=2,
+        )
+        provider_mgr._registry.register(config)
 
         timeout = provider_mgr.get_effective_timeout("openai", None)
         assert timeout == 90
@@ -71,15 +69,14 @@ class TestProviderManagerProfileIntegration:
         )
 
         provider_mgr = ProviderManager(profile_manager=profile_mgr)
-        provider_mgr._configs = {
-            "openai": ProviderConfig(
-                name="openai",
-                api_key="sk-test",
-                base_url="https://api.openai.com/v1",
-                timeout=90,
-                max_retries=2,
-            )
-        }
+        config = ProviderConfig(
+            name="openai",
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            timeout=90,
+            max_retries=2,
+        )
+        provider_mgr._registry.register(config)
 
         profile = profile_mgr.get_profile("inherit")
         timeout = provider_mgr.get_effective_timeout("openai", profile)
@@ -97,15 +94,14 @@ class TestProviderManagerProfileIntegration:
         )
 
         provider_mgr = ProviderManager(profile_manager=profile_mgr)
-        provider_mgr._configs = {
-            "openai": ProviderConfig(
-                name="openai",
-                api_key="sk-test",
-                base_url="https://api.openai.com/v1",
-                timeout=90,
-                max_retries=2,  # Base config has 2
-            )
-        }
+        config = ProviderConfig(
+            name="openai",
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            timeout=90,
+            max_retries=2,  # Base config has 2
+        )
+        provider_mgr._registry.register(config)
 
         profile = profile_mgr.get_profile("test")
         retries = provider_mgr.get_effective_max_retries("openai", profile)
@@ -116,15 +112,14 @@ class TestProviderManagerProfileIntegration:
     def test_get_effective_max_retries_without_profile(self):
         """Test get_effective_max_retries uses base config when no profile."""
         provider_mgr = ProviderManager()
-        provider_mgr._configs = {
-            "openai": ProviderConfig(
-                name="openai",
-                api_key="sk-test",
-                base_url="https://api.openai.com/v1",
-                timeout=90,
-                max_retries=2,
-            )
-        }
+        config = ProviderConfig(
+            name="openai",
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            timeout=90,
+            max_retries=2,
+        )
+        provider_mgr._registry.register(config)
 
         retries = provider_mgr.get_effective_max_retries("openai", None)
         assert retries == 2
@@ -139,15 +134,14 @@ class TestProviderManagerProfileIntegration:
         )
 
         provider_mgr = ProviderManager(profile_manager=profile_mgr)
-        provider_mgr._configs = {
-            "openai": ProviderConfig(
-                name="openai",
-                api_key="sk-test",
-                base_url="https://api.openai.com/v1",
-                timeout=90,
-                max_retries=2,
-            )
-        }
+        config = ProviderConfig(
+            name="openai",
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            timeout=90,
+            max_retries=2,
+        )
+        provider_mgr._registry.register(config)
 
         profile = profile_mgr.get_profile("inherit")
         retries = provider_mgr.get_effective_max_retries("openai", profile)

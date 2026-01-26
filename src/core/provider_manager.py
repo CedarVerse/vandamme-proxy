@@ -23,7 +23,6 @@ ProviderConfigLoader is enhanced to support [defaults] section fallback.
 import hashlib
 import logging
 import os
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Union
 
 from src.core.client import OpenAIClient
@@ -37,6 +36,7 @@ from src.core.provider import (
     ProviderConfigLoader,
     ProviderRegistry,
 )
+from src.core.provider.provider_config_loader import ProviderLoadResult
 from src.core.provider_config import (
     OAUTH_SENTINEL,
     PASSTHROUGH_SENTINEL,
@@ -59,17 +59,6 @@ logger = logging.getLogger(__name__)
 
 # Lazy-loaded singleton for AliasConfigLoader
 _alias_config_loader: "AliasConfigLoader | None" = None
-
-
-@dataclass
-class ProviderLoadResult:
-    """Result of loading a provider configuration"""
-
-    name: str
-    status: str  # "success", "partial"
-    message: str | None = None
-    api_key_hash: str | None = None
-    base_url: str | None = None
 
 
 class ProviderManager(ProviderClientFactory):
@@ -123,15 +112,9 @@ class ProviderManager(ProviderClientFactory):
             source=default_provider_source or "system",
         )
 
-        # Legacy state (kept for backward compatibility during refactoring)
-        # TODO: Remove after Phase 2 when all methods delegate to components
-        self._default_provider = default  # Compatibility shim
-        self._clients: dict[str, OpenAIClient | AnthropicClient] = {}
-        self._configs: dict[str, ProviderConfig] = {}
-        self._loaded = False
+        # Load tracking
         self._load_results: list[ProviderLoadResult] = []
-        self.middleware_chain = self._middleware_manager.middleware_chain
-        self._middleware_initialized = False
+        self._loaded = False
 
     @property
     def default_provider(self) -> str:
@@ -163,19 +146,29 @@ class ProviderManager(ProviderClientFactory):
 
     @property
     def default_provider_source(self) -> str:
-        """Get the source of the default provider configuration.
-
-        This is a compatibility property during refactoring.
-        """
+        """Get the source of the default provider configuration."""
         return self._default_selector._source
 
     @property
     def _middleware_config(self) -> "Any | None":  # MiddlewareConfig | None
-        """Get middleware config (compatibility shim).
-
-        This is a compatibility property during refactoring.
-        """
+        """Get middleware config."""
         return self._middleware_manager._config
+
+    @property
+    def middleware_chain(self) -> "Any":
+        """Get the middleware chain from MiddlewareManager."""
+        return self._middleware_manager.middleware_chain
+
+    @property
+    def _middleware_initialized(self) -> bool:
+        """Check if middleware is initialized."""
+        return self._middleware_manager.is_initialized
+
+    @_middleware_initialized.setter
+    def _middleware_initialized(self, value: bool) -> None:
+        """Setter for middleware_initialized (delegates to MiddlewareManager)."""
+        # This is a no-op since the MiddlewareManager tracks its own state
+        pass
 
     @property
     def _api_key_indices(self) -> dict[str, int]:
@@ -212,7 +205,9 @@ class ProviderManager(ProviderClientFactory):
         Delegates to DefaultProviderSelector for cleaner separation of concerns.
         Also syncs the legacy _default_provider attribute for backward compatibility.
         """
-        selected = self._default_selector.select(dict(self._configs))  # type: ignore[arg-type]
+        selected = self._default_selector.select(
+            dict(self._registry.list_all())  # type: ignore[arg-type]
+        )
         # Update legacy attribute for backward compatibility
         self._default_provider = selected
 
@@ -403,18 +398,32 @@ class ProviderManager(ProviderClientFactory):
         )
 
     def load_provider_configs(self) -> None:
-        """Load all provider configurations from environment variables"""
+        """Load all provider configurations from environment variables.
+
+        Delegates to ProviderConfigLoader for actual loading logic.
+        """
         if self._loaded:
             return
 
         # Reset load results
         self._load_results = []
 
-        # Load default provider (if API key is available)
-        self._load_default_provider()
+        # Delegate loading to ProviderConfigLoader
+        results = self._config_loader.load_all_providers(
+            default_provider=self._default_selector.configured_default,
+            default_selector=self._default_selector,
+            registry=self._registry,
+        )
+        self._load_results = results
 
-        # Load additional providers from environment
-        self._load_additional_providers()
+        # Validate at least one provider loaded successfully
+        loaded_providers = [r for r in results if r.status == "success"]
+        if not loaded_providers:
+            available_providers = self._config_loader.scan_providers()
+            raise ValueError(
+                f"No providers configured. Set {available_providers} API keys or "
+                f"configure providers in vandamme-config.toml"
+            )
 
         # Select a default provider from available ones if needed
         self._select_default_from_available()
@@ -447,395 +456,6 @@ class ProviderManager(ProviderClientFactory):
         Delegates to MiddlewareManager for cleaner separation of concerns.
         """
         await self._middleware_manager.cleanup()
-
-    def _load_default_provider(self) -> None:
-        """Load the default provider configuration"""
-        # Load provider configuration based on default_provider name
-        provider_prefix = f"{self.default_provider.upper()}_"
-        api_key = os.environ.get(f"{provider_prefix}API_KEY")
-        base_url = os.environ.get(f"{provider_prefix}BASE_URL")
-        api_version = os.environ.get(f"{provider_prefix}API_VERSION")
-
-        # Apply provider-specific defaults
-        if not base_url:
-            # Check TOML configuration first
-            toml_config = self._load_provider_toml_config(self.default_provider)
-            base_url = toml_config.get("base-url")
-            # Final fallback to hardcoded default
-            if not base_url:
-                base_url = "https://api.openai.com/v1"
-        else:
-            # Still need to load TOML for auth-mode detection
-            toml_config = self._load_provider_toml_config(self.default_provider)
-
-        # Phase 2: Use centralized auth mode detection
-        auth_mode = self._detect_auth_mode(self.default_provider, toml_config)
-
-        if not api_key:
-            # For OAuth mode, empty API key is allowed
-            if auth_mode != AuthMode.OAUTH:
-                # Check if this is actually a profile name before warning about provider API key
-                is_profile = self._profile_manager is not None and self._profile_manager.is_profile(
-                    self.default_provider
-                )
-                # Only warn if this was explicitly configured by the user AND is not a profile
-                if self.default_provider_source != "system" and not is_profile:
-                    logger.warning(
-                        f"Configured default provider '{self.default_provider}' API key not found. "
-                        f"Set {provider_prefix}API_KEY to use it as default. "
-                        "Will use another provider if available."
-                    )
-                else:
-                    # This is just a system default, no warning needed
-                    logger.debug(
-                        f"System default provider '{self.default_provider}' not configured. "
-                        "Will use another provider if available."
-                    )
-                # Don't create a config for the default provider if no API key
-                return
-            api_key = ""  # OAuth mode uses empty API key
-
-        # Support multiple static keys, whitespace-separated.
-        api_keys = api_key.split()
-        if len(api_keys) == 0:
-            return
-        if len(api_keys) > 1 and PASSTHROUGH_SENTINEL in api_keys:
-            raise ValueError(
-                f"Provider '{self.default_provider}' has mixed configuration: "
-                f"'!PASSTHRU' cannot be combined with static keys"
-            )
-
-        config = ProviderConfig(
-            name=self.default_provider,
-            api_key=api_keys[0],
-            api_keys=api_keys if len(api_keys) > 1 else None,
-            base_url=base_url,
-            api_version=api_version,
-            timeout=self._get_config_with_fallback(
-                toml_config=toml_config,
-                key="timeout",
-                env_var="REQUEST_TIMEOUT",
-                defaults_section=self._get_alias_config_loader().get_defaults(),
-                provider_name=self.default_provider,
-            ),
-            max_retries=self._get_config_with_fallback(
-                toml_config=toml_config,
-                key="max-retries",
-                env_var="MAX_RETRIES",
-                defaults_section=self._get_alias_config_loader().get_defaults(),
-                provider_name=self.default_provider,
-            ),
-            custom_headers=self._get_provider_custom_headers(self.default_provider.upper()),
-            tool_name_sanitization=bool(
-                self._load_provider_toml_config(self.default_provider).get(
-                    "tool-name-sanitization", False
-                )
-            ),
-            auth_mode=auth_mode,
-        )
-
-        self._configs[self.default_provider] = config
-        # Also register to ProviderRegistry for delegation
-        self._registry.register(config)
-
-    def _load_additional_providers(self) -> None:
-        """Load additional provider configurations from environment variables and TOML"""
-        # Track which providers we've already attempted to load
-        loaded_providers = set()
-
-        # Phase 3: Improved error handling with specific exception types
-        # First: Discover providers from TOML configuration
-        try:
-            loader = self._get_alias_config_loader()
-            config = loader.load_config()
-            toml_providers = config.get("providers", {})
-
-            for provider_name, provider_config in toml_providers.items():
-                # Skip if this is the default provider (already loaded)
-                if provider_name == self.default_provider:
-                    continue
-
-                # Load provider if:
-                # 1. It has OAuth auth-mode (no API key needed)
-                # 2. It has an api-key in TOML config
-                # 3. It has a PROVIDER_API_KEY env var
-                auth_mode = provider_config.get("auth-mode", "").lower()
-                has_toml_api_key = bool(provider_config.get("api-key"))
-                has_env_api_key = bool(os.environ.get(f"{provider_name.upper()}_API_KEY"))
-
-                if auth_mode in ("oauth", "passthrough") or has_toml_api_key or has_env_api_key:
-                    self._load_provider_config_with_result(provider_name)
-                    loaded_providers.add(provider_name)
-        except ImportError as e:
-            logger.warning(
-                f"TOML configuration loading not available: {e}. "
-                "Only environment variables will be used for provider discovery."
-            )
-        except OSError as e:
-            logger.error(
-                f"Cannot read TOML configuration files: {e}. Check file permissions and paths."
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to load TOML configuration: {e}. "
-                "Falling back to environment variable scanning."
-            )
-
-        # Second: Scan environment for any additional providers (backward compatibility)
-        for env_key, _env_value in os.environ.items():
-            if env_key.endswith("_API_KEY") and not env_key.startswith("CUSTOM_"):
-                # Phase 4: Use normalization helper
-                provider_name = self._normalize_provider_name(env_key[:-8])
-                # Skip if this is the default provider or already loaded from TOML
-                if provider_name == self.default_provider or provider_name in loaded_providers:
-                    continue
-                self._load_provider_config_with_result(provider_name)
-
-    def _load_provider_toml_config(self, provider_name: str) -> dict[str, Any]:
-        """Load provider configuration from TOML files.
-
-        Args:
-            provider_name: Name of the provider (e.g., "poe", "openai")
-
-        Returns:
-            Provider configuration dictionary from TOML
-        """
-        # Phase 3: Improved error handling
-        # Phase 5: Use singleton AliasConfigLoader
-        try:
-            loader = self._get_alias_config_loader()
-            return loader.get_provider_config(provider_name)
-        except ImportError:
-            logger.debug(
-                f"AliasConfigLoader not available for provider '{provider_name}'. "
-                "TOML configuration will be skipped."
-            )
-            return {}
-        except OSError as e:
-            logger.warning(f"Cannot read TOML configuration for provider '{provider_name}': {e}")
-            return {}
-        except Exception as e:
-            logger.warning(f"Failed to load TOML config for provider '{provider_name}': {e}")
-            return {}
-
-    def _load_provider_config_with_result(self, provider_name: str) -> None:
-        """Load configuration for a specific provider and track the result"""
-        provider_upper = provider_name.upper()
-
-        # First, try to load from TOML configuration
-        toml_config = self._load_provider_toml_config(provider_name)
-
-        # Phase 2: Use centralized auth mode detection
-        auth_mode = self._detect_auth_mode(provider_name, toml_config)
-
-        # For OAuth mode, we don't require an API key
-        if auth_mode == AuthMode.OAUTH:
-            raw_api_key = ""  # OAuth uses tokens, not API keys
-        else:
-            raw_api_key = os.environ.get(f"{provider_upper}_API_KEY") or toml_config.get(
-                "api-key", ""
-            )
-            if not raw_api_key:
-                # Skip entirely if no API key and not OAuth mode
-                return
-
-        # Support multiple static keys, whitespace-separated.
-        # Example: OPENAI_API_KEY="key1 key2 key3"
-        # For OAuth mode, we don't need an API key (tokens are managed separately)
-        if auth_mode != AuthMode.OAUTH:
-            api_keys = raw_api_key.split()
-            if len(api_keys) == 0:
-                return
-            if len(api_keys) > 1 and PASSTHROUGH_SENTINEL in api_keys:
-                raise ValueError(
-                    f"Provider '{provider_name}' has mixed configuration: "
-                    f"'!PASSTHRU' cannot be combined with static keys"
-                )
-            api_key = api_keys[0]
-        else:
-            # OAuth mode: no API key needed, use empty string as placeholder
-            api_key = ""
-            api_keys = None
-
-        # Load base URL with precedence: env > TOML > default
-        base_url = os.environ.get(f"{provider_upper}_BASE_URL") or toml_config.get("base-url")
-        if not base_url:
-            # Create result for partial configuration (missing base URL)
-            result = ProviderLoadResult(
-                name=provider_name,
-                status="partial",
-                message=(
-                    f"Missing {provider_upper}_BASE_URL (configure in environment or "
-                    "vandamme-config.toml)"
-                ),
-                api_key_hash=self.get_api_key_hash(api_key),
-                base_url=None,
-            )
-            self._load_results.append(result)
-            return
-
-        # Load other settings with precedence: env > TOML > defaults
-        api_format = os.environ.get(
-            f"{provider_upper}_API_FORMAT", toml_config.get("api-format", "openai")
-        )
-        if api_format not in ["openai", "anthropic"]:
-            api_format = "openai"  # Default to openai if invalid
-
-        # Load timeout and max-retries with fallback chain
-        defaults_section = self._get_alias_config_loader().get_defaults()
-        timeout = self._get_config_with_fallback(
-            toml_config=toml_config,
-            key="timeout",
-            env_var="REQUEST_TIMEOUT",
-            defaults_section=defaults_section,
-            provider_name=provider_name,
-        )
-        max_retries = self._get_config_with_fallback(
-            toml_config=toml_config,
-            key="max-retries",
-            env_var="MAX_RETRIES",
-            defaults_section=defaults_section,
-            provider_name=provider_name,
-        )
-
-        # Create result for successful configuration
-        result = ProviderLoadResult(
-            name=provider_name,
-            status="success",
-            api_key_hash=self.get_api_key_hash(api_key),
-            base_url=base_url,
-        )
-        self._load_results.append(result)
-
-        # Create the config with auth_mode properly set
-        config = ProviderConfig(
-            name=provider_name,
-            api_key=api_key,
-            api_keys=api_keys if api_keys is not None and len(api_keys) > 1 else None,
-            base_url=base_url,
-            api_version=os.environ.get(f"{provider_upper}_API_VERSION")
-            or toml_config.get("api-version"),
-            timeout=timeout,
-            max_retries=max_retries,
-            custom_headers=self._get_provider_custom_headers(provider_upper),
-            api_format=api_format,
-            tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
-            auth_mode=auth_mode,  # Properly set the auth_mode
-        )
-
-        self._configs[provider_name] = config
-        # Also register to ProviderRegistry for delegation
-        self._registry.register(config)
-
-    def _load_provider_config(self, provider_name: str) -> None:
-        """Load configuration for a specific provider (legacy method for default provider)"""
-        provider_upper = provider_name.upper()
-
-        # Load from TOML first
-        toml_config = self._load_provider_toml_config(provider_name)
-
-        # Phase 2: Use centralized auth mode detection
-        auth_mode = self._detect_auth_mode(provider_name, toml_config)
-
-        # For OAuth mode, API key is not required
-        if auth_mode != AuthMode.OAUTH:
-            # API key is required (from env or TOML)
-            raw_api_key = os.environ.get(f"{provider_upper}_API_KEY") or toml_config.get("api-key")
-            if not raw_api_key:
-                raise ValueError(
-                    f"API key not found for provider '{provider_name}'. "
-                    f"Please set {provider_upper}_API_KEY environment variable."
-                )
-        else:
-            raw_api_key = ""
-
-        api_keys = raw_api_key.split()
-        if len(api_keys) == 0:
-            raise ValueError(
-                f"API key not found for provider '{provider_name}'. "
-                f"Please set {provider_upper}_API_KEY environment variable."
-            )
-        if len(api_keys) > 1 and PASSTHROUGH_SENTINEL in api_keys:
-            raise ValueError(
-                f"Provider '{provider_name}' has mixed configuration: "
-                f"'!PASSTHRU' cannot be combined with static keys"
-            )
-        api_key = api_keys[0]
-
-        # Base URL with precedence: env > TOML > default
-        base_url = os.environ.get(f"{provider_upper}_BASE_URL") or toml_config.get("base-url")
-        if not base_url:
-            raise ValueError(
-                f"Base URL not found for provider '{provider_name}'. "
-                f"Please set {provider_upper}_BASE_URL environment variable "
-                f"or configure in vandamme-config.toml"
-            )
-
-        # Load other settings with precedence: env > TOML > defaults
-        api_format = os.environ.get(
-            f"{provider_upper}_API_FORMAT", toml_config.get("api-format", "openai")
-        )
-        if api_format not in ["openai", "anthropic"]:
-            api_format = "openai"  # Default to openai if invalid
-
-        # Load timeout and max-retries with fallback chain
-        defaults_section = self._get_alias_config_loader().get_defaults()
-        timeout = self._get_config_with_fallback(
-            toml_config=toml_config,
-            key="timeout",
-            env_var="REQUEST_TIMEOUT",
-            defaults_section=defaults_section,
-            provider_name=provider_name,
-        )
-        max_retries = self._get_config_with_fallback(
-            toml_config=toml_config,
-            key="max-retries",
-            env_var="MAX_RETRIES",
-            defaults_section=defaults_section,
-            provider_name=provider_name,
-        )
-
-        config = ProviderConfig(
-            name=provider_name,
-            api_key=api_key,
-            api_keys=api_keys if len(api_keys) > 1 else None,
-            base_url=base_url,
-            api_version=os.environ.get(f"{provider_upper}_API_VERSION")
-            or toml_config.get("api-version"),
-            timeout=timeout,
-            max_retries=max_retries,
-            custom_headers=self._get_provider_custom_headers(provider_upper),
-            api_format=api_format,
-            tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
-            auth_mode=auth_mode,  # Phase 2: Add auth_mode to ProviderConfig
-        )
-
-        self._configs[provider_name] = config
-        # Also register to ProviderRegistry for delegation
-        self._registry.register(config)
-
-    def _get_provider_custom_headers(self, provider_prefix: str) -> dict[str, str]:
-        """Get custom headers for a specific provider"""
-        custom_headers = {}
-        provider_prefix = provider_prefix.upper()
-
-        # Get all environment variables
-        env_vars = dict(os.environ)
-
-        # Find provider-specific CUSTOM_HEADER_* environment variables
-        for env_key, env_value in env_vars.items():
-            if env_key.startswith(f"{provider_prefix}_CUSTOM_HEADER_"):
-                # Convert PROVIDER_CUSTOM_HEADER_KEY to Header-Key
-                header_name = env_key[
-                    len(provider_prefix) + 15 :
-                ]  # Remove 'PROVIDER_CUSTOM_HEADER_' prefix
-
-                if header_name:  # Make sure it's not empty
-                    # Convert underscores to hyphens for HTTP header format
-                    header_name = header_name.replace("_", "-")
-                    custom_headers[header_name] = env_value
-
-        return custom_headers
 
     def parse_model_name(self, model: str) -> tuple[str, str]:
         """Parse 'provider:model' into (provider, model)
@@ -900,7 +520,7 @@ class ProviderManager(ProviderClientFactory):
         if not self._loaded:
             self.load_provider_configs()
 
-        config = self._configs.get(provider_name)
+        config = self._registry.get(provider_name)
         if config is None:
             raise ValueError(f"Provider '{provider_name}' not configured")
         if config.uses_passthrough or config.uses_oauth:
@@ -957,7 +577,7 @@ class ProviderManager(ProviderClientFactory):
         Returns:
             Timeout value in seconds, or None if provider not found
         """
-        base_config = self._registry.get(provider_name) or self._configs.get(provider_name)
+        base_config = self._registry.get(provider_name)
         if base_config is None:
             return None
 
@@ -977,7 +597,7 @@ class ProviderManager(ProviderClientFactory):
         Returns:
             Max retry count, or None if provider not found
         """
-        base_config = self._registry.get(provider_name) or self._configs.get(provider_name)
+        base_config = self._registry.get(provider_name)
         if base_config is None:
             return None
 
@@ -1011,11 +631,9 @@ class ProviderManager(ProviderClientFactory):
         # Check if default provider is already in results
         default_in_results = any(r.name == self.default_provider for r in all_results)
 
-        # If not, add it from registry (with fallback to _configs)
+        # If not, add it from registry
         if not default_in_results:
-            default_config = self._registry.get(self.default_provider) or self._configs.get(
-                self.default_provider
-            )
+            default_config = self._registry.get(self.default_provider)
             if default_config:
                 default_result = ProviderLoadResult(
                     name=self.default_provider,
@@ -1040,7 +658,7 @@ class ProviderManager(ProviderClientFactory):
             default_indicator = "  * " if is_default else "    "
 
             # Check if this provider uses OAuth authentication
-            provider_config = self._registry.get(result.name) or self._configs.get(result.name)
+            provider_config = self._registry.get(result.name)
             is_oauth = provider_config and provider_config.uses_oauth
             oauth_indicator = "  🔐" if is_oauth else ""
 

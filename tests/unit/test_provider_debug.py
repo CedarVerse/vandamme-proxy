@@ -14,8 +14,10 @@ def test_check_provider_loading():
 
     print(f"OPENAI_API_KEY env: {repr(os.environ.get('OPENAI_API_KEY'))}")
     print(f"_loaded: {config.provider_manager._loaded}")
-    print(f"_configs keys: {list(config.provider_manager._configs.keys())}")
+    print(f"registry keys: {list(config.provider_manager._registry.list_all().keys())}")
 
     # Try to reload
     config.provider_manager.load_provider_configs()
-    print(f"After reload - _configs keys: {list(config.provider_manager._configs.keys())}")
+    print(
+        f"After reload - registry keys: {list(config.provider_manager._registry.list_all().keys())}"
+    )

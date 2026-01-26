@@ -27,18 +27,17 @@ class TestDependenciesProfileManager:
 
         provider_mgr = ProviderManager(profile_manager=profile_mgr)
 
-        # Mock _configs directly
+        # Use registry instead of _configs
         from src.core.provider_config import ProviderConfig
 
-        provider_mgr._configs = {
-            "openai": ProviderConfig(
-                name="openai",
-                api_key="sk-test",
-                base_url="https://api.openai.com/v1",
-                timeout=90,  # Base config has 90
-                max_retries=2,
-            )
-        }
+        config = ProviderConfig(
+            name="openai",
+            api_key="sk-test",
+            base_url="https://api.openai.com/v1",
+            timeout=90,  # Base config has 90
+            max_retries=2,
+        )
+        provider_mgr._registry.register(config)
 
         profile = profile_mgr.get_profile("test")
         timeout = provider_mgr.get_effective_timeout("openai", profile)
