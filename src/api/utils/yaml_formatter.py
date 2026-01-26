@@ -86,16 +86,18 @@ def format_running_totals_yaml(data: dict[str, Any], filters: dict[str, str] | N
 
 
 def create_hierarchical_structure(
-    summary_data: dict[str, Any], provider_data: dict[str, Any]
+    summary_data: dict[str, Any], provider_data: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Create hierarchical YAML structure from summary and provider data.
 
     Args:
         summary_data: Overall summary statistics
-        provider_data: Provider-specific data with models
+        provider_data: Provider-specific data with models (optional)
 
     Returns:
-        Hierarchical dictionary suitable for YAML formatting
+        Hierarchical dictionary suitable for YAML formatting.
+        Always includes a 'providers' key (even when empty) to satisfy
+        the HierarchicalData TypedDict contract.
     """
     structure = {
         "# Summary Statistics": None,
@@ -117,8 +119,11 @@ def create_hierarchical_structure(
         "#": None,  # Empty line separator
     }
 
-    # Add provider breakdown
-    if provider_data is not None:
+    # Always initialize providers to satisfy HierarchicalData TypedDict contract
+    structure["providers"] = {}
+
+    # Only populate provider breakdown if data provided
+    if provider_data:
         structure["# Provider Breakdown"] = None
         providers_dict: dict[str, Any] = {}
 
@@ -169,6 +174,10 @@ def create_hierarchical_structure(
             providers_dict[provider_name] = provider_stats
 
         structure["providers"] = providers_dict
+
+    # Runtime validation: ensure HierarchicalData TypedDict contract is satisfied
+    assert "providers" in structure, "Required field 'providers' missing from structure"
+    assert isinstance(structure["providers"], dict), "Field 'providers' must be a dict"
 
     return structure
 

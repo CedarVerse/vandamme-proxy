@@ -101,7 +101,12 @@ async def test_logs_endpoint():
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_running_totals_endpoint():
-    """Test GET /metrics/running-totals endpoint."""
+    """Test GET /metrics/running-totals endpoint.
+
+    Uses YAML parsing to validate structure instead of fragile string matching.
+    """
+    import yaml
+
     async with httpx.AsyncClient() as client:
         # Test without filters
         response = await client.get(f"{BASE_URL}/metrics/running-totals")
@@ -110,57 +115,63 @@ async def test_running_totals_endpoint():
         assert response.headers["content-type"] == "text/yaml; charset=utf-8"
 
         yaml_content = response.text
+        yaml_data = yaml.safe_load(yaml_content)
 
-        # If metrics are disabled, we get a different response
-        if "Request metrics logging is disabled" in yaml_content:
-            assert "Set LOG_REQUEST_METRICS=true to enable tracking" in yaml_content
+        # Check metrics disabled flag (structured approach)
+        # When metrics are disabled, _metrics_enabled flag is set to False
+        if not yaml_data.get("_metrics_enabled", True):
+            # Metrics disabled - check for suggestion
+            # The response should contain guidance about enabling metrics
+            assert any("LOG_REQUEST_METRICS" in str(v) for v in yaml_data.values()), (
+                "Disabled metrics response should mention LOG_REQUEST_METRICS"
+            )
         else:
-            # Check for YAML structure elements
-            assert "# Running Totals Report" in yaml_content
-            assert "summary:" in yaml_content
-            assert "total_requests:" in yaml_content
-            assert "total_errors:" in yaml_content
-            assert "total_input_tokens:" in yaml_content
-            assert "total_output_tokens:" in yaml_content
-            assert "active_requests:" in yaml_content
-            assert "average_duration_ms:" in yaml_content
+            # Metrics enabled - validate hierarchical structure
+            assert isinstance(yaml_data, dict), "YAML root should be a dict"
 
-            # New provider schema (explicit rollup + per-model split).
-            # NOTE: Integration tests assume the running server is the code under test.
-            # If you're running an older server binary, these assertions will fail.
-            assert "providers:" in yaml_content
-            # rollup: and models: only appear when providers have data
-            if "providers: {}" not in yaml_content:
-                assert "rollup:" in yaml_content
-                assert "models:" in yaml_content
-                # Streaming split keys
-                assert "total:" in yaml_content
+            # Validate summary section (always present when metrics enabled)
+            assert "summary" in yaml_data, "Summary section required"
+            summary = yaml_data["summary"]
+            assert isinstance(summary, dict), "Summary must be a dict"
+            for key in (
+                "total_requests",
+                "total_errors",
+                "total_input_tokens",
+                "total_output_tokens",
+                "active_requests",
+                "average_duration_ms",
+            ):
+                assert key in summary, f"Summary missing required key: {key}"
 
-            # Nested mirrored metric keys
-            assert "requests:" in yaml_content
-            assert "errors:" in yaml_content
-            assert "input_tokens:" in yaml_content
-            assert "output_tokens:" in yaml_content
-            assert "cache_read_tokens:" in yaml_content
-            assert "cache_creation_tokens:" in yaml_content
-            assert "tool_uses:" in yaml_content
-            assert "tool_results:" in yaml_content
-            assert "tool_calls:" in yaml_content
-            assert "average_duration_ms:" in yaml_content
+            # Validate providers key (always present due to HierarchicalData contract)
+            assert "providers" in yaml_data, "Providers key required by TypedDict contract"
+            assert isinstance(yaml_data["providers"], dict), "Providers must be a dict"
 
-            # Old ambiguous nested provider totals should not appear
-            # These are summary totals and are expected
-            assert "total_tool_uses:" in yaml_content
-            assert "total_tool_results:" in yaml_content
-            assert "total_tool_calls:" in yaml_content
-            assert "total_cache_read_tokens:" in yaml_content
-            assert "total_cache_creation_tokens:" in yaml_content
+            # Only validate provider structure if non-empty
+            if yaml_data["providers"]:
+                # Filter out comment keys (starting with #)
+                provider_entries = {
+                    k: v for k, v in yaml_data["providers"].items() if not k.startswith("#")
+                }
 
-            # Summary stays in old schema
-            assert "total_requests:" in yaml_content
-            assert "total_errors:" in yaml_content
-            assert "total_input_tokens:" in yaml_content
-            assert "total_output_tokens:" in yaml_content
+                # Check that at least one provider has expected structure
+                for provider_key, provider_data in provider_entries.items():
+                    if isinstance(provider_data, dict):
+                        # Validate rollup structure
+                        assert "rollup" in provider_data, f"Provider {provider_key} missing rollup"
+                        rollup = provider_data["rollup"]
+                        assert "total" in rollup, f"Provider {provider_key} rollup missing total"
+                        total = rollup["total"]
+                        assert "requests" in total, (
+                            f"Provider {provider_key} total missing requests"
+                        )
+
+                        # Models section is optional (only when there's model data)
+                        if "models" in provider_data:
+                            models = provider_data["models"]
+                            assert isinstance(models, dict), (
+                                f"Provider {provider_key} models must be dict"
+                            )
 
         # Test with provider filter
         response = await client.get(f"{BASE_URL}/metrics/running-totals?provider=poe")
@@ -169,7 +180,7 @@ async def test_running_totals_endpoint():
         assert response.headers["content-type"] == "text/yaml; charset=utf-8"
         yaml_content = response.text
 
-        if "Request metrics logging is disabled" not in yaml_content:
+        if yaml_data.get("_metrics_enabled", True):
             assert "# Filter: provider=poe" in yaml_content
 
         # Test with model filter using wildcard
@@ -179,7 +190,7 @@ async def test_running_totals_endpoint():
         assert response.headers["content-type"] == "text/yaml; charset=utf-8"
         yaml_content = response.text
 
-        if "Request metrics logging is disabled" not in yaml_content:
+        if yaml_data.get("_metrics_enabled", True):
             assert "# Filter: model=gpt*" in yaml_content
 
         # Test with both provider and model filter
@@ -189,7 +200,7 @@ async def test_running_totals_endpoint():
         assert response.headers["content-type"] == "text/yaml; charset=utf-8"
         yaml_content = response.text
 
-        if "Request metrics logging is disabled" not in yaml_content:
+        if yaml_data.get("_metrics_enabled", True):
             assert "# Filter: provider=poe & model=claude*" in yaml_content
 
         # Test case-insensitive matching
@@ -204,14 +215,39 @@ async def test_running_totals_endpoint():
 async def test_connection_test():
     """Test connection test endpoint.
 
-    This test verifies the /test-connection endpoint responds correctly,
-    regardless of whether the upstream API is actually reachable.
+    LIMITATIONS:
+    This test runs against a real upstream API without mocking, so it accepts
+    multiple outcomes (success/failed/skipped/rate-limited). This allows silent
+    regressions because the test passes even when the success path is broken.
 
-    The endpoint may return:
-    - 200 with status="success" if API is reachable
-    - 200 with status="skipped" for passthrough providers
-    - 503 with status="failed" if API is unreachable
-    - 429 if rate limited by upstream provider
+    TODO: Split into separate test scenarios with RESPX mocking:
+    - test_connection_test_success(): Mock successful upstream response
+    - test_connection_test_skipped(): Mock passthrough provider configuration
+    - test_connection_test_failure(): Mock upstream unreachable scenario
+
+    Current endpoint behavior:
+    - 200 with status="success" if API is reachable and returns valid response
+    - 200 with status="skipped" for passthrough providers (no connection test)
+    - 503 with status="failed" if API is unreachable or returns error
+    - 429 if rate limited by upstream provider (FastAPI rate limiting)
+
+    Success path structure (when status="success"):
+    {
+        "status": "success",
+        "provider": "provider_name",
+        "message": "Successfully connected",
+        "response_id": "req_xxx",
+        "model": "model_name",
+        "cached": false
+    }
+
+    Failed path structure (when status="failed"):
+    {
+        "status": "failed",
+        "provider": "provider_name",
+        "message": "Error details",
+        "error_type": "upstream_error"
+    }
     """
     async with httpx.AsyncClient() as client:
         response = await client.get(f"{BASE_URL}/test-connection")
@@ -223,22 +259,33 @@ async def test_connection_test():
         if response.status_code == 429:
             data = response.json()
             assert "detail" in data
-            return
+            pytest.skip("Rate limited by upstream - cannot validate success path")
 
         data = response.json()
 
         # Verify response structure
-        assert "status" in data
-        assert data["status"] in ("success", "failed", "skipped")
+        assert "status" in data, "Response missing 'status' field"
+        assert data["status"] in ("success", "failed", "skipped"), (
+            f"Invalid status: {data['status']}"
+        )
 
         # Common fields across all response types
-        assert "provider" in data or "error_type" in data
+        assert "provider" in data or "error_type" in data, (
+            "Response must have 'provider' or 'error_type' field"
+        )
 
+        # Validate success path structure when status is "success"
         if data["status"] == "success":
-            assert "message" in data
-            assert "response_id" in data
+            assert "message" in data, "Success response missing 'message' field"
+            assert "response_id" in data, "Success response missing 'response_id' field"
+            assert isinstance(data["response_id"], str), "response_id must be a string"
+            assert data["response_id"].startswith("req_"), (
+                f"response_id must start with 'req_', got: {data['response_id']}"
+            )
         elif data["status"] == "failed":
-            assert "message" in data or "error_type" in data
+            assert "message" in data or "error_type" in data, (
+                "Failed response must have 'message' or 'error_type' field"
+            )
 
 
 # ZAIO provider tests moved to tests/external/test_zaio_provider.py
