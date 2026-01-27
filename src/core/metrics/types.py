@@ -6,9 +6,7 @@ tracker logic (useful for API layers and tests).
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
-
-from typing_extensions import NotRequired
+from typing import Any, NotRequired, TypedDict
 
 
 class HierarchicalData(TypedDict):

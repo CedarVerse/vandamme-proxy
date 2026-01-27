@@ -306,7 +306,7 @@ class OpenAIClient(OAuthClientMixin):
 
             except HTTPException:
                 raise
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 # Let timeout and cancellation errors propagate for SSE wrapper handling
                 logger.debug("Timeout/cancellation in streaming, propagating to SSE wrapper")
                 raise
@@ -378,7 +378,7 @@ class OpenAIClient(OAuthClientMixin):
             # Note: Timeouts and other streaming errors should NOT be converted to
             # HTTPException here - they will be caught by the SSE error handler wrapper
             # in streaming.py and converted to graceful error events.
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 # Let timeout and cancellation errors propagate for SSE wrapper handling
                 logger.debug("Timeout/cancellation in streaming, propagating to SSE wrapper")
                 raise

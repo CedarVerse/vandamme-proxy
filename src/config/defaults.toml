@@ -74,6 +74,7 @@ opus = "agentrouter:opus"
 # OpenAI provider defaults
 [openai]
 base-url = "https://api.openai.com/v1"
+models-url = "https://platform.openai.com/docs/models"
 api-format = "openai"
 timeout = 90
 max-retries = 2
@@ -86,11 +87,11 @@ extract = "gpt-4o"
 # ChatGPT provider defaults (OAuth authentication)
 [chatgpt]
 base-url = "https://api.openai.com/v1"
+models-url = "https://platform.openai.com/docs/models"
 api-format = "openai"
 auth-mode = "oauth"
 timeout = 90
 max-retries = 2
-models-url = "https://platform.openai.com/docs/models"
 [chatgpt.aliases]
 haiku = "gpt-5-mini-2025-08-07"
 sonnet = "gpt-5.2-codex"
@@ -99,6 +100,7 @@ opus = "gpt-5.2-2025-12-11"
 # Poe provider defaults
 [poe]
 base-url = "https://api.poe.com/v1"
+models-url = "https://poe.com/explore?category=Programming"
 # Only used if POE_MODEL_PAGE is empty
 model-page = "https://poe.com/{display_name}/api"
 api-format = "openai"
@@ -127,6 +129,7 @@ summary2 = "gpt-5-nano"
 # OpenRouter provider defaults
 [openrouter]
 base-url = "https://openrouter.ai/api/v1"
+models-url = "https://openrouter.ai/models"
 # Only used if OPENROUTER_MODEL_PAGE is empty
 model-page = "https://openrouter.ai/{id}"
 api-format = "openai"
@@ -144,8 +147,15 @@ cheap2 = "openai/gpt-oss-120b:free"
 cheap3 = "qwen/qwen3-coder:free"
 top = "openai/gpt-5.2"
 
+[cerebras]
+base-url = "https://api.cerebras.ai/v1"
+models-url = "https://www.cerebras.ai/pricing"
+api-format = "openai"
+[cerebras.aliases]
+
 [nanogpt]
 base-url = "https://nano-gpt.com/api/v1"
+models-url = "https://nano-gpt.com/pricing"
 api-format = "openai"
 [nanogpt.aliases]
 minimax = "minimax/minimax-m2.1"
@@ -160,6 +170,7 @@ docs = "ds"
 
 [agentrouter]
 base-url = "https://agentrouter.org/v1"
+models-url = "https://agentrouter.org/pricing"
 api-format = "openai"
 timeout = 90
 max-retries = 2
@@ -173,6 +184,7 @@ opus = "claude-opus-4-5-20251101"
 
 [agentroutera]
 base-url = "https://agentrouter.org"
+models-url = "https://agentrouter.org/pricing"
 api-format = "anthropic"
 timeout = 90
 max-retries = 2
@@ -206,6 +218,7 @@ opus = "GLM-4.7"
 # Kimi provider defaults
 [kimi]
 base-url = "https://api.kimi.com/coding/v1"
+models-url = "https://kimi-ai.chat/models/"
 api-format = "openai"
 timeout = 90
 max-retries = 2
@@ -239,10 +252,10 @@ opus = "LongCat-Flash-Thinking"
 # Anthropic provider defaults
 [anthropic]
 base-url = "https://api.anthropic.com"
+models-url = "https://platform.claude.com/docs/en/about-claude/models/overview"
 api-format = "anthropic"
 timeout = 90
 max-retries = 2
-models-url = "https://docs.anthropic.com/en/docs/about-claude/models"
 [anthropic.aliases]
 haiku = "claude-3-5-haiku-20241022"
 sonnet = "claude-3-5-sonnet-20241022"

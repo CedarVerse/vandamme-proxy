@@ -7,7 +7,7 @@ Caches provider-specific model lists to avoid repeated API calls.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -141,9 +141,9 @@ class ModelsDiskCache(DiskJsonCache):
 
     def _get_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
     def _serialize(self, payload: Any) -> dict[str, Any]:  # noqa: ANN401
         """Not used - we implement custom read/write methods."""
@@ -173,9 +173,9 @@ class ModelsDiskCache(DiskJsonCache):
 
     def _get_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
     def _serialize(self, payload: Any) -> dict[str, Any]:  # noqa: ANN401
         """Not used - we implement custom read/write methods."""

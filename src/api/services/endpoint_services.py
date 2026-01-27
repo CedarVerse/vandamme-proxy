@@ -12,7 +12,6 @@ Design principles:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -298,7 +297,7 @@ class ModelsListService:
                 )
             return raw
 
-        except (httpx.HTTPError, ConnectionError, asyncio.TimeoutError) as e:
+        except (TimeoutError, httpx.HTTPError, ConnectionError) as e:
             # Network/HTTP errors - try stale cache
             logger.debug(f"Upstream fetch failed, trying stale cache: {type(e).__name__}: {e}")
             if self._cache:
@@ -618,9 +617,9 @@ class TokenCountService:
             return tokens if isinstance(tokens, int) else None
 
         except (
+            TimeoutError,
             httpx.HTTPError,
             ConnectionError,
-            asyncio.TimeoutError,
             KeyError,
             AttributeError,
             TypeError,
@@ -756,9 +755,9 @@ class AliasesListService:
             if top.aliases:
                 return {"default": top.aliases}
         except (
+            TimeoutError,
             ImportError,
             ConnectionError,
-            asyncio.TimeoutError,
             AttributeError,
             TopModelsSourceError,
             RuntimeError,
@@ -876,13 +875,13 @@ class TestConnectionService:
             )
 
         except (
+            TimeoutError,
             httpx.HTTPError,
             ConnectionError,
-            asyncio.TimeoutError,
             KeyError,
             AttributeError,
             TypeError,
-            ValueError,  # Catch ValueError for OAuth and other configuration issues
+            ValueError,
         ) as e:
             logger.debug(f"Connection test failed: {type(e).__name__}: {e}")
             return TestConnectionResult(
@@ -980,9 +979,9 @@ class TopModelsEndpointService:
             )
 
         except (
+            TimeoutError,
             ImportError,
             ConnectionError,
-            asyncio.TimeoutError,
             AttributeError,
             KeyError,
             TypeError,

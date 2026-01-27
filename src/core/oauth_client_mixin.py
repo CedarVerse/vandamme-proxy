@@ -4,7 +4,7 @@ This module provides a reusable mixin for API clients that need to inject
 OAuth tokens into their requests instead of traditional API keys.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -92,11 +92,9 @@ class OAuthClientMixin:
             exp_timestamp = get_token_expiry(access_token)
             if exp_timestamp:
                 # Set invalidation time to 5 minutes before actual expiry
-                self._oauth_token_expiry = datetime.fromtimestamp(
-                    exp_timestamp - 300, tz=timezone.utc
-                )
+                self._oauth_token_expiry = datetime.fromtimestamp(exp_timestamp - 300, tz=UTC)
         except Exception:
             # If we can't parse expiry, set a safe default (55 minutes from now)
-            self._oauth_token_expiry = datetime.now(timezone.utc) + timedelta(minutes=55)
+            self._oauth_token_expiry = datetime.now(UTC) + timedelta(minutes=55)
 
         return headers

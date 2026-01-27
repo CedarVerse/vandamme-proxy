@@ -19,7 +19,7 @@ def _provider_tab_content() -> list:
                                 id="vdm-models-provider-dropdown",
                                 options=[],
                                 value=None,
-                                placeholder="Provider",
+                                placeholder="Select a provider...",
                                 clearable=False,
                             ),
                         ],

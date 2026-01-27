@@ -180,7 +180,7 @@ class TopModelsService:
             assert isinstance(source, OpenRouterTopModelsSource)
             models = await source.fetch_models()
 
-        last_updated = datetime.now(tz=dt.timezone.utc)
+        last_updated = datetime.now(tz=dt.UTC)
 
         models = _apply_exclusions(models, self._cfg.exclude)
         aliases = _suggest_aliases(models)

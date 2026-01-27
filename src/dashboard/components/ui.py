@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import dash_ag_grid as dag  # type: ignore[import-untyped]
@@ -141,7 +141,7 @@ def format_timestamp(iso_string: str | None) -> str:
                 return f"{int(diff.total_seconds() / 86400)}d ago"
 
         # For timezone-aware timestamps, use UTC comparison
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         diff = now - dt
 
         # Handle future timestamps (clock skew)
@@ -185,7 +185,7 @@ def timestamp_age_seconds(iso_string: str | None) -> float | None:
     if not dt:
         return None
 
-    diff = datetime.now() - dt if dt.tzinfo is None else datetime.now(timezone.utc) - dt
+    diff = datetime.now() - dt if dt.tzinfo is None else datetime.now(UTC) - dt
 
     # Future timestamps (clock skew) count as "just now".
     return max(0.0, float(diff.total_seconds()))

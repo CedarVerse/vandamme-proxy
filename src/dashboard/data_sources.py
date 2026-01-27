@@ -117,7 +117,10 @@ async def fetch_active_requests(*, cfg: DashboardConfigProtocol) -> dict[str, An
 async def fetch_models(
     *, cfg: DashboardConfigProtocol, provider: str | None = None
 ) -> dict[str, Any]:
-    """Fetch available models from the API"""
+    """Fetch available models from the API.
+
+    Preserves provider context in error messages for elegant display.
+    """
     url = f"{cfg.api_base_url}/v1/models"
     params: dict[str, str] = {"format": "openai"}
     headers: dict[str, str] = {}
@@ -125,11 +128,28 @@ async def fetch_models(
         params["provider"] = provider
         headers["provider"] = provider
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(url, params=params, headers=headers)
+    provider_display = f"'{provider}'" if provider else "default"
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url, params=params, headers=headers)
+    except httpx.TimeoutException as e:
+        raise DashboardDataError(
+            f"Timeout fetching models for provider {provider_display}: {type(e).__name__}",
+        ) from e
+    except httpx.NetworkError as e:
+        raise DashboardDataError(
+            f"Connection error fetching models for provider {provider_display}: {type(e).__name__}",
+        ) from e
+    except httpx.HTTPStatusError as e:
+        raise DashboardDataError(
+            f"HTTP error fetching models for provider {provider_display}: {e.response.status_code}",
+        ) from e
 
     if resp.status_code != 200:
-        raise DashboardDataError(f"Failed to fetch models from {url}: HTTP {resp.status_code}")
+        raise DashboardDataError(
+            f"Failed to fetch models for provider {provider_display}: HTTP {resp.status_code}",
+        )
 
     try:
         data = resp.json()

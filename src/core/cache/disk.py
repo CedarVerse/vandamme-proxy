@@ -11,7 +11,7 @@ import hashlib
 import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +73,7 @@ class DiskJsonCache(ABC):
                 return False
 
             last_updated = datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             return (now - last_updated) <= self.ttl
         except (ValueError, TypeError) as e:
             logger.debug(f"Cache timestamp validation failed: {e}")
@@ -194,7 +194,7 @@ class DiskJsonCache(ABC):
         # Prepare cache data with metadata
         cache_data = {
             "schema_version": self.schema_version,
-            "last_updated": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "last_updated": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             **self._serialize(payload),
         }
 

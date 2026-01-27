@@ -684,7 +684,7 @@ class ProviderConfigLoader:
             )
 
         # Second: Scan environment for any additional providers (backward compatibility)
-        for env_key, _env_value in os.environ.items():
+        for env_key in os.environ:
             if env_key.endswith("_API_KEY") and not env_key.startswith("CUSTOM_"):
                 provider_name = self._normalize_provider_name(env_key[:-8])
                 # Skip if this is the default provider or already loaded from TOML

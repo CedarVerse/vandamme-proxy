@@ -145,8 +145,8 @@ class TokenManager:
             try:
                 expiry = datetime.datetime.fromisoformat(auth_data.expires_at)
                 if expiry.tzinfo is None:
-                    expiry = expiry.replace(tzinfo=datetime.timezone.utc)
-                now = datetime.datetime.now(datetime.timezone.utc)
+                    expiry = expiry.replace(tzinfo=datetime.UTC)
+                now = datetime.datetime.now(datetime.UTC)
                 # Refresh if expires within threshold
                 return (expiry - now).total_seconds() < _REFRESH_THRESHOLD_SECONDS
             except Exception:
@@ -158,8 +158,8 @@ class TokenManager:
             try:
                 last_refresh = datetime.datetime.fromisoformat(auth_data.last_refresh)
                 if last_refresh.tzinfo is None:
-                    last_refresh = last_refresh.replace(tzinfo=datetime.timezone.utc)
-                now = datetime.datetime.now(datetime.timezone.utc)
+                    last_refresh = last_refresh.replace(tzinfo=datetime.UTC)
+                now = datetime.datetime.now(datetime.UTC)
                 # Refresh after 55 minutes
                 return (
                     now - last_refresh
@@ -229,7 +229,7 @@ class TokenManager:
             if exp_timestamp:
                 with contextlib.suppress(Exception):
                     expires_at = datetime.datetime.fromtimestamp(
-                        exp_timestamp, tz=datetime.timezone.utc
+                        exp_timestamp, tz=datetime.UTC
                     ).isoformat()
 
             return AuthData(
@@ -238,7 +238,7 @@ class TokenManager:
                 id_token=id_token,
                 account_id=account_id,
                 expires_at=expires_at,
-                last_refresh=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                last_refresh=datetime.datetime.now(datetime.UTC).isoformat(),
             )
 
         except HttpError as e:

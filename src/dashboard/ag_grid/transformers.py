@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import urllib.parse
+from datetime import UTC
 from typing import Any
 
 from src.core.alias_config import AliasConfigLoader
@@ -293,9 +294,9 @@ def metrics_active_requests_row_data(active_requests: list[dict[str, Any]]) -> l
     Note: `start_time` is epoch seconds.
     """
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     row_data: list[dict[str, Any]] = []
     for r in active_requests:
@@ -308,7 +309,7 @@ def metrics_active_requests_row_data(active_requests: list[dict[str, Any]]) -> l
         start_time_s = r.get("start_time")
         if isinstance(start_time_s, (int, float)):
             start_epoch_ms = float(start_time_s) * 1000.0
-            start_iso = datetime.fromtimestamp(float(start_time_s), tz=timezone.utc).isoformat()
+            start_iso = datetime.fromtimestamp(float(start_time_s), tz=UTC).isoformat()
             age_s = now.timestamp() - float(start_time_s)
         else:
             start_epoch_ms = 0.0

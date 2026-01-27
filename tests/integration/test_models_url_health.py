@@ -34,7 +34,7 @@ async def test_health_endpoint_includes_models_url():
 
         # Check that models_url key exists in provider info (may be null if not configured)
         # At minimum, the key should be present
-        for _provider_name, provider_info in providers.items():
+        for provider_info in providers.values():
             if isinstance(provider_info, dict):
                 # models_url should be present in provider info
                 assert "models_url" in provider_info
@@ -58,7 +58,7 @@ async def test_health_endpoint_models_url_structure():
         providers = health_data.get("providers", {})
 
         # Verify structure is consistent
-        for _provider_name, provider_info in providers.items():
+        for provider_info in providers.values():
             if isinstance(provider_info, dict):
                 # Check expected keys exist
                 assert "api_format" in provider_info

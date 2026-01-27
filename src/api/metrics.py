@@ -177,7 +177,7 @@ async def stream_active_requests(
             # Client disconnected
             logger.debug("SSE client disconnected from /metrics/active-requests/stream")
             raise
-        except (asyncio.TimeoutError, ConnectionError, OSError) as e:
+        except (TimeoutError, ConnectionError, OSError) as e:
             logger.error(f"Error in active requests SSE stream: {type(e).__name__}: {e}")
             raise
 
@@ -262,14 +262,7 @@ async def get_running_totals(
             },
         )
 
-    except (
-        asyncio.TimeoutError,
-        ConnectionError,
-        KeyError,
-        TypeError,
-        ValueError,
-        AttributeError,
-    ) as e:
+    except (TimeoutError, ConnectionError, KeyError, TypeError, ValueError, AttributeError) as e:
         logger.error(f"Error getting running totals: {type(e).__name__}: {e}")
         # Return error as YAML for consistency
         error_yaml = format_running_totals_yaml(

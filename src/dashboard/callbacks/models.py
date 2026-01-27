@@ -14,16 +14,129 @@ from src.dashboard.data_sources import DashboardConfigProtocol
 logger = logging.getLogger(__name__)
 
 
+def _build_error_alert(
+    error_message: str,
+    error_type: str | None,
+    provider: str | None,
+) -> Any:
+    """Build elegant error alert with helpful context.
+
+    Displays color-coded alert with icon, provider name, error message,
+    and actionable suggestion based on error type.
+    """
+    # Map error type to display properties
+    error_config = {
+        "timeout": {
+            "icon": "⏱️",
+            "color": "warning",
+            "suggestion": "Check network connectivity or verify the provider is accessible",
+        },
+        "connection": {
+            "icon": "🔌",
+            "color": "danger",
+            "suggestion": "Verify the provider's base_url is correct and accessible",
+        },
+        "auth": {
+            "icon": "🔑",
+            "color": "warning",
+            "suggestion": "Check API key or run 'vdm oauth login <provider>'",
+        },
+        "server_error": {
+            "icon": "🔴",
+            "color": "danger",
+            "suggestion": "The provider API may be experiencing issues. Try again later",
+        },
+        "not_found": {
+            "icon": "🔍",
+            "color": "info",
+            "suggestion": "The provider or models endpoint may not be configured",
+        },
+    }
+
+    config = error_config.get(
+        error_type or "unknown",
+        {
+            "icon": "⚠️",
+            "color": "secondary",
+            "suggestion": None,
+        },
+    )
+
+    parts = [
+        html.Strong(f"{config['icon']} Models fetch failed"),
+        html.Br(),
+        html.Span(f"Provider: {provider or 'default'}", className="text-muted small"),
+        html.Br(),
+        html.Span(error_message, className="small"),
+    ]
+
+    if config["suggestion"]:
+        parts.extend(
+            [
+                html.Hr(className="my-2"),
+                html.Span("💡 Suggestion: ", className="small fw-semibold"),
+                html.Span(config["suggestion"], className="small"),
+            ]
+        )
+
+    return dbc.Alert(parts, color=config["color"], className="small")
+
+
 def register_models_callbacks(
     *,
     app: dash.Dash,
     cfg: DashboardConfigProtocol,
     run: Any,
 ) -> None:
+    def _build_docs_link_for_provider(provider: str | None) -> Any:
+        """Build documentation link component for a provider.
+
+        Shows the documentation link whenever a provider is selected,
+        regardless of whether models load successfully or not.
+        """
+        from src.dashboard.data_sources import fetch_health
+
+        if not provider:
+            return html.Div()
+
+        # Fetch health to get models_url (fast operation - cached, no external API call)
+        try:
+            health = run(fetch_health(cfg=cfg))
+
+            providers_dict = health.get("providers", {})
+            provider_info = (
+                providers_dict.get(provider, {}) if isinstance(providers_dict, dict) else {}
+            )
+            models_url = (
+                provider_info.get("models_url") if isinstance(provider_info, dict) else None
+            )
+        except Exception:
+            models_url = None
+
+        if not models_url:
+            return html.Div()
+
+        # Simple link component - always visible
+        return html.Div(
+            [
+                html.Span("Documentation: ", className="text-muted small me-2"),
+                dbc.Button(
+                    "View available models",
+                    href=models_url,
+                    target="_blank",
+                    external_link=True,
+                    color="info",
+                    size="sm",
+                    outline=True,
+                ),
+            ],
+            className="mb-3",
+        )
+
     @app.callback(
-        Output("vdm-models-provider-grid", "rowData"),
         Output("vdm-models-provider-dropdown", "options"),
         Output("vdm-models-provider-dropdown", "value"),
+        Output("vdm-models-provider-grid", "rowData"),
         Output("vdm-models-provider-hint", "children"),
         Output("vdm-models-provider-docs-link", "children"),
         Input("vdm-models-poll", "n_intervals"),
@@ -35,28 +148,74 @@ def register_models_callbacks(
         _n: int,
         _clicks: int | None,
         provider_value: str | None,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], str | None, Any, Any]:
-        """Fetch and update provider models tab."""
+    ) -> tuple[list[dict[str, str]], str | None, list[dict[str, Any]], Any, Any]:
+        """Fetch and update provider models tab.
+
+        Uses trigger detection to provide immediate feedback when provider changes:
+        - Provider dropdown change: Clear grid, show loading state, show docs link (fast)
+        - Poll/Refresh/Initial load: Fetch full data from API (slow)
+        """
+        from dash import no_update
+
+        trigger = dash.callback_context.triggered
+
+        # Detect if this is a provider change vs poll/refresh/initial load
+        is_provider_change = (
+            any(t["prop_id"] == "vdm-models-provider-dropdown.value" for t in trigger)
+            if trigger
+            else False
+        )
+
+        if is_provider_change:
+            # IMMEDIATE FEEDBACK: Clear grid, show loading, show docs link
+            # This runs instantly without fetching data
+            hint = [
+                html.Span("Loading models for "),
+                provider_badge(provider_value)
+                if provider_value
+                else html.Span("(no provider)", className="text-muted"),
+                html.Span("...", className="text-muted ms-2"),
+            ]
+
+            docs_link = _build_docs_link_for_provider(provider_value)
+
+            # Keep dropdown options/value unchanged, clear grid, show loading
+            return no_update, provider_value, [], hint, docs_link  # type: ignore[return-value]
+
+        # POLL/REFRESH/INITIAL LOAD: Fetch full data from API
         try:
             from src.dashboard.services.models import build_provider_models_view
 
             view = run(build_provider_models_view(cfg=cfg, provider_value=provider_value))
 
-            docs_link = _build_docs_link_component(
-                models_url=view.models_url,
-                error_message=view.error_message,
-                has_models=bool(view.row_data),
-            )
+            # Show docs link when models load, or error alert with docs link on failure
+            if view.row_data:
+                # Models loaded successfully - show the docs link
+                docs_link = _build_docs_link_for_provider(view.provider_value)
+            else:
+                # Models failed to load - show error/fallback message with optional docs link
+                docs_link = _build_docs_link_component(
+                    models_url=view.models_url,
+                    error_message=view.error_message,
+                    has_models=False,
+                    error_type=view.error_type,
+                )
 
-            return view.row_data, view.provider_options, view.provider_value, view.hint, docs_link
+            return view.provider_options, view.provider_value, view.row_data, view.hint, docs_link
 
         except Exception:
             logger.exception("dashboard.models: provider refresh failed")
+
+            # Try to extract error context from view if available
+            error_type = "unknown"
+            error_message = "Failed to load providers"
+            provider = provider_value or "unknown"
+
             return (
                 [],
-                [],
                 None,
-                html.Span("Failed to load providers", className="text-muted"),
+                [],
+                _build_error_alert(error_message, error_type, provider),
                 html.Div(),
             )
 
@@ -333,23 +492,28 @@ def _build_docs_link_component(
     models_url: str | None,
     error_message: str | None,
     has_models: bool,
+    error_type: str | None = None,
 ) -> Any:
     """Build documentation link component based on context.
 
     Shows:
     - Nothing if models loaded successfully
-    - Documentation link + error explanation if fetch failed and URL available
-    - Error message only if no URL available
+    - Elegant error alert if fetch failed (with icon, color, suggestion)
+    - Documentation link if no error but models_url available
+
+    This function is kept for error-only contexts. The always-visible docs link
+    is handled by _build_docs_link_for_provider() in the on_provider_change callback.
     """
     if has_models:
         return html.Div()
 
     if not models_url:
         if error_message:
-            return dbc.Alert(
-                f"Could not load models: {error_message}",
-                color="warning",
-                className="small",
+            # Use elegant error alert instead of simple text
+            return _build_error_alert(
+                error_message=error_message,
+                error_type=error_type,
+                provider=None,  # Provider context already in message
             )
         return html.Div()
 

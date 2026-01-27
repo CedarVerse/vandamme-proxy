@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .oauth import OAuthConfig
 
-from .constants import OAuthDefaults, OAuthProtocol
+from .constants import OAuthClient, OAuthDefaults, OAuthProtocol
 from .pkce import generate_pkce
 from .storage import AuthData, AuthStorage
 from .token_exchanger import TokenExchanger
@@ -123,7 +123,7 @@ class OAuthHTTPServer(http.server.HTTPServer):
             "response_type": "code",
             "client_id": self.config.client_id,
             "redirect_uri": self.redirect_uri,
-            "scope": "openid offline_access",
+            "scope": OAuthClient.SCOPE,
             "code_challenge": self.pkce.code_challenge,
             "code_challenge_method": "S256",
             "id_token_add_organizations": "true",

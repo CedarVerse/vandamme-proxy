@@ -32,13 +32,12 @@ class TestIsTimeoutError:
 
     def test_returns_false_for_asyncio_timeout(self):
         """Should return False for asyncio.TimeoutError (different base class)."""
-        import asyncio
 
         from src.api.endpoints import _is_timeout_error
 
         # asyncio.TimeoutError is NOT an httpx.TimeoutException
         # so it should return False
-        exc = asyncio.TimeoutError("Async operation timed out")
+        exc = TimeoutError("Async operation timed out")
         assert _is_timeout_error(exc) is False
 
     def test_returns_false_for_non_timeout_errors(self):

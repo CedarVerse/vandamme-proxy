@@ -97,9 +97,7 @@ class TokenExchanger:
         expires_at = None
         exp_timestamp = get_token_expiry(access_token, raise_on_error=True)
         if exp_timestamp:
-            expires_at = datetime.datetime.fromtimestamp(
-                exp_timestamp, tz=datetime.timezone.utc
-            ).isoformat()
+            expires_at = datetime.datetime.fromtimestamp(exp_timestamp, tz=datetime.UTC).isoformat()
 
         return AuthData(
             access_token=access_token,
@@ -107,7 +105,7 @@ class TokenExchanger:
             id_token=id_token,
             account_id=account_id,
             expires_at=expires_at,
-            last_refresh=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            last_refresh=datetime.datetime.now(datetime.UTC).isoformat(),
         )
 
 

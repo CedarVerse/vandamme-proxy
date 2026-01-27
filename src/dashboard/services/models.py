@@ -26,6 +26,7 @@ class ProviderModelsView:
     hint: Any
     models_url: str | None = None
     error_message: str | None = None
+    error_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,39 @@ class ProfileModelsView:
     profile_options: list[dict[str, str]]
     profile_value: str | None
     hint: Any  # Can be html.Span or list[html.Span | html.Any]
+
+
+def _classify_error(error_message: str) -> str:
+    """Classify error type from message.
+
+    Returns error type string for UI display and icon selection.
+    """
+    msg_lower = error_message.lower()
+    if "timeout" in msg_lower:
+        return "timeout"
+    if "connection" in msg_lower or "connect" in msg_lower:
+        return "connection"
+    if "401" in msg_lower or "403" in msg_lower or "auth" in msg_lower:
+        return "auth"
+    if "404" in msg_lower:
+        return "not_found"
+    if "502" in msg_lower or "503" in msg_lower or "500" in msg_lower:
+        return "server_error"
+    return "unknown"
+
+
+def _format_error_message(
+    error_message: str,
+    provider: str | None,
+) -> str:
+    """Format error message with provider context.
+
+    Extracts the core error message from DashboardDataError which already
+    includes provider context, and formats it for display.
+    """
+    # The error message already has provider context from fetch_models()
+    # Just return it as-is for display
+    return error_message
 
 
 async def build_provider_models_view(*, cfg: Any, provider_value: str | None) -> ProviderModelsView:
@@ -48,13 +82,7 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
 
     sorted_providers = sorted(p for p in providers if isinstance(p, str) and p)
 
-    selected_provider = provider_value.strip() if provider_value else ""
-    if not selected_provider:
-        if default_provider:
-            selected_provider = default_provider
-        elif sorted_providers:
-            selected_provider = sorted_providers[0]
-
+    # Build provider options first (needed for dropdown)
     provider_options: list[dict[str, str]] = []
     if default_provider and default_provider in sorted_providers:
         provider_options.append(
@@ -65,11 +93,23 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
         [{"label": p, "value": p} for p in sorted_providers if p != default_provider]
     )
 
+    # If no provider selected, return empty state (don't auto-select or fetch)
+    if not provider_value:
+        return ProviderModelsView(
+            row_data=[],
+            provider_options=provider_options,
+            provider_value=None,
+            hint=html.Span("Select a provider to view available models", className="text-muted"),
+            models_url=None,
+            error_message=None,
+        )
+
+    # Provider selected - proceed with model fetch
+    selected_provider = provider_value.strip()
+
     hint = [
         html.Span("Listing models for "),
-        provider_badge(selected_provider)
-        if selected_provider
-        else html.Span("(no providers)", className="text-muted"),
+        provider_badge(selected_provider),
     ]
 
     # Get models_url from health endpoint
@@ -84,15 +124,24 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
         models_data = await fetch_models(cfg=cfg, provider=selected_provider or None)
         models = models_data.get("data", [])
     except Exception as e:
-        # On error, return view with models_url and error message
-        logger.debug(f"Failed to fetch models for {selected_provider}: {e}")
+        # Classify and format error for elegant display
+        error_message = str(e)
+        error_type = _classify_error(error_message)
+        formatted_error = _format_error_message(error_message, selected_provider)
+
+        logger.debug(
+            f"Failed to fetch models for {selected_provider}: {e}",
+            extra={"error_type": error_type, "provider": selected_provider},
+        )
+
         return ProviderModelsView(
             row_data=[],
             provider_options=provider_options,
             provider_value=selected_provider or None,
             hint=hint,
             models_url=models_url,
-            error_message=str(e),
+            error_message=formatted_error,
+            error_type=error_type,
         )
 
     inferred_provider = selected_provider or default_provider or "multiple"

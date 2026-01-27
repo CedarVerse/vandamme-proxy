@@ -198,7 +198,7 @@ def external_api_keys(external_test_config: type[ExternalTestConfig]):
                 # Use the key
     """
     available_keys = {}
-    for provider, _env_var in external_test_config.PROVIDER_API_KEYS.items():
+    for provider in external_test_config.PROVIDER_API_KEYS:
         key = external_test_config.get_api_key(provider)
         if key:
             available_keys[provider] = key

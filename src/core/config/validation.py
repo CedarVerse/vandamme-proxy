@@ -174,7 +174,7 @@ def validate_all() -> list[ConfigError]:
     errors: list[ConfigError] = []
     loaded = load_all_specs()
 
-    for _name, value in loaded.items():
+    for value in loaded.values():
         if isinstance(value, ConfigError):
             errors.append(value)
 
