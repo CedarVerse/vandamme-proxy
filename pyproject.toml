@@ -94,6 +94,8 @@ select = [
     "I",
     # pep8-naming
     "N",
+    # performance
+    "PERF",
 ]
 ignore = [
     # Too many arguments to function call
@@ -102,6 +104,10 @@ ignore = [
     "PLR2004",
     # Function calls in default arguments (false positive for FastAPI Depends())
     "B008",
+    # Use list/dict comprehension for transformed lists/dicts
+    # Prefer readability for complex conditions and async generators
+    "PERF401",
+    "PERF403",
 ]
 
 # Explicitly enable type transformation rules
