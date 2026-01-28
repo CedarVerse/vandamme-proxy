@@ -230,6 +230,7 @@ opus = "kimi-k2-thinking-turbo"
 
 [deepseek]
 base-url = "https://api.deepseek.com"
+models-url = "https://api-docs.deepseek.com/quick_start/pricing"
 api-format = "openai"
 timeout = 90
 max-retries = 2
@@ -240,14 +241,21 @@ opus = "deepseek-reasoner"
 
 [longcat]
 base-url = "https://api.longcat.chat/openai/v1"
+models-url = "https://longcat.chat/platform/docs/#supported-models"
 api-format = "openai"
-# Anthropic: base-url = "https://api.longcat.chat/anthropic"
-timeout = 90
-max-retries = 2
 [longcat.aliases]
 haiku = "LongCat-Flash-Chat"
 sonnet = "LongCat-Flash-Thinking"
-opus = "LongCat-Flash-Thinking"
+opus = "LongCat-Flash-Thinking-2601"
+
+[longcata]
+base-url = "https://api.longcat.chat/anthropic"
+models-url = "https://longcat.chat/platform/docs/#supported-models"
+api-format = "anthropic"
+[longcata.aliases]
+haiku = "LongCat-Flash-Chat"
+sonnet = "LongCat-Flash-Thinking"
+opus = "LongCat-Flash-Thinking-2601"
 
 # Anthropic provider defaults
 [anthropic]
