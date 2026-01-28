@@ -151,38 +151,14 @@ def register_models_callbacks(
     ) -> tuple[list[dict[str, str]], str | None, list[dict[str, Any]], Any, Any]:
         """Fetch and update provider models tab.
 
-        Uses trigger detection to provide immediate feedback when provider changes:
-        - Provider dropdown change: Clear grid, show loading state, show docs link (fast)
-        - Poll/Refresh/Initial load: Fetch full data from API (slow)
+        Refreshes provider models data on:
+        - Provider dropdown change
+        - Poll interval (30s)
+        - Manual refresh button
+        - Initial page load
+
+        Always fetches data immediately regardless of trigger.
         """
-        from dash import no_update
-
-        trigger = dash.callback_context.triggered
-
-        # Detect if this is a provider change vs poll/refresh/initial load
-        is_provider_change = (
-            any(t["prop_id"] == "vdm-models-provider-dropdown.value" for t in trigger)
-            if trigger
-            else False
-        )
-
-        if is_provider_change:
-            # IMMEDIATE FEEDBACK: Clear grid, show loading, show docs link
-            # This runs instantly without fetching data
-            hint = [
-                html.Span("Loading models for "),
-                provider_badge(provider_value)
-                if provider_value
-                else html.Span("(no provider)", className="text-muted"),
-                html.Span("...", className="text-muted ms-2"),
-            ]
-
-            docs_link = _build_docs_link_for_provider(provider_value)
-
-            # Keep dropdown options/value unchanged, clear grid, show loading
-            return no_update, provider_value, [], hint, docs_link  # type: ignore[return-value]
-
-        # POLL/REFRESH/INITIAL LOAD: Fetch full data from API
         try:
             from src.dashboard.services.models import build_provider_models_view
 
