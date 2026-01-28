@@ -14,36 +14,45 @@ class TestAliasManager:
 
     def test_load_aliases_from_env(self):
         """Test loading aliases from environment variables."""
-        with (
-            patch.dict(
-                os.environ,
-                {
-                    "POE_ALIAS_HAIKU": "grok-4.1-fast-non-reasoning",
-                    "OPENAI_ALIAS_FAST": "gpt-4o-mini",
-                    "ANTHROPIC_ALIAS_CHAT": "claude-3-5-sonnet-20241022",
-                    "OTHER_VAR": "should_be_ignored",
-                },
-            ),
-            patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
-        ):
-            # Mock provider manager with available providers
-            mock_pm = mock_provider_manager.return_value
-            mock_pm._configs = {"poe": {}, "openai": {}, "anthropic": {}}
+        # Remove test-specific OPENROUTER_ALIAS_CHEAP to avoid interference
+        original_openrouter_alias = os.environ.pop("OPENROUTER_ALIAS_CHEAP", None)
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "POE_ALIAS_HAIKU": "grok-4.1-fast-non-reasoning",
+                        "OPENAI_ALIAS_FAST": "gpt-4o-mini",
+                        "ANTHROPIC_ALIAS_CHAT": "claude-3-5-sonnet-20241022",
+                        "OTHER_VAR": "should_be_ignored",
+                    },
+                ),
+                patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
+            ):
+                # Mock provider manager with available providers
+                mock_pm = mock_provider_manager.return_value
+                mock_pm._configs = {"poe": {}, "openai": {}, "anthropic": {}}
 
-            # Mock empty fallbacks to avoid interference
-            with patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader:
-                mock_loader_instance = mock_config_loader.return_value
-                mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
-                mock_loader_instance.get_defaults.return_value = {}
-                mock_loader_instance.get_defaults_aliases.return_value = {}
+                # Mock empty fallbacks to avoid interference
+                with patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader:
+                    mock_loader_instance = mock_config_loader.return_value
+                    mock_loader_instance.load_config.return_value = {
+                        "providers": {},
+                        "defaults": {},
+                    }
+                    mock_loader_instance.get_defaults.return_value = {}
+                    mock_loader_instance.get_defaults_aliases.return_value = {}
 
-                alias_manager = AliasManager()
+                    alias_manager = AliasManager()
 
-            aliases = alias_manager.get_all_aliases()
-            assert len(aliases) == 3
-            assert aliases["poe"]["haiku"] == "grok-4.1-fast-non-reasoning"
-            assert aliases["openai"]["fast"] == "gpt-4o-mini"
-            assert aliases["anthropic"]["chat"] == "claude-3-5-sonnet-20241022"
+                aliases = alias_manager.get_all_aliases()
+                assert len(aliases) == 3
+                assert aliases["poe"]["haiku"] == "grok-4.1-fast-non-reasoning"
+                assert aliases["openai"]["fast"] == "gpt-4o-mini"
+                assert aliases["anthropic"]["chat"] == "claude-3-5-sonnet-20241022"
+        finally:
+            if original_openrouter_alias is not None:
+                os.environ["OPENROUTER_ALIAS_CHEAP"] = original_openrouter_alias
 
     def test_case_insensitive_storage(self):
         """Test that aliases are stored in lowercase."""
@@ -154,51 +163,66 @@ class TestAliasManager:
 
     def test_empty_alias_value_skip(self):
         """Test that empty alias values are skipped."""
-        with (
-            patch.dict(
-                os.environ,
-                {
-                    "OPENAI_ALIAS_EMPTY": "",
-                    "POE_ALIAS_SPACES": "   ",
-                    "ANTHROPIC_ALIAS_VALID": "claude-3-5-sonnet-20241022",
-                },
-            ),
-            patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
-            patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader,
-        ):
-            mock_pm = mock_provider_manager.return_value
-            mock_pm._configs = {"openai": {}, "poe": {}, "anthropic": {}}
+        # Remove test-specific OPENROUTER_ALIAS_CHEAP to avoid interference
+        original_openrouter_alias = os.environ.pop("OPENROUTER_ALIAS_CHEAP", None)
+        try:
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "OPENAI_ALIAS_EMPTY": "",
+                        "POE_ALIAS_SPACES": "   ",
+                        "ANTHROPIC_ALIAS_VALID": "claude-3-5-sonnet-20241022",
+                    },
+                ),
+                patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
+                patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader,
+            ):
+                mock_pm = mock_provider_manager.return_value
+                mock_pm._configs = {"openai": {}, "poe": {}, "anthropic": {}}
 
-            # Mock empty fallbacks to avoid interference
-            mock_loader_instance = mock_config_loader.return_value
-            mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
-            mock_loader_instance.get_defaults.return_value = {}
-            mock_loader_instance.get_defaults_aliases.return_value = {}
-
-            alias_manager = AliasManager()
-
-            aliases = alias_manager.get_all_aliases()
-            assert aliases == {"anthropic": {"valid": "claude-3-5-sonnet-20241022"}}
-
-    def test_invalid_provider_skip(self):
-        """Test that aliases for unknown providers are accepted (lazy validation)."""
-        with (
-            patch.dict(os.environ, {"UNKNOWN_ALIAS_X": "model"}),
-            patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
-        ):
-            mock_pm = mock_provider_manager.return_value
-            mock_pm._configs = {"openai": {}}
-
-            with patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader:
+                # Mock empty fallbacks to avoid interference
                 mock_loader_instance = mock_config_loader.return_value
                 mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
                 mock_loader_instance.get_defaults.return_value = {}
                 mock_loader_instance.get_defaults_aliases.return_value = {}
+
                 alias_manager = AliasManager()
 
-            # With lazy validation, AliasManager accepts any provider alias.
-            # Validation will occur downstream when the alias is actually used.
-            assert alias_manager.get_all_aliases() == {"unknown": {"x": "model"}}
+                aliases = alias_manager.get_all_aliases()
+                assert aliases == {"anthropic": {"valid": "claude-3-5-sonnet-20241022"}}
+        finally:
+            if original_openrouter_alias is not None:
+                os.environ["OPENROUTER_ALIAS_CHEAP"] = original_openrouter_alias
+
+    def test_invalid_provider_skip(self):
+        """Test that aliases for unknown providers are accepted (lazy validation)."""
+        # Remove test-specific OPENROUTER_ALIAS_CHEAP to avoid interference
+        original_openrouter_alias = os.environ.pop("OPENROUTER_ALIAS_CHEAP", None)
+        try:
+            with (
+                patch.dict(os.environ, {"UNKNOWN_ALIAS_X": "model"}),
+                patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
+            ):
+                mock_pm = mock_provider_manager.return_value
+                mock_pm._configs = {"openai": {}}
+
+                with patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader:
+                    mock_loader_instance = mock_config_loader.return_value
+                    mock_loader_instance.load_config.return_value = {
+                        "providers": {},
+                        "defaults": {},
+                    }
+                    mock_loader_instance.get_defaults.return_value = {}
+                    mock_loader_instance.get_defaults_aliases.return_value = {}
+                    alias_manager = AliasManager()
+
+                # With lazy validation, AliasManager accepts any provider alias.
+                # Validation will occur downstream when the alias is actually used.
+                assert alias_manager.get_all_aliases() == {"unknown": {"x": "model"}}
+        finally:
+            if original_openrouter_alias is not None:
+                os.environ["OPENROUTER_ALIAS_CHEAP"] = original_openrouter_alias
 
     def test_get_all_aliases_is_copy(self):
         """Test get_all_aliases returns a copy."""
@@ -270,20 +294,29 @@ class TestAliasManager:
 
     def test_get_alias_count(self):
         """Test get_alias_count method."""
-        with (
-            patch.dict(os.environ, {"POE_ALIAS_HAIKU": "grok-4.1-fast"}),
-            patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
-        ):
-            mock_pm = mock_provider_manager.return_value
-            mock_pm._configs = {"poe": {}}
+        # Remove test-specific OPENROUTER_ALIAS_CHEAP to avoid interference
+        original_openrouter_alias = os.environ.pop("OPENROUTER_ALIAS_CHEAP", None)
+        try:
+            with (
+                patch.dict(os.environ, {"POE_ALIAS_HAIKU": "grok-4.1-fast"}),
+                patch("src.core.provider_manager.ProviderManager") as mock_provider_manager,
+            ):
+                mock_pm = mock_provider_manager.return_value
+                mock_pm._configs = {"poe": {}}
 
-            with patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader:
-                mock_loader_instance = mock_config_loader.return_value
-                mock_loader_instance.load_config.return_value = {"providers": {}, "defaults": {}}
-                mock_loader_instance.get_defaults.return_value = {}
-                alias_manager = AliasManager()
+                with patch("src.core.alias_config.AliasConfigLoader") as mock_config_loader:
+                    mock_loader_instance = mock_config_loader.return_value
+                    mock_loader_instance.load_config.return_value = {
+                        "providers": {},
+                        "defaults": {},
+                    }
+                    mock_loader_instance.get_defaults.return_value = {}
+                    alias_manager = AliasManager()
 
-            assert alias_manager.get_alias_count() == 1
+                assert alias_manager.get_alias_count() == 1
+        finally:
+            if original_openrouter_alias is not None:
+                os.environ["OPENROUTER_ALIAS_CHEAP"] = original_openrouter_alias
 
     def test_resolve_alias_provider_scope_with_fallbacks(self):
         """Test provider-scoped resolution works with fallback aliases."""

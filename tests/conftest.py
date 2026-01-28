@@ -186,6 +186,9 @@ def setup_test_environment_for_unit_tests():
             "POE_API_KEY": TEST_API_KEYS["POE"],
             "GLM_API_KEY": TEST_API_KEYS["GLM"],
             "OPENROUTER_API_KEY": TEST_API_KEYS["OPENROUTER"],
+            # Test-specific alias for test_openrouter_prefixed_alias_records_target_model_in_metrics
+            # Decouples test from defaults.toml changes
+            "OPENROUTER_ALIAS_CHEAP": "minimax/minimax-m2",
             "KIMI_API_KEY": "test-kimi-key",
             # Additional providers needed for profile validation in defaults.toml
             # Note: 'top' is a profile name (#top), not a provider - no TOP_API_KEY needed

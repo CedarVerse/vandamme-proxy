@@ -118,19 +118,16 @@ def test_openai_chat_completions_passthrough_mocked(mock_openai_api, openai_chat
 
 
 def test_openrouter_prefixed_alias_records_target_model_in_metrics(
-    mock_openai_api, openai_chat_completion, monkeypatch
+    mock_openai_api, openai_chat_completion
 ):
     """Regression: requests like model='openrouter:cheap' must record the target model.
 
     Underlying bug: provider-prefixed aliases can leak into metrics and appear as model rows.
     This test enforces that the recorded model name is the resolved target.
+
+    Note: OPENROUTER_ALIAS_CHEAP is set by conftest fixture to decouple this test
+    from defaults.toml, allowing defaults.toml to change without breaking this test.
     """
-
-    # Ensure a deterministic openrouter alias in this test.
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
-    monkeypatch.setenv("OPENROUTER_API_FORMAT", "openai")
-    monkeypatch.setenv("OPENROUTER_ALIAS_CHEAP", "minimax/minimax-m2")
-
     from src.main import app
 
     # OpenRouter is OpenAI-compatible, but uses a different base URL. In unit tests,
