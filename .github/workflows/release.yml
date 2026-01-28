@@ -126,12 +126,13 @@ jobs:
           make build-cli
         shell: bash
 
+      - name: List built binaries
+        run: ls -la dist/nuitka/
+        shell: bash
+
       - name: Upload binaries to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Upload all binaries
-          gh release upload ${{ steps.version.outputs.version }} \
-            dist/nuitka/vdm-*${{ matrix.binary_ext }} \
-            --clobber
+          gh release upload "${{ steps.version.outputs.version }}" "dist/nuitka/vdm-*${{ matrix.binary_ext }}" --clobber
         shell: bash
