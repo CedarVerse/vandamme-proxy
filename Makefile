@@ -157,18 +157,11 @@ health: ## Check proxy server health
 check-install: ## Verify that installation was successful
 	@printf "$(BOLD)$(BLUE)🔍 Verifying installation...$(RESET)\n"
 	@printf "$(CYAN)Checking vdm command...$(RESET)\n"
-	@if [ -f ".venv/bin/vdm" ]; then \
-		printf "$(GREEN)✅ vdm command found$(RESET)\n"; \
-		.venv/bin/vdm version; \
-	else \
-		printf "$(RED)❌ vdm command not found$(RESET)\n"; \
-		printf "$(YELLOW)💡 Run 'make dev-env-init' to install CLI$(RESET)\n"; \
-		exit 1; \
-	fi
-	@printf "$(CYAN)Checking Python imports...$(RESET)\n"
 ifndef HAS_UV
 	$(error UV is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh)
 endif
+	@$(UV) run vdm version || (printf "$(RED)❌ vdm command not found$(RESET)\n" && printf "$(YELLOW)💡 Run 'make dev-env-init' to install CLI$(RESET)\n" && exit 1)
+	@printf "$(CYAN)Checking Python imports...$(RESET)\n"
 	@$(UV) run python -c "import src.cli.main; print('$(GREEN)✅ CLI module imports successfully$(RESET)')" || exit 1
 	@printf "$(BOLD)$(GREEN)✅ Installation verified successfully$(RESET)\n"
 
