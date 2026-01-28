@@ -55,23 +55,19 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          release_name: Release ${{ steps.version.outputs.version }}
-          draft: false
-          prerelease: false
-          body: |
-            ## Changes in ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --title "Release ${{ steps.version.outputs.version }}" \
+            --notes "## Changes in ${{ steps.version.outputs.version }}
 
-            [View changelog](https://github.com/elifarley/vandamme-proxy/blob/main/CHANGELOG.md)
+          [View changelog](https://github.com/elifarley/vandamme-proxy/blob/main/CHANGELOG.md)
 
-            ### Installation
-            ```bash
-            pip install vandamme-proxy==${{ steps.version.outputs.version }}
-            ```
+          ### Installation
+          \`\`\`bash
+          pip install vandamme-proxy==${{ steps.version.outputs.version }}
+          \`\`\`"
 
   build-binaries:
     name: Build Binaries
