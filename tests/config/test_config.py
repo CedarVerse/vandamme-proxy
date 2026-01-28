@@ -17,6 +17,7 @@ TEST_API_KEYS = {
     "VERTEX": "test-vertex-key",
     "POE": "test-poe-key",
     "CUSTOM": "test-custom-key",
+    "OPENROUTER": "test-openrouter-key",
     "ZAI": "test-zai-key",
     "ZAIO": "test-zaio-key",
 }
@@ -30,6 +31,7 @@ TEST_ENDPOINTS = {
     "BEDROCK": "https://bedrock-runtime.us-east-1.amazonaws.com",
     "VERTEX": "https://generativelanguage.googleapis.com",
     "POE": "https://poe.com",
+    "OPENROUTER": "https://openrouter.ai/api",
     "CUSTOM": "https://api.custom-provider.com",
     "ZAI": "https://api.z.ai/api/anthropic",
     "ZAIO": "https://api.z.ai/api/coding/paas/v4",
