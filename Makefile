@@ -441,19 +441,23 @@ build-cli: ## Build CLI binary for current platform
 	@# Detect platform
 	@UNAME_S="$$(uname -s)"; \
 	UNAME_M="$$(uname -m)"; \
-	if [ "$${UNAME_S}" = "Darwin" ]; then \
-		PLATFORM="darwin"; \
-	elif [ "$${UNAME_S}" = "Linux" ]; then \
-		PLATFORM="linux"; \
-	else \
-		PLATFORM="unknown"; \
-	fi; \
+	PLATFORM="unknown"; \
+	case "$${UNAME_S}" in \
+		Darwin*) PLATFORM="darwin" ;; \
+		Linux*) PLATFORM="linux" ;; \
+		MINGW64_NT*|MSYS_NT*|CYGWIN_NT*) PLATFORM="windows" ;; \
+	esac; \
 	BINARY_EXT=""; \
+	case "$${PLATFORM}" in \
+		windows) BINARY_EXT=".exe" ;; \
+	esac; \
 	if [ "$${UNAME_S}" = "Darwin" ] && [ "$${UNAME_M}" = "arm64" ]; then \
 		BINARY_NAME="vdm-$${PLATFORM}-aarch64$${BINARY_EXT}"; \
 	elif [ "$${UNAME_S}" = "Darwin" ] && [ "$${UNAME_M}" = "x86_64" ]; then \
 		BINARY_NAME="vdm-$${PLATFORM}-x86_64$${BINARY_EXT}"; \
-	elif [ "$${UNAME_S}" = "Linux" ]; then \
+	elif [ "$${PLATFORM}" = "linux" ]; then \
+		BINARY_NAME="vdm-$${PLATFORM}-$${UNAME_M}$${BINARY_EXT}"; \
+	elif [ "$${PLATFORM}" = "windows" ]; then \
 		BINARY_NAME="vdm-$${PLATFORM}-$${UNAME_M}$${BINARY_EXT}"; \
 	else \
 		BINARY_NAME="vdm$${BINARY_EXT}"; \
