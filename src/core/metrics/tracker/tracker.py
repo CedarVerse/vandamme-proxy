@@ -485,5 +485,3 @@ class RequestTracker:
                 [f"{e}: {c}" for e, c in self.summary_metrics.error_counts.items()]
             )
             self._logger.warning(" ERRORS | %s", error_dist)
-
-        self.summary_metrics = SummaryMetrics()
