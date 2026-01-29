@@ -397,18 +397,17 @@ test-quick: ## Run tests without coverage (fast)
 
 coverage: ## Run tests with coverage report
 	@printf "$(BOLD)$(CYAN)Running tests with coverage...$(RESET)\n"
-	@printf "$(CYAN)→ Ensuring pytest-cov is installed...$(RESET)\n"
-	@$(UV) add --group dev pytest-cov 2>/dev/null || true
+	@printf "$(CYAN)→ Generating coverage reports (XML + HTML)...$(RESET)\n"
 	@# Check if server is running, if so run all tests, otherwise run only unit tests
 	@if curl -s --max-time 2 --connect-timeout 1 http://localhost:$(PORT)/health > /dev/null 2>&1 || \
 	   curl -s --max-time 2 --connect-timeout 1 http://localhost:18082/health > /dev/null 2>&1; then \
 		printf "$(YELLOW)Server detected, running coverage on all tests...$(RESET)\n"; \
-		$(UV) run $(PYTEST) $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=html --cov-report=term-missing; \
+		$(UV) run $(PYTEST) $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=xml --cov-report=html --cov-report=term-missing; \
 	else \
 		printf "$(YELLOW)Server not running, running coverage on unit tests only...$(RESET)\n"; \
-		$(UV) run $(PYTEST) $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=html --cov-report=term-missing -m unit; \
+		$(UV) run $(PYTEST) $(TEST_DIR) --cov=$(SRC_DIR) --cov-report=xml --cov-report=html --cov-report=term-missing -m unit; \
 	fi
-	@printf "$(GREEN)✓ Coverage report generated in htmlcov/$(RESET)\n"
+	@printf "$(GREEN)✓ Coverage reports generated: coverage.xml, htmlcov/$(RESET)\n"
 
 # =============================================================================
 # Helper Targets
