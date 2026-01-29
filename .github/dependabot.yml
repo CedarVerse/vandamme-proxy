@@ -7,6 +7,7 @@ updates:
   # Python dependencies (pyproject.toml)
   - package-ecosystem: "pip"
     directory: "/"
+    versioning-strategy: increase
     schedule:
       # Check for updates weekly on Monday at 6:00 UTC
       interval: "weekly"
