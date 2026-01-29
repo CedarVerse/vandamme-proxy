@@ -600,6 +600,21 @@ async def list_profiles(cfg: Config = Depends(get_config)) -> Response:
             content={"object": "list", "data": []},
         )
 
+    # Get provider names for collision detection
+    provider_names = set(cfg.provider_manager.list_providers())
+
+    # Detect collisions with provider names
+    collisions = pm.detect_collisions(provider_names)
+
+    # Extract colliding profile names from collision messages
+    # Message format: "Profile '{name}' has the same name as provider '{name}'..."
+    collision_names = set()
+    for msg in collisions:
+        if "'" in msg:
+            parts = msg.split("'")
+            if len(parts) >= 2:
+                collision_names.add(parts[1])
+
     summary = pm.get_profile_summary()
 
     profiles = [
@@ -610,6 +625,7 @@ async def list_profiles(cfg: Config = Depends(get_config)) -> Response:
             "alias_count": p.alias_count,
             "aliases": p.aliases,
             "source": p.source,
+            "has_collision": p.name in collision_names,
         }
         for p in summary.profiles
     ]

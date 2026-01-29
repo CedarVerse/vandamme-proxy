@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+import dash_bootstrap_components as dbc  # type: ignore[import-untyped]
 from dash import html
 
 from src.dashboard.components.ag_grid import models_row_data
@@ -172,13 +173,20 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
 async def build_profile_models_view(*, cfg: Any, profile_value: str | None) -> ProfileModelsView:
     """Fetch models and build view fragments for the Profile Models tab."""
 
-    # Fetch profiles list
+    # Fetch profiles list with collision data
     profiles_data = await fetch_profiles(cfg=cfg)
-    profiles = [p["name"] for p in profiles_data.get("data", [])]
+    profiles_list = profiles_data.get("data", [])
 
-    # Build dropdown options
-    sorted_profiles = sorted(profiles)
-    profile_options: list[dict[str, str]] = [{"label": p, "value": p} for p in sorted_profiles]
+    # Build dropdown options with collision indicators
+    sorted_profiles = sorted(p["name"] for p in profiles_list)
+    profile_options: list[dict[str, str]] = []
+
+    for profile_name in sorted_profiles:
+        profile_data = next((p for p in profiles_list if p["name"] == profile_name), None)
+        label = profile_name
+        if profile_data and profile_data.get("has_collision"):
+            label = f"⚠️ {profile_name}"
+        profile_options.append({"label": label, "value": profile_name})
 
     # Default selection (first profile or None)
     selected = profile_value or (sorted_profiles[0] if sorted_profiles else None)
@@ -195,13 +203,47 @@ async def build_profile_models_view(*, cfg: Any, profile_value: str | None) -> P
         for model in models:
             if not model.get("provider"):
                 model["provider"] = selected
+            model["is_profile_model"] = True
 
         row_data = models_row_data(models)
-        hint = [html.Span("Profile: "), provider_badge(selected)]
+
+        # Enhanced hint with data source badge
+        profile_data = next((p for p in profiles_list if p["name"] == selected), None)
+        if profile_data:
+            source_badge = _source_badge(profile_data.get("source"))
+            hint = [
+                html.Span("Profile: "),
+                provider_badge(selected),
+                html.Span(" ", className="me-2"),
+                source_badge,
+            ]
 
     return ProfileModelsView(
         row_data=row_data,
         profile_options=profile_options,
         profile_value=selected,
         hint=hint,
+    )
+
+
+def _source_badge(source: str | None) -> dbc.Badge:
+    """Create a colored badge for data source.
+
+    Args:
+        source: Data source identifier ("local", "user", "package")
+
+    Returns:
+        dbc.Badge with appropriate color and icon
+    """
+    source_config = {
+        "local": {"color": "success", "icon": "📁", "label": "Local"},
+        "user": {"color": "info", "icon": "👤", "label": "User"},
+        "package": {"color": "secondary", "icon": "📦", "label": "Package"},
+    }
+    cfg = source_config.get(source or "package", source_config["package"])
+    return dbc.Badge(
+        f"{cfg['icon']} {cfg['label']}",
+        color=cfg["color"],
+        pill=True,
+        className="me-2",
     )

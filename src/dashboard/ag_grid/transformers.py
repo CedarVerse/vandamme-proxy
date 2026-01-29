@@ -404,6 +404,12 @@ def models_row_data(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
         model_id = model.get("id", "")
         display_name = model.get("display_name", model_id)
 
+        # Profile-specific fields for dashboard
+        is_profile_model = model.get("is_profile_model", False)
+        resolution_chain = model.get("resolution_chain", [])
+        final_model_id = model.get("final_model_id")
+        data_source = model.get("data_source")
+
         architecture = model.get("architecture")
         architecture_modality = None
         if isinstance(architecture, dict):
@@ -480,6 +486,11 @@ def models_row_data(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "description_preview": description_preview,
                 "description_full": description_text,
                 "model_icon_url": image_url,
+                # Profile-specific fields
+                "is_profile_model": is_profile_model,
+                "resolution_chain": resolution_chain,
+                "final_model_id": final_model_id,
+                "data_source": data_source,
             }
         )
 

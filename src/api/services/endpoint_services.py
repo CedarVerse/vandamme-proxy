@@ -396,6 +396,43 @@ class ModelsListService:
         for alias_name, target_model in profile.aliases.items():
             # target_model is already in "provider:model" format
             provider_part = target_model.split(":", 1)[0] if ":" in target_model else "unknown"
+
+            # Trace resolution chain to show how aliases resolve through the chain.
+            # Example: agentrouter:opus -> claude-opus-4-5-20251101
+            # The chain includes the starting point and all intermediate steps.
+            max_resolution_steps = 10  # More than enough for practical alias chains
+
+            resolution_chain: list[str] = [target_model]  # Include starting point
+            final_model = target_model
+            current = target_model
+            visited: set[str] = set()  # Track visited to detect cycles
+
+            # Follow the chain (bounded to prevent infinite loops)
+            for _ in range(max_resolution_steps):
+                if ":" not in current:
+                    break
+                if current in visited:
+                    # Cycle detected - stop resolution
+                    break
+                visited.add(current)
+
+                chain_provider, chain_model = current.split(":", 1)
+                resolved = self._config.alias_manager.resolve_alias(
+                    model=chain_model, provider=chain_provider
+                )
+
+                # Validate resolution: must be non-None, different from current,
+                # and contain a colon (provider:model format)
+                if not resolved or resolved == current:
+                    break
+                if ":" not in resolved:
+                    # Malformed resolution - stop here
+                    break
+
+                resolution_chain.append(resolved)
+                current = resolved
+                final_model = resolved
+
             models_data.append(
                 {
                     "id": target_model,
@@ -403,6 +440,15 @@ class ModelsListService:
                     "object": "model",
                     "created": None,
                     "owned_by": provider_part,
+                    # NEW FIELDS:
+                    # resolution_chain: full resolution path including start and intermediates
+                    # final_model_id: the ultimate resolved model after following all aliases
+                    # data_source: where the profile was defined (local/user/package)
+                    # is_profile: marker to distinguish profile models from provider models
+                    "resolution_chain": resolution_chain,
+                    "final_model_id": final_model,
+                    "data_source": profile.source,
+                    "is_profile": True,
                 }
             )
 
