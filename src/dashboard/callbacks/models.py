@@ -291,6 +291,14 @@ def register_models_callbacks(
         model_page_url = focused.get("model_page_url")
         model_icon_url = focused.get("model_icon_url")
 
+        # Profile model handling
+        is_profile_model = focused.get("is_profile_model", False)
+        final_model_id = focused.get("final_model_id")
+
+        actual_provider: str | None = None
+        if is_profile_model and isinstance(final_model_id, str) and ":" in final_model_id:
+            actual_provider = final_model_id.split(":", 1)[0]
+
         raw_json_obj = {
             k: v for k, v in focused.items() if k not in {"description_full", "description_preview"}
         }
@@ -375,18 +383,31 @@ def register_models_callbacks(
             monospace(pricing_out) if pricing_out else html.Span("—", className="text-muted")
         )
 
+        # Build overview table rows based on whether this is a profile model
+        overview_rows = [
+            _row("Model", monospace(model_id)),
+        ]
+
+        if is_profile_model:
+            # For profile models, show "Profile: {profile_name}" and "Provider: {actual_provider}"
+            overview_rows.append(_row("Profile", monospace(provider or "—")))
+            overview_rows.append(_row("Provider", monospace(actual_provider or "—")))
+        else:
+            # For regular models, show existing labels
+            overview_rows.append(_row("Provider", monospace(provider or "—")))
+            overview_rows.append(_row("Sub-provider", monospace(owned_by or "—")))
+
+        overview_rows.extend(
+            [
+                _row("Modality", monospace(modality or "—")),
+                _row("Created", created_cell),
+            ]
+        )
+
         body_children: list[Any] = [
             html.Div("Overview", className="text-muted small"),
             dbc.Table(
-                html.Tbody(
-                    [
-                        _row("Model", monospace(model_id)),
-                        _row("Provider", monospace(provider or "—")),
-                        _row("Sub-provider", monospace(owned_by or "—")),
-                        _row("Modality", monospace(modality or "—")),
-                        _row("Created", created_cell),
-                    ]
-                ),
+                html.Tbody(overview_rows),
                 bordered=False,
                 striped=True,
                 size="sm",
@@ -455,6 +476,7 @@ def register_models_callbacks(
                 className="mt-2",
             ),
         ]
+
 
         body = dbc.Card(
             dbc.CardBody(body_children),
