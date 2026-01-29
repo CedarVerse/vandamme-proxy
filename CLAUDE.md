@@ -130,6 +130,31 @@ async def test_chat(mock_openai_api, openai_chat_completion):
 - ✅ Deterministic, reproducible tests
 - ✅ Mock at HTTP layer (not SDK objects)
 
+### Coverage
+
+The project uses Codecov for coverage tracking and reporting:
+
+```bash
+# Run tests with coverage (local)
+make coverage
+
+# View HTML coverage report
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
+```
+
+**Coverage Configuration:**
+- `codecov.yml` - Codecov platform settings (thresholds, ignores)
+- `pyproject.toml` - pytest-cov settings (source dirs, omit patterns)
+- Project target: 80% coverage
+- Patch target: 75% coverage
+
+**CI/CD:**
+- Coverage reports uploaded to Codecov on every PR
+- PR comments show coverage diff and missing lines
+- GitHub Actions use codecov-action@v5
+- Upload happens only for Python 3.12 matrix job
+
 ### Code Quality
 
 ```bash
