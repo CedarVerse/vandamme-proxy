@@ -3,7 +3,7 @@ from __future__ import annotations
 import dash_bootstrap_components as dbc  # type: ignore[import-untyped]
 from dash import dcc, html
 
-from src.dashboard.components.ui import model_details_drawer, models_table
+from src.dashboard.components.ui import model_details_drawer, models_table, search_box
 
 
 def _provider_tab_content() -> list:
@@ -109,6 +109,22 @@ def models_layout() -> dbc.Container:
                     ),
                 ],
                 className="align-items-center mb-3",
+            ),
+            # Quick Filter input with keyboard shortcut hints
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            search_box("vdm-models-quick-filter", "Quick filter models..."),
+                            html.Small(
+                                "Press / to focus, Esc to clear",
+                                className="text-muted ms-2",
+                            ),
+                        ],
+                        md=12,
+                    ),
+                ],
+                className="mb-3",
             ),
             dbc.Row(
                 [
