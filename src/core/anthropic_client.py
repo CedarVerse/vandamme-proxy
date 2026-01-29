@@ -228,6 +228,11 @@ class AnthropicClient(OAuthClientMixin):
 
             # Log the request with API key hash
             if log_request_metrics():
+                # nosemgrep: py.weak-sensitive-data-hashing
+                # SHA-256 first-8-char is appropriate for logging correlation IDs:
+                # - Non-reversible: cannot recover original API key
+                # - Stable: same key produces same hash across runs
+                # - Purpose: debugging/incident correlation, not cryptography
                 key_hash = hashlib.sha256(effective_api_key.encode()).hexdigest()[:8]
                 conversation_logger.debug(f"🔑 API KEY HASH {key_hash} @ {self.base_url}")
                 conversation_logger.debug(
@@ -383,6 +388,11 @@ class AnthropicClient(OAuthClientMixin):
             client = self._get_client(effective_api_key, for_streaming=True)
 
             if log_request_metrics():
+                # nosemgrep: py.weak-sensitive-data-hashing
+                # SHA-256 first-8-char is appropriate for logging correlation IDs:
+                # - Non-reversible: cannot recover original API key
+                # - Stable: same key produces same hash across runs
+                # - Purpose: debugging/incident correlation, not cryptography
                 key_hash = hashlib.sha256(effective_api_key.encode()).hexdigest()[:8]
                 conversation_logger.debug(f"🔑 API KEY HASH {key_hash} @ {self.base_url}")
                 conversation_logger.debug(

@@ -197,6 +197,11 @@ class ProviderManager(ProviderClientFactory):
             return "PASSTHRU"
         if api_key == OAUTH_SENTINEL:
             return "OAUTH"
+        # nosemgrep: py.weak-sensitive-data-hashing
+        # SHA-256 first-8-char is appropriate for logging correlation IDs:
+        # - Non-reversible: cannot recover original API key
+        # - Stable: same key produces same hash across runs
+        # - Purpose: debugging/incident correlation, not cryptography
         return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
     def _select_default_from_available(self) -> None:
@@ -661,6 +666,10 @@ class ProviderManager(ProviderClientFactory):
             provider_config = self._registry.get(result.name)
             is_oauth = provider_config and provider_config.uses_oauth
             oauth_indicator = "  🔐" if is_oauth else ""
+
+            # nosemgrep: py.clear-text-logging-sensitive-data
+            # api_key_hash is already hashed via get_api_key_hash() before logging
+            # Raw API keys are never logged directly
 
             if result.status == "success":
                 if is_default:

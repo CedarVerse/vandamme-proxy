@@ -14,7 +14,10 @@ handlers, formatters, or any initialization logic.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 
 def get_api_key_hash(api_key: str) -> str:
@@ -39,6 +42,11 @@ def get_api_key_hash(api_key: str) -> str:
 
     if not api_key or api_key == "REDACTED":
         return "REDACTED"
+    # nosemgrep: py.weak-sensitive-data-hashing
+    # SHA-256 first-8-char is appropriate for logging correlation IDs:
+    # - Non-reversible: cannot recover original API key
+    # - Stable: same key produces same hash across runs
+    # - Purpose: debugging/incident correlation, not cryptography
     return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
 
@@ -92,3 +100,36 @@ def hash_api_keys_in_message(message: str) -> str:
         redacted = re.sub(pattern, replacement, redacted, flags=re.IGNORECASE)
 
     return redacted
+
+
+def safe_exception_message(
+    exception: Exception,
+    include_debug: bool = False,
+) -> str:
+    """Return a safe error message from an exception for API responses.
+
+    This function prevents stack trace exposure in client-facing error messages
+    while preserving full details in server logs when debug mode is enabled.
+
+    Args:
+        exception: The exception to format.
+        include_debug: If True, include exception type and message.
+                      If False, return a generic message without internal details.
+
+    Returns:
+        A safe error message. Stack traces are NEVER included in API responses.
+        They go to server logs only via logger.debug(exc_info=True).
+
+    Examples:
+        >>> safe_exception_message(ValueError("invalid input"), include_debug=False)
+        'An error occurred while processing your request'
+
+        >>> safe_exception_message(ValueError("invalid input"), include_debug=True)
+        'ValueError: invalid input'
+    """
+    if include_debug:
+        # Debug mode: include exception type and message (but never stack trace)
+        return f"{type(exception).__name__}: {str(exception)}"
+    else:
+        # Production mode: generic message without internal details
+        return "An error occurred while processing your request"

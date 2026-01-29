@@ -404,6 +404,11 @@ class ProviderConfigLoader:
 
         if api_key == PASSTHROUGH_SENTINEL:
             return "PASSTHRU"
+        # nosemgrep: py.weak-sensitive-data-hashing
+        # SHA-256 first-8-char is appropriate for logging correlation IDs:
+        # - Non-reversible: cannot recover original API key
+        # - Stable: same key produces same hash across runs
+        # - Purpose: debugging/incident correlation, not cryptography
         return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
     # ==================== Auth Mode Detection ====================

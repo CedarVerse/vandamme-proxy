@@ -260,6 +260,11 @@ class Config:
 
     @property
     def api_key_hash(self) -> str:
+        # nosemgrep: py.weak-sensitive-data-hashing
+        # SHA-256 first-16-char is appropriate for logging correlation IDs:
+        # - Non-reversible: cannot recover original API key
+        # - Stable: same key produces same hash across runs
+        # - Purpose: debugging/incident correlation, not cryptography
         return (
             "<not-set>"
             if not self.openai_api_key

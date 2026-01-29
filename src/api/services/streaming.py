@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from src.core.error_types import ErrorType
 from src.core.logging import ConversationLogger
 from src.core.metrics.runtime import get_request_tracker
+from src.core.security import safe_exception_message
 
 AnySseStream = AsyncGenerator[str, None] | Any
 
@@ -129,6 +130,9 @@ def with_sse_error_handler(
     """
 
     async def _wrapped() -> AsyncGenerator[str, None]:
+        # Determine if debug mode is enabled for safe exception formatting
+        include_debug = logger.isEnabledFor(logging.DEBUG)
+
         try:
             async for chunk in original_stream:
                 yield chunk
@@ -139,8 +143,13 @@ def with_sse_error_handler(
                 f"Consider increasing REQUEST_TIMEOUT and/or "
                 f"STREAMING_READ_TIMEOUT_SECONDS"
             )
+            # Log full exception details to server logs only
+            if include_debug:
+                logger.debug(
+                    f"[{request_id}] Full exception: {type(e).__name__}: {e}", exc_info=True
+                )
             yield _format_sse_error_event(
-                message=f"Upstream read timeout: {str(e)}",
+                message=f"Upstream read timeout: {safe_exception_message(e, include_debug)}",
                 error_type=ErrorType.UPSTREAM_TIMEOUT,
                 code="read_timeout",
                 suggestion=(
@@ -155,8 +164,13 @@ def with_sse_error_handler(
                 f"Consider increasing REQUEST_TIMEOUT and/or "
                 f"STREAMING_READ_TIMEOUT_SECONDS"
             )
+            # Log full exception details to server logs only
+            if include_debug:
+                logger.debug(
+                    f"[{request_id}] Full exception: {type(e).__name__}: {e}", exc_info=True
+                )
             yield _format_sse_error_event(
-                message=f"Upstream timeout: {str(e)}",
+                message=f"Upstream timeout: {safe_exception_message(e, include_debug)}",
                 error_type=ErrorType.UPSTREAM_TIMEOUT,
                 code="timeout",
                 suggestion=(
@@ -176,6 +190,11 @@ def with_sse_error_handler(
                 f"[{request_id}] Upstream HTTP error{provider_info}: "
                 f"status={e.response.status_code} detail={error_detail}"
             )
+            # Log full exception details to server logs only
+            if include_debug:
+                logger.debug(
+                    f"[{request_id}] Full exception: {type(e).__name__}: {e}", exc_info=True
+                )
             yield _format_sse_error_event(
                 message=f"Upstream HTTP error: status {e.response.status_code}",
                 error_type=ErrorType.UPSTREAM_HTTP_ERROR,
@@ -188,8 +207,13 @@ def with_sse_error_handler(
             conversation_logger.warning(
                 f"[{request_id}] Streaming error{provider_info}: {type(e).__name__}: {e}"
             )
+            # Log full exception details to server logs only
+            if include_debug:
+                logger.debug(
+                    f"[{request_id}] Full exception: {type(e).__name__}: {e}", exc_info=True
+                )
             yield _format_sse_error_event(
-                message=f"Streaming error: {type(e).__name__}: {str(e)}",
+                message=f"Streaming error: {safe_exception_message(e, include_debug)}",
                 error_type=ErrorType.STREAMING_ERROR,
                 code="stream_error",
                 suggestion=None,
