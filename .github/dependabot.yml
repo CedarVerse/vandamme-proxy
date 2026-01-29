@@ -1,0 +1,87 @@
+# Dependabot configuration for automated dependency updates
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # Python dependencies (pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      # Check for updates weekly on Monday at 6:00 UTC
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 5
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      # Prefix all commit messages with "deps:"
+      prefix: "deps"
+      include: "scope"
+    # Rebase PRs instead of creating merge commits
+    rebase-strategy: "auto"
+    # Allow Dependabot to group updates
+    groups:
+      # Group FastAPI-related updates together
+      fastapi-ecosystem:
+        patterns:
+          - "fastapi*"
+          - "uvicorn*"
+          - "pydantic*"
+        exclude-patterns:
+          - "pydantic-core"
+      # Group testing dependencies
+      testing:
+        patterns:
+          - "pytest*"
+          - "coverage*"
+          - "respx*"
+      # Group security-critical packages
+      security-sensitive:
+        patterns:
+          - "httpx*"
+          - "httpcore*"
+          - "requests*"
+          - "urllib3*"
+    # Ignore major version updates for stability (opt-in via manual PR)
+    ignore:
+      - dependency-name: "fastapi"
+        update-types: ["version-update:major"]
+      - dependency-name: "pydantic"
+        update-types: ["version-update:major"]
+    # Ensure UV compatibility
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+
+  # GitHub Actions workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+    open-pull-requests-limit: 3
+    target-branch: "main"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      # Group GitHub Actions updates
+      actions:
+        patterns:
+          - "actions/*"
+          - "astral-sh/*"
+    # Always update Actions (they're backwards compatible)
+    ignore: []
+
+# Configure pull request settings (applies globally)
+pull-request-branch-name:
+  # Use shorter branch names for cleaner git history
+  separator: "-"
