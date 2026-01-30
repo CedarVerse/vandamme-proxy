@@ -37,6 +37,99 @@ class AliasConfigLoader:
             # Package defaults (lowest priority)
             Path(__file__).parent.parent / "config" / "defaults.toml",
         ]
+        # Track deprecation warnings to avoid spamming
+        self._warned_profiles: set[str] = set()
+        # Track if any legacy syntax was found for startup summary
+        self._legacy_syntax_found: bool = False
+
+    def _get_source(self, config_path: Path) -> str:
+        """Get source identifier for a config path."""
+        if config_path == Path.cwd() / "vandamme-config.toml":
+            return "local"
+        elif config_path == Path.home() / ".config" / "vandamme-proxy" / "vandamme-config.toml":
+            return "user"
+        else:
+            return "package"
+
+    def _parse_profiles_section(
+        self, profiles_dict: dict, merged_config: dict, config_path: Path
+    ) -> None:
+        """Parse NEW [profiles.name] syntax.
+
+        Args:
+            profiles_dict: The 'profiles' section from TOML
+            merged_config: The merged config dict to update
+            config_path: Path to the config file being parsed
+        """
+        for profile_name, profile_data in profiles_dict.items():
+            if not isinstance(profile_data, dict):
+                continue
+
+            merged_config["profiles"][profile_name] = {}
+            profile_config = merged_config["profiles"][profile_name]
+
+            # Copy source info (for logging/debugging)
+            profile_config["source"] = self._get_source(config_path)
+
+            # Extract timeout and max-retries (only if present)
+            for setting_key in ["timeout", "max-retries"]:
+                if setting_key in profile_data:
+                    profile_config[setting_key] = profile_data[setting_key]
+
+            # Extract aliases
+            if "aliases" in profile_data and isinstance(profile_data["aliases"], dict):
+                profile_config["aliases"] = {
+                    alias.lower(): target
+                    for alias, target in profile_data["aliases"].items()
+                    if isinstance(alias, str) and isinstance(target, str)
+                }
+            else:
+                profile_config["aliases"] = {}
+
+    def _parse_legacy_profile(
+        self, key: str, value: dict, merged_config: dict, config_path: Path
+    ) -> None:
+        """Parse LEGACY ["#name"] syntax with deprecation warning.
+
+        Args:
+            key: The TOML key (e.g., "#main")
+            value: The profile data dict
+            merged_config: The merged config dict to update
+            config_path: Path to the config file being parsed
+        """
+        profile_name = key[1:]  # Strip #
+
+        # Emit deprecation warning once per profile name
+        if profile_name not in self._warned_profiles:
+            logger.warning(
+                f"Deprecated TOML syntax: ['{key}']. "
+                f"Please use [profiles.{profile_name}] instead. "
+                f"This syntax will be removed in a future version."
+            )
+            self._warned_profiles.add(profile_name)
+            self._legacy_syntax_found = True
+
+        # Extract profile configuration
+        merged_config["profiles"][profile_name] = {}
+        profile_config = merged_config["profiles"][profile_name]
+
+        # Copy source info (for logging/debugging)
+        profile_config["source"] = self._get_source(config_path)
+
+        # Extract timeout and max-retries (only if present)
+        for setting_key in ["timeout", "max-retries"]:
+            if setting_key in value:
+                profile_config[setting_key] = value[setting_key]
+
+        # Extract aliases from ["#profile".aliases]
+        if "aliases" in value and isinstance(value["aliases"], dict):
+            profile_config["aliases"] = {
+                alias.lower(): target
+                for alias, target in value["aliases"].items()
+                if isinstance(alias, str) and isinstance(target, str)
+            }
+        else:
+            profile_config["aliases"] = {}
 
     def load_config(self, force_reload: bool = False) -> dict[str, Any]:
         """Load and merge configurations from all TOML files.
@@ -83,6 +176,13 @@ class AliasConfigLoader:
                         config_data = globals()["tomli"].load(f)
 
                     # Extract provider sections (e.g., [poe], [openai])
+                    # First, check for NEW [profiles.name] syntax - it takes precedence
+                    if "profiles" in config_data and isinstance(config_data["profiles"], dict):
+                        self._parse_profiles_section(
+                            config_data["profiles"], merged_config, config_path
+                        )
+
+                    # Then process remaining keys (including legacy ["#name"] and providers)
                     for key, value in config_data.items():
                         if key == "defaults":
                             # Handle defaults section - preserve both flat and nested structures
@@ -98,43 +198,19 @@ class AliasConfigLoader:
                                     ):
                                         # Flat value like timeout, max-retries
                                         merged_config["defaults"][default_key] = default_value
+                        elif key == "profiles":
+                            # Already handled above - skip to avoid double processing
+                            continue
                         elif isinstance(value, dict):
-                            # Check for profile sections first (["#profile-name"])
+                            # Check for legacy profile sections (["#profile-name"])
                             if key.startswith("#"):
-                                # Profile section: ["#webdev-good"]
+                                # Legacy syntax: ["#webdev-good"]
+                                # Only process if new syntax didn't already define this profile
                                 profile_name = key[1:]  # Strip # for storage
-                                merged_config["profiles"][profile_name] = {}
-
-                                profile_config = merged_config["profiles"][profile_name]
-
-                                # Copy source info (for logging/debugging)
-                                if config_path == Path.cwd() / "vandamme-config.toml":
-                                    profile_config["source"] = "local"
-                                elif (
-                                    config_path
-                                    == Path.home()
-                                    / ".config"
-                                    / "vandamme-proxy"
-                                    / "vandamme-config.toml"
-                                ):
-                                    profile_config["source"] = "user"
-                                else:
-                                    profile_config["source"] = "package"
-
-                                # Extract timeout and max-retries (only if present)
-                                for setting_key in ["timeout", "max-retries"]:
-                                    if setting_key in value:
-                                        profile_config[setting_key] = value[setting_key]
-
-                                # Extract aliases from ["#profile".aliases]
-                                if "aliases" in value and isinstance(value["aliases"], dict):
-                                    profile_config["aliases"] = {
-                                        alias.lower(): target
-                                        for alias, target in value["aliases"].items()
-                                        if isinstance(alias, str) and isinstance(target, str)
-                                    }
-                                else:
-                                    profile_config["aliases"] = {}
+                                if profile_name not in merged_config["profiles"]:
+                                    self._parse_legacy_profile(
+                                        key, value, merged_config, config_path
+                                    )
                             else:
                                 # This is a provider configuration section
                                 provider_name = key.lower()

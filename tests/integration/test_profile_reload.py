@@ -61,7 +61,7 @@ def test_strict_validation_failure():
 timeout = 90
 max-retries = 2
 
-["#invalid"]
+[profiles.invalid]
 aliases = { "haiku" = "nonexistent:model" }
 """
         )
@@ -82,8 +82,17 @@ aliases = { "haiku" = "nonexistent:model" }
                 for key, value in raw_config.items():
                     if key == "defaults":
                         self._test_config["defaults"] = value
+                    elif key == "profiles":
+                        # New [profiles.name] syntax
+                        for profile_name, profile_data in value.items():
+                            self._test_config["profiles"][profile_name] = {
+                                "source": "local",
+                                "timeout": profile_data.get("timeout"),
+                                "max-retries": profile_data.get("max-retries"),
+                                "aliases": profile_data.get("aliases", {}),
+                            }
                     elif key.startswith("#"):
-                        # Profile section
+                        # Legacy profile section
                         profile_name = key[1:]  # Strip # for storage
                         self._test_config["profiles"][profile_name] = {
                             "source": "local",
@@ -143,7 +152,7 @@ def test_lenient_validation_warning():
 timeout = 90
 max-retries = 2
 
-["#invalid"]
+[profiles.invalid]
 aliases = { "haiku" = "nonexistent:model" }
 """
         )
@@ -164,8 +173,17 @@ aliases = { "haiku" = "nonexistent:model" }
                 for key, value in raw_config.items():
                     if key == "defaults":
                         self._test_config["defaults"] = value
+                    elif key == "profiles":
+                        # New [profiles.name] syntax
+                        for profile_name, profile_data in value.items():
+                            self._test_config["profiles"][profile_name] = {
+                                "source": "local",
+                                "timeout": profile_data.get("timeout"),
+                                "max-retries": profile_data.get("max-retries"),
+                                "aliases": profile_data.get("aliases", {}),
+                            }
                     elif key.startswith("#"):
-                        # Profile section
+                        # Legacy profile section
                         profile_name = key[1:]  # Strip # for storage
                         self._test_config["profiles"][profile_name] = {
                             "source": "local",

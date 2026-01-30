@@ -574,6 +574,30 @@ Model aliases provide flexible model selection with case-insensitive substring m
 **Precedence order:**
    `{PROVIDER}_ALIAS_{NAME}` env → `[provider.aliases]` → `[defaults.aliases]` → not found
 
+#### TOML Profile Syntax Migration
+
+**New syntax (recommended):**
+```toml
+[profiles.main]
+timeout = 100
+[profiles.main.aliases]
+haiku = "zai:haiku"
+```
+
+**Legacy syntax (deprecated, will be removed):**
+```toml
+["#main"]
+timeout = 100
+["#main".aliases]
+haiku = "zai:haiku"
+```
+
+**Migration notes:**
+- Both syntaxes work during the deprecation period
+- New syntax takes precedence when both exist for the same profile
+- Legacy syntax emits a deprecation warning in logs
+- Migrate your configurations to `[profiles.name]` syntax
+
 #### Built-in Fallback Aliases
 
 The proxy automatically provides sensible defaults for common model names:
@@ -683,8 +707,7 @@ You can specify which provider to use per request:
 When a profile name matches a provider name (case-insensitive), **the profile takes precedence**. This is intentional behavior that allows custom provider overrides.
 
 **How it works:**
-- TOML uses `["#profile-name"]` syntax for visual distinction
-- The `#` is stripped during parsing (profile name stored without it)
+- Use `[profiles.name]` syntax to define profiles
 - Profile resolution happens BEFORE provider resolution
 - Request `name:model` checks if `name` is a profile first
 
@@ -692,10 +715,10 @@ When a profile name matches a provider name (case-insensitive), **the profile ta
 
 ```toml
 # vandamme-config.toml
-["#openai"]
+[profiles.openai]
 timeout = 120
 max-retries = 5
-["#openai".aliases]
+[profiles.openai.aliases]
 haiku = "anthropic:claude-3-5-haiku-20241022"  # Override to use Anthropic
 ```
 
