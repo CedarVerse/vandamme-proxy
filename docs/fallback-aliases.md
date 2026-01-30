@@ -216,10 +216,10 @@ Some projects might use different providers:
 
 ```bash
 # Project A: Fast development with Poe
-VDM_DEFAULT_PROVIDER=poe
+VDM_DEFAULT_TARGET=poe
 
 # Project B: Production with OpenAI
-VDM_DEFAULT_PROVIDER=openai
+VDM_DEFAULT_TARGET=openai
 
 # Both work with same model names!
 claude --model haiku  # Uses Poe's fast model

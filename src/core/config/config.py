@@ -85,21 +85,24 @@ class Config:
 
     # Provider settings
     @property
-    def default_provider(self) -> str:
-        return self._providers.default_provider
+    def default_target(self) -> str:
+        """Get the default target (provider or profile)."""
+        return self._providers.default_target
 
     @property
-    def default_provider_source(self) -> str:
-        return self._providers.default_provider_source
+    def default_target_source(self) -> str:
+        """Get the default target source (env, toml, or system)."""
+        return self._providers.default_target_source
 
     @property
-    def openai_api_key(self) -> str | None:
-        return self._providers.default_provider_api_key
+    def default_target_api_key(self) -> str | None:
+        """Get the default target API key, if available."""
+        return self._providers.default_target_api_key
 
     @property
     def base_url(self) -> str:
-        base_url_env_var = get_provider_base_url_env_var(self.default_provider)
-        return os.environ.get(base_url_env_var, get_default_base_url(self.default_provider))
+        base_url_env_var = get_provider_base_url_env_var(self.default_target)
+        return os.environ.get(base_url_env_var, get_default_base_url(self.default_target))
 
     @property
     def azure_api_version(self) -> str | None:
@@ -254,9 +257,9 @@ class Config:
 
     # Utility methods
     def validate_api_key(self) -> bool:
-        if not self.openai_api_key:
+        if not self.default_target_api_key:
             return False
-        return self.openai_api_key.startswith("sk-")
+        return self.default_target_api_key.startswith("sk-")
 
     @property
     def api_key_hash(self) -> str:
@@ -267,6 +270,8 @@ class Config:
         # - Purpose: debugging/incident correlation, not cryptography
         return (
             "<not-set>"
-            if not self.openai_api_key
-            else "sha256:" + hashlib.sha256(self.openai_api_key.encode()).hexdigest()[:16] + "..."
+            if not self.default_target_api_key
+            else "sha256:"
+            + hashlib.sha256(self.default_target_api_key.encode()).hexdigest()[:16]
+            + "..."
         )

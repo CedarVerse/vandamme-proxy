@@ -26,8 +26,8 @@ def test_print_provider_summary_no_default_when_profile_active(mock_registry_cla
 
     mock_registry.get_all_providers.return_value = [mock_provider1, mock_provider2]
 
-    # Create provider manager with default_provider="top" (a profile)
-    manager = ProviderManager(default_provider="top")
+    # Create provider manager with default_target="top" (a profile)
+    manager = ProviderManager(default_target="top")
 
     # Mock the _check_provider_connection method
     async def mock_check(provider, base_url, api_format):
@@ -78,8 +78,8 @@ def test_print_provider_summary_shows_default_when_provider_active(mock_registry
 
     mock_registry.get_all_providers.return_value = [mock_provider1, mock_provider2]
 
-    # Create provider manager with default_provider="openai" (a real provider)
-    manager = ProviderManager(default_provider="openai")
+    # Create provider manager with default_target="openai" (a real provider)
+    manager = ProviderManager(default_target="openai")
 
     # Mock the _check_provider_connection method
     async def mock_check(provider, base_url, api_format):

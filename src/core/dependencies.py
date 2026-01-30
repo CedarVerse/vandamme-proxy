@@ -100,7 +100,7 @@ def initialize_app() -> None:
     from src.core.provider_resolver import ProviderResolver
 
     _provider_resolver = ProviderResolver(
-        default_provider=_config.default_provider,
+        default_target=_config.default_target,
         profile_manager=_profile_manager,
     )
     logger.debug("ProviderResolver initialized")
@@ -118,8 +118,8 @@ def initialize_app() -> None:
     )
 
     _provider_manager = ProviderManager(
-        default_provider=_config.default_provider,
-        default_provider_source=_config.default_provider_source,
+        default_target=_config.default_target,
+        default_target_source=_config.default_target_source,
         middleware_config=middleware_dto,
         profile_manager=_profile_manager,  # Pass ProfileManager
         provider_resolver=_provider_resolver,  # Pass ProviderResolver for delegated operations

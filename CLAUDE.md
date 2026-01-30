@@ -239,7 +239,7 @@ make help
    - Support for multiple LLM providers (OpenAI, Anthropic, Azure, Google Gemini, custom endpoints)
    - Each provider can be configured as `api_format=openai` or `api_format=anthropic`
    - Provider selection via model prefix: `provider:model_name` (e.g., `anthropic:claude-3-sonnet`)
-   - Falls back to default provider if no prefix specified
+   - Falls back to Default Target if no prefix specified
    - Providers auto-discovered from environment variables (`{PROVIDER}_API_KEY`)
    - Special defaults: OpenAI and Poe providers have default BASE_URLs if not specified
 
@@ -258,7 +258,7 @@ make help
 6. **Configuration**:
    - `src/core/config.py` - Central configuration management
    - `src/core/provider_config.py` - Per-provider configuration management
-   - `src/config/defaults.toml` - Default provider configurations and fallback model aliases
+   - `src/config/defaults.toml` - Default Target configurations and fallback model aliases
    - `src/core/alias_config.py` - TOML-based configuration loader for hierarchical alias system
    - Environment variables loaded from `.env` file via `python-dotenv`
    - Custom headers support via `CUSTOM_HEADER_*` environment variables (auto-converted to HTTP headers)
@@ -299,7 +299,7 @@ Environment variables prefixed with `CUSTOM_HEADER_` are automatically converted
 - `src/core/config.py` - Configuration management (83 lines)
 - `src/core/alias_manager.py` - Model alias management with case-insensitive substring matching
 - `src/core/alias_config.py` - TOML configuration loader for hierarchical alias system
-- `src/config/defaults.toml` - Default provider configurations and fallback aliases
+- `src/config/defaults.toml` - Default Target configurations and fallback aliases
 - `src/conversion/request_converter.py` - Claude→OpenAI request conversion
 - `src/conversion/response_converter.py` - OpenAI→Claude response conversion
 
@@ -313,7 +313,7 @@ Required (at least one provider):
 Provider Configuration:
 - `{PROVIDER}_API_FORMAT` - API format: "openai" (default) or "anthropic"
 - `{PROVIDER}_BASE_URL` - Base URL for the provider
-- `VDM_DEFAULT_PROVIDER` - Default provider to use (overrides defaults.toml)
+- `VDM_DEFAULT_TARGET` - Default Target to use (overrides defaults.toml)
 
 Model Aliases:
 - `{PROVIDER}_ALIAS_{NAME}` - Provider-specific model alias (e.g., `POE_ALIAS_HAIKU=gpt-4o-mini`)
@@ -466,7 +466,7 @@ LOG_LEVEL=DEBUG vdm server start
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_BASE_URL=https://api.anthropic.com
 ANTHROPIC_API_FORMAT=anthropic
-VDM_DEFAULT_PROVIDER=anthropic
+VDM_DEFAULT_TARGET=anthropic
 ```
 
 #### AWS Bedrock
@@ -475,7 +475,7 @@ VDM_DEFAULT_PROVIDER=anthropic
 BEDROCK_API_KEY=your-aws-key
 BEDROCK_BASE_URL=https://bedrock-runtime.us-east-1.amazonaws.com
 BEDROCK_API_FORMAT=anthropic
-VDM_DEFAULT_PROVIDER=bedrock
+VDM_DEFAULT_TARGET=bedrock
 
 # Use with specific model
 ANTHROPIC_BASE_URL=http://localhost:8082 claude --model bedrock:anthropic.claude-3-sonnet-20240229-v1:0
@@ -487,7 +487,7 @@ ANTHROPIC_BASE_URL=http://localhost:8082 claude --model bedrock:anthropic.claude
 VERTEX_API_KEY=your-vertex-key
 VERTEX_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 VERTEX_API_FORMAT=anthropic
-VDM_DEFAULT_PROVIDER=vertex
+VDM_DEFAULT_TARGET=vertex
 ```
 
 ### Using OAuth Authentication
@@ -499,7 +499,7 @@ instead of purchasing API keys.
 # 1. Configure ChatGPT provider for OAuth
 export CHATGPT_AUTH_MODE=oauth
 export CHATGPT_BASE_URL=https://api.openai.com/v1
-export VDM_DEFAULT_PROVIDER=chatgpt
+export VDM_DEFAULT_TARGET=chatgpt
 
 # 2. Authenticate with ChatGPT (opens browser)
 vdm oauth login chatgpt
@@ -658,9 +658,9 @@ ANTHROPIC_BASE_URL=http://localhost:8082 claude --model sonnet "Uses glm-4.6 fal
 
 You can specify which provider to use per request:
 
-1. **Default Provider**: Uses the configured `VDM_DEFAULT_PROVIDER`
+1. **Default Target**: Uses the configured `VDM_DEFAULT_TARGET`
    ```bash
-   # Uses default provider
+   # Uses Default Target
    claude --model claude-3-5-sonnet-20241022
    ```
 
@@ -672,10 +672,10 @@ You can specify which provider to use per request:
    claude --model bedrock:anthropic.claude-3-sonnet-20240229-v1:0
    ```
 
-3. **Environment Override**: Override default provider temporarily
+3. **Environment Override**: Override Default Target temporarily
    ```bash
    # Temporarily use different provider
-   VDM_DEFAULT_PROVIDER=anthropic claude
+   VDM_DEFAULT_TARGET=anthropic claude
    ```
 
 ### Profile-Provider Name Collision (Intentional Feature)

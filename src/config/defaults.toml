@@ -9,7 +9,7 @@
 # alias settings. Use profile prefix in requests: "profile-name:model"
 #
 # Profile syntax uses # prefix for visual distinction in TOML (quoted)
-# External reference omits the #: VDM_DEFAULT_PROVIDER="webdev-good"
+# External reference omits the #: VDM_DEFAULT_TARGET="webdev-good"
 #
 # === PROFILE-PROVIDER COLLISION IS INTENTIONAL BEHAVIOR ===
 # When a profile name matches a provider name (case-insensitive), the profile
@@ -29,9 +29,9 @@
 # ============================================================================
 
 [defaults]
-# Default provider to use when not specified via environment variable
-# Can be overridden by VDM_DEFAULT_PROVIDER environment variable
-default-provider = "top"
+# Default target to use when not specified via environment variable
+# Can be overridden by VDM_DEFAULT_TARGET environment variable
+default-target = "top"
 
 # Global fallback values for providers
 # These are used when a provider doesn't define its own value.

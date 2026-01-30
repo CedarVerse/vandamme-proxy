@@ -220,6 +220,10 @@ def models_ag_grid(
             "sort": "desc",  # Default sort by creation date (newest first)
             "tooltipField": "created_relative",
             "comparator": {"function": "vdmDateComparator"},
+            # Profile models don't have creation dates
+            "valueGetter": {
+                "function": "params.data.is_profile_model ? null : params.data.created_iso"
+            },
         },
         {
             "headerName": "Actions",
@@ -233,7 +237,7 @@ def models_ag_grid(
             "cellRenderer": "vdmModelPageLinkRenderer",
         },
         {
-            "headerName": "Sub-Provider",
+            "headerName": "Provider",
             "field": "owned_by",
             "sortable": True,
             "filter": True,

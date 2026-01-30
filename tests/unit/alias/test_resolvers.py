@@ -26,7 +26,7 @@ class TestResolutionContext:
         context = ResolutionContext(
             model="test-model",
             provider="test-provider",
-            default_provider="default",
+            default_target="default",
             aliases={"provider1": {"alias1": "target1"}},
         )
         assert context.model == "test-model"
@@ -38,20 +38,20 @@ class TestResolutionContext:
         context = ResolutionContext(
             model="original",
             provider=None,
-            default_provider="default",
+            default_target="default",
             aliases={},
         )
         updated = context.with_updates(model="updated", provider="new-provider")
         assert updated.model == "updated"
         assert updated.provider == "new-provider"
-        assert updated.default_provider == "default"  # Unchanged
+        assert updated.default_target == "default"  # Unchanged
 
     def test_with_updates_preserves_metadata(self) -> None:
         """Test that metadata is copied, not mutated."""
         context = ResolutionContext(
             model="test",
             provider=None,
-            default_provider="default",
+            default_target="default",
             aliases={},
             metadata={"key": "value"},
         )
@@ -74,7 +74,7 @@ class TestLiteralPrefixResolver:
         return ResolutionContext(
             model="test-model",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
 
@@ -83,7 +83,7 @@ class TestLiteralPrefixResolver:
         context = ResolutionContext(
             model="!gpt-4",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         assert resolver.can_resolve(context) is True
@@ -93,7 +93,7 @@ class TestLiteralPrefixResolver:
         context = ResolutionContext(
             model="gpt-4",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         assert resolver.can_resolve(context) is False
@@ -103,7 +103,7 @@ class TestLiteralPrefixResolver:
         context = ResolutionContext(
             model="!openai:gpt-4",
             provider=None,
-            default_provider="poe",
+            default_target="poe",
             aliases={},
         )
         result = resolver.resolve(context)
@@ -116,7 +116,7 @@ class TestLiteralPrefixResolver:
         context = ResolutionContext(
             model="!gpt-4",
             provider="anthropic",
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = resolver.resolve(context)
@@ -128,7 +128,7 @@ class TestLiteralPrefixResolver:
         context = ResolutionContext(
             model="!",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = resolver.resolve(context)
@@ -147,7 +147,7 @@ class TestChainedAliasResolver:
         return ResolutionContext(
             model="test-model",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {"fast": "sonnet", "sonnet": "gpt-4o-mini"},
                 "openai": {"gpt-4o-mini": "gpt-4"},
@@ -159,7 +159,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="poe:fast",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"fast": "sonnet"}},
         )
         assert resolver.can_resolve(context) is True
@@ -169,7 +169,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="fast",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"fast": "sonnet"}},
         )
         assert resolver.can_resolve(context) is False
@@ -179,7 +179,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="poe:fast",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"fast": "sonnet"}},
         )
         result = resolver.resolve(context)
@@ -192,7 +192,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="poe:fast",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "fast": "sonnet",
@@ -210,7 +210,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="poe:fast",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {"fast": "openai:sonnet"},
                 "openai": {"sonnet": "gpt-4o"},
@@ -228,7 +228,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="poe:a",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "a": "b",
@@ -253,7 +253,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="poe:a",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "a": "b",
@@ -272,7 +272,7 @@ class TestChainedAliasResolver:
         context = ResolutionContext(
             model="poe:unknown",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"other": "target"}},
         )
         result = resolver.resolve(context)
@@ -291,7 +291,7 @@ class TestSubstringMatcher:
         return ResolutionContext(
             model="test-model",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "haiku": "grok-4.1-fast",
@@ -306,7 +306,7 @@ class TestSubstringMatcher:
         context = ResolutionContext(
             model="haiku",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"haiku": "target"}},
         )
         assert resolver.can_resolve(context) is True
@@ -316,7 +316,7 @@ class TestSubstringMatcher:
         context = ResolutionContext(
             model="test",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         assert resolver.can_resolve(context) is False
@@ -326,7 +326,7 @@ class TestSubstringMatcher:
         context = ResolutionContext(
             model="!test",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"test": "target"}},
         )
         assert resolver.can_resolve(context) is False
@@ -364,7 +364,7 @@ class TestSubstringMatcher:
         context = ResolutionContext(
             model="my_model_name",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"my-model-name": "target"}},
         )
         result = resolver.resolve(context)
@@ -376,7 +376,7 @@ class TestSubstringMatcher:
         context = ResolutionContext(
             model="haiku",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {"haiku": "poe-target"},
                 "openai": {"haiku": "openai-target"},
@@ -393,7 +393,7 @@ class TestSubstringMatcher:
         context = ResolutionContext(
             model="nonexistent",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"haiku": "target"}},
         )
         result = resolver.resolve(context)
@@ -438,7 +438,7 @@ class TestMatchRanker:
         context = ResolutionContext(
             model="haiku",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = resolver.resolve(context, sample_matches)
@@ -471,7 +471,7 @@ class TestMatchRanker:
         context = ResolutionContext(
             model="test",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = resolver.resolve(context, matches)
@@ -500,7 +500,7 @@ class TestMatchRanker:
         context = ResolutionContext(
             model="haiku",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = resolver.resolve(context, matches)
@@ -522,7 +522,7 @@ class TestMatchRanker:
         context = ResolutionContext(
             model="fast",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={"openai": {}, "poe": {}},
         )
         result = resolver.resolve(context, matches)
@@ -544,7 +544,7 @@ class TestMatchRanker:
         context = ResolutionContext(
             model="haiku",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = resolver.resolve(context, matches)
@@ -556,7 +556,7 @@ class TestMatchRanker:
         context = ResolutionContext(
             model="test",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = resolver.resolve(context, [])
@@ -584,7 +584,7 @@ class TestAliasResolverChain:
         return ResolutionContext(
             model="test",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "haiku": "grok-4.1-fast",
@@ -599,7 +599,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="!exact-model-name",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"haiku": "target"}},
         )
         result = chain.resolve(context)
@@ -612,7 +612,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="fast",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "fast": "sonnet",
@@ -630,7 +630,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="haiku",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "haiku": "grok-4.1-fast",
@@ -648,7 +648,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="my-haiku-model",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"haiku": "grok-4.1-fast"}},
         )
         result = chain.resolve(context)
@@ -660,7 +660,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="nonexistent",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={"poe": {"haiku": "target"}},
         )
         result = chain.resolve(context)
@@ -672,7 +672,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="test",
             provider=None,
-            default_provider="openai",
+            default_target="openai",
             aliases={},
         )
         result = chain.resolve(context)
@@ -684,7 +684,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="fast",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {
                     "fast": "sonnet",
@@ -701,7 +701,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="haiku",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {"haiku": "poe-haiku"},
                 "openai": {"haiku": "openai-haiku"},
@@ -717,7 +717,7 @@ class TestAliasResolverChain:
         context = ResolutionContext(
             model="fast",
             provider="poe",
-            default_provider="openai",
+            default_target="openai",
             aliases={
                 "poe": {"fast": "openai:sonnet"},
                 "openai": {"sonnet": "gpt-4o"},

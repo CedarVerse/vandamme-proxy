@@ -40,7 +40,7 @@ base-url = "https://api.openai.com/v1"
 fast = "gpt-4o"
 
 [defaults]
-default-provider = "openai"
+default-target = "openai"
 timeout = 90
 """
             )

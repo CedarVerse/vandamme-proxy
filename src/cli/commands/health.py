@@ -72,12 +72,12 @@ def upstream(
     console = Console()
     cfg = Config()
 
-    with Status("Checking OpenAI API connectivity...", console=console):
+    with Status("Checking default target API connectivity...", console=console):
         try:
             # Use existing client to test connectivity
             client = httpx.Client(
                 base_url=cfg.base_url,
-                headers={"Authorization": f"Bearer {cfg.openai_api_key}"},
+                headers={"Authorization": f"Bearer {cfg.default_target_api_key}"},
                 timeout=10.0,
             )
 

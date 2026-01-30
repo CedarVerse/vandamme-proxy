@@ -35,7 +35,7 @@ class TestDefaultsTimeoutMaxRetries:
             os.environ["TESTPROVIDER_API_KEY"] = "test-key"
 
             try:
-                manager = ProviderManager(default_provider="testprovider")
+                manager = ProviderManager(default_target="testprovider")
                 manager.load_provider_configs()
                 config = manager.get_provider_config("testprovider")
                 assert config.timeout == 60
@@ -63,7 +63,7 @@ class TestDefaultsTimeoutMaxRetries:
             os.environ["TESTPROVIDER_API_KEY"] = "test-key"
 
             try:
-                manager = ProviderManager(default_provider="testprovider")
+                manager = ProviderManager(default_target="testprovider")
                 manager.load_provider_configs()
                 config = manager.get_provider_config("testprovider")
                 assert config.timeout == 30
@@ -91,7 +91,7 @@ class TestDefaultsTimeoutMaxRetries:
             os.environ["TESTPROVIDER_API_KEY"] = "test-key"
 
             try:
-                manager = ProviderManager(default_provider="testprovider")
+                manager = ProviderManager(default_target="testprovider")
                 manager.load_provider_configs()
                 config = manager.get_provider_config("testprovider")
                 assert config.timeout == 120
@@ -119,7 +119,7 @@ class TestDefaultsTimeoutMaxRetries:
             os.environ["TESTPROVIDER_API_KEY"] = "test-key"
 
             try:
-                manager = ProviderManager(default_provider="testprovider")
+                manager = ProviderManager(default_target="testprovider")
                 manager.load_provider_configs()
                 config = manager.get_provider_config("testprovider")
                 assert config.timeout == 0
@@ -144,7 +144,7 @@ class TestDefaultsTimeoutMaxRetries:
             os.environ["TESTPROVIDER_API_KEY"] = "test-key"
 
             try:
-                manager = ProviderManager(default_provider="testprovider")
+                manager = ProviderManager(default_target="testprovider")
                 manager.load_provider_configs()
                 config = manager.get_provider_config("testprovider")
                 assert config.max_retries == 3
@@ -172,7 +172,7 @@ class TestDefaultsTimeoutMaxRetries:
             os.environ["TESTPROVIDER_API_KEY"] = "test-key"
 
             try:
-                manager = ProviderManager(default_provider="testprovider")
+                manager = ProviderManager(default_target="testprovider")
                 manager.load_provider_configs()
                 config = manager.get_provider_config("testprovider")
                 assert config.max_retries == 0
@@ -198,7 +198,7 @@ class TestDefaultsTimeoutMaxRetries:
 
             try:
                 with pytest.raises(ConfigurationError) as exc_info:
-                    manager = ProviderManager(default_provider="testprovider")
+                    manager = ProviderManager(default_target="testprovider")
                     manager.load_provider_configs()
 
                 error_msg = str(exc_info.value)
@@ -226,7 +226,7 @@ class TestDefaultsTimeoutMaxRetries:
 
             try:
                 with pytest.raises(ConfigurationError) as exc_info:
-                    manager = ProviderManager(default_provider="testprovider")
+                    manager = ProviderManager(default_target="testprovider")
                     manager.load_provider_configs()
 
                 error_msg = str(exc_info.value)
@@ -257,7 +257,7 @@ class TestDefaultsTimeoutMaxRetries:
 
             try:
                 with pytest.raises(ConfigurationError) as exc_info:
-                    manager = ProviderManager(default_provider="testprovider")
+                    manager = ProviderManager(default_target="testprovider")
                     manager.load_provider_configs()
 
                 assert "Invalid" in str(exc_info.value)

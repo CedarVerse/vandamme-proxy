@@ -13,9 +13,9 @@ def providers_table(health: dict[str, Any]) -> dbc.Table:
     if not isinstance(providers, dict):
         providers = {}
 
-    default_provider = health.get("default_provider")
-    if not isinstance(default_provider, str):
-        default_provider = ""
+    default_target = health.get("default_target")
+    if not isinstance(default_target, str):
+        default_target = ""
 
     header = html.Thead(
         html.Tr(
@@ -37,7 +37,7 @@ def providers_table(health: dict[str, Any]) -> dbc.Table:
         base_url = pdata.get("base_url")
         api_key_hash = pdata.get("api_key_hash", "<not set>")
 
-        is_default = bool(default_provider) and provider_name == default_provider
+        is_default = bool(default_target) and provider_name == default_target
 
         provider_cell = [provider_badge(provider_name)]
         if is_default:

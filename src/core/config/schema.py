@@ -81,11 +81,11 @@ class ConfigSchema:
 
     # === Provider Settings ===
 
-    VDM_DEFAULT_PROVIDER = EnvVarSpec(
-        name="VDM_DEFAULT_PROVIDER",
+    VDM_DEFAULT_TARGET = EnvVarSpec(
+        name="VDM_DEFAULT_TARGET",
         default="openai",
         type_hint=str,
-        description="Default LLM provider to use",
+        description="Default routing target (provider or profile) to use",
     )
 
     PROXY_API_KEY = EnvVarSpec(

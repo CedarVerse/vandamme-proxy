@@ -64,7 +64,7 @@ Configure fallback defaults using TOML files. The proxy loads configurations fro
 
 3. **Package Defaults**: `src/config/defaults.toml`
    - Built-in defaults
-   - Includes default provider and fallback aliases
+   - Includes Default Target and fallback aliases
    - Lowest priority
 
 #### Example TOML Configuration
@@ -72,9 +72,9 @@ Configure fallback defaults using TOML files. The proxy loads configurations fro
 ```toml
 # src/config/defaults.toml - Package defaults
 [defaults]
-# Default provider to use when not specified via environment variable
-# Can be overridden by VDM_DEFAULT_PROVIDER environment variable
-default-provider = "openai"
+# Default Target to use when not specified via environment variable
+# Can be overridden by VDM_DEFAULT_TARGET environment variable
+default-target = "openai"
 
 [aliases]
 # Fallback aliases for special model names

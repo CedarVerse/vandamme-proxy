@@ -346,9 +346,9 @@ class TestAliasManager:
                         }
                     },
                 },
-                "defaults": {"default-provider": "openai"},
+                "defaults": {"default-target": "openai"},
             }
-            mock_loader_instance.get_defaults.return_value = {"default-provider": "openai"}
+            mock_loader_instance.get_defaults.return_value = {"default-target": "openai"}
 
             alias_manager = AliasManager()
 

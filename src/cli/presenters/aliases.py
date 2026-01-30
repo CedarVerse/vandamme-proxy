@@ -118,9 +118,9 @@ class AliasSummaryPresenter:
         if summary.providers:
             # Use default provider if available, otherwise first provider
             example_provider = (
-                summary.default_provider
-                if summary.default_provider
-                and any(p.provider == summary.default_provider for p in summary.providers)
+                summary.default_target
+                if summary.default_target
+                and any(p.provider == summary.default_target for p in summary.providers)
                 else summary.providers[0].provider
             )
 

@@ -27,13 +27,13 @@ def show() -> None:
     table.add_column("Source", style="yellow")
 
     # Add rows with masked secrets
-    table.add_row(f"{cfg.default_provider.upper()}_API_KEY", cfg.api_key_hash, "Environment")
+    table.add_row(f"{cfg.default_target.upper()}_API_KEY", cfg.api_key_hash, "Environment")
     table.add_row(
         "PROXY_API_KEY",
         "***" if cfg.proxy_api_key else "<not set>",
         "Environment",
     )
-    table.add_row(f"{cfg.default_provider.upper()}_BASE_URL", cfg.base_url, "Environment/Default")
+    table.add_row(f"{cfg.default_target.upper()}_BASE_URL", cfg.base_url, "Environment/Default")
     table.add_row("HOST", cfg.host, "Environment/Default")
     table.add_row("PORT", str(cfg.port), "Environment/Default")
     table.add_row("LOG_LEVEL", cfg.log_level, "Environment/Default")
@@ -54,10 +54,10 @@ def validate() -> None:
     errors = []
 
     # Validate required settings
-    if not cfg.openai_api_key:
-        errors.append("❌ OPENAI_API_KEY is required")
+    if not cfg.default_target_api_key:
+        errors.append("❌ Default target API key is required")
     elif not cfg.validate_api_key():
-        errors.append("❌ OPENAI_API_KEY format is invalid")
+        errors.append("❌ Default target API key format is invalid")
 
     if errors:
         console.print(Panel("\n".join(errors), title="Validation Errors", style="red"))

@@ -24,13 +24,13 @@ def connection() -> None:
 
     # Test configuration
     try:
-        if not cfg.openai_api_key:
-            provider_upper = cfg.default_provider.upper()
+        if not cfg.default_target_api_key:
+            provider_upper = cfg.default_target.upper()
             console.print(f"[red]❌ {provider_upper}_API_KEY not configured[/red]")
             sys.exit(1)
 
         console.print(f"✅ API Key configured: {cfg.api_key_hash}")
-        console.print(f"✅ Default Provider: {cfg.default_provider}")
+        console.print(f"✅ Default Target: {cfg.default_target}")
         console.print(f"✅ Base URL: {cfg.base_url}")
 
         console.print()
@@ -90,7 +90,7 @@ def providers() -> None:
             else:  # partial
                 status = f"[yellow]⚠️ {result.message}[/yellow]"
 
-            is_default = "✓" if result.name == cfg.provider_manager.default_provider else ""
+            is_default = "✓" if result.name == cfg.provider_manager.default_target else ""
             table.add_row(
                 result.name,
                 f"[dim]{result.api_key_hash}[/dim]",
@@ -109,18 +109,18 @@ def providers() -> None:
         )
         console.print()
 
-        # Show default provider
-        console.print(f"Default Provider: [bold]{cfg.provider_manager.default_provider}[/bold]")
+        # Show default target
+        console.print(f"Default Target: [bold]{cfg.provider_manager.default_target}[/bold]")
         console.print()
 
         # Show examples
-        default_provider = cfg.provider_manager.default_provider
+        default_target = cfg.provider_manager.default_target
         console.print(
             Panel(
                 f"Use providers with model prefixes:\n"
                 f"• [cyan]openrouter:gpt-4o[/cyan] → Uses OpenRouter\n"
                 f"• [cyan]poe:gemini-3-pro[/cyan] → Uses Poe\n"
-                f"• [cyan]claude-3-5-sonnet[/cyan] → Uses default provider ({default_provider})",
+                f"• [cyan]claude-3-5-sonnet[/cyan] → Uses default target ({default_target})",
                 title="Usage Examples",
                 expand=False,
             )

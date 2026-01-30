@@ -162,9 +162,9 @@ POE_ALIAS_FAST=gemini-flash
 ANTHROPIC_ALIAS_CHAT=claude-3-5-sonnet-20241022
 OPENAI_ALIAS_CODE=gpt-4o
 
-# Default Provider (when no prefix specified)
-# Overrides the default-provider from src/config/defaults.toml
-VDM_DEFAULT_PROVIDER=openai
+# Default Target (when no prefix specified)
+# Overrides the default-target from src/config/defaults.toml
+VDM_DEFAULT_TARGET=openai
 EOF
 ```
 
@@ -227,18 +227,18 @@ Environment Variables (highest priority)
 └── Package: src/config/defaults.toml (lowest priority)
 ```
 
-### Default Provider
+### Default Target
 
-The default provider is determined in this order:
-1. `VDM_DEFAULT_PROVIDER` environment variable (if set)
-2. `default-provider` from your local `./vandamme-config.toml`
-3. `default-provider` from your user config `~/.config/vandamme-proxy/vandamme-config.toml`
-4. `default-provider` from `src/config/defaults.toml` (defaults to "openai")
+The Default Target is determined in this order:
+1. `VDM_DEFAULT_TARGET` environment variable (if set)
+2. `default-target` from your local `./vandamme-config.toml`
+3. `default-target` from your user config `~/.config/vandamme-proxy/vandamme-config.toml`
+4. `default-target` from `src/config/defaults.toml` (defaults to "openai")
 
 ### Package Defaults
 
 The `src/config/defaults.toml` file provides built-in defaults:
-- Default provider: "openai"
+- Default Target: "openai"
 - Fallback model aliases for providers like Poe
 
 You can override any of these settings using environment variables or your own TOML configuration files.
@@ -256,7 +256,7 @@ Route requests by prefixing model names with the provider identifier:
 claude --model openai:gpt-4o         # Routes to OpenAI
 claude --model poe:gemini-flash      # Routes to Poe
 claude --model anthropic:claude-3    # Routes to Anthropic
-claude --model gpt-4o                # Routes to VDM_DEFAULT_PROVIDER
+claude --model gpt-4o                # Routes to VDM_DEFAULT_TARGET
 ```
 
 **Providers are auto-discovered from environment variables:**
@@ -561,12 +561,12 @@ POE_API_KEY=your-poe-key
 # Any {PROVIDER}_API_KEY creates a provider
 ```
 
-#### Default Provider
+#### Default Target
 ```bash
-# Default provider for models without provider prefixes
-# Overrides the default-provider from src/config/defaults.toml
+# Default Target for models without provider prefixes
+# Overrides the default-target from src/config/defaults.toml
 # If not set, uses value from defaults.toml (defaults to "openai")
-VDM_DEFAULT_PROVIDER=openai
+VDM_DEFAULT_TARGET=openai
 ```
 
 #### Provider Configuration

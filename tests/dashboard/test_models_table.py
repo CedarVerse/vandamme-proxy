@@ -131,3 +131,80 @@ def test_models_ag_grid_uses_registered_model_id_renderer() -> None:
     assert model_id_col["cellRenderer"] == "vdmModelIdWithIconRenderer"
     # Copy-to-clipboard is handled by a JS listener attached to the grid API.
     assert model_id_col["cellStyle"]["cursor"] == "copy"
+
+
+def test_models_ag_grid_provider_column_label_is_correct() -> None:
+    """Test that the provider column is labeled 'Provider' not 'Sub-Provider'."""
+    grid = models_ag_grid([])
+
+    # Dash components store props in .to_plotly_json()
+    props = grid.to_plotly_json()["props"]
+    col_defs = props["columnDefs"]
+
+    provider_col = next(c for c in col_defs if c.get("field") == "owned_by")
+    assert provider_col["headerName"] == "Provider"
+    # Should not be 'Sub-Provider' which is misleading for profile models
+    assert provider_col["headerName"] != "Sub-Provider"
+
+
+def test_models_ag_grid_created_column_has_value_getter_for_profile_models() -> None:
+    """Test that the Created column has a valueGetter to hide dates for profile models."""
+    grid = models_ag_grid([])
+
+    # Dash components store props in .to_plotly_json()
+    props = grid.to_plotly_json()["props"]
+    col_defs = props["columnDefs"]
+
+    created_col = next(c for c in col_defs if c.get("field") == "created_iso")
+    # Should have a valueGetter that returns null for profile models
+    assert "valueGetter" in created_col
+    assert (
+        created_col["valueGetter"]["function"]
+        == "params.data.is_profile_model ? null : params.data.created_iso"
+    )
+
+
+def test_models_ag_grid_profile_model_row_data_includes_is_profile_model() -> None:
+    """Test that profile model rows include the is_profile_model field."""
+    models = [
+        {
+            "id": "haiku",
+            "created": 1758868894776,
+            "owned_by": "main",
+            "is_profile_model": True,
+            "resolution_chain": ["haiku", "anthropic:claude-3-5-haiku-20241022"],
+            "final_model_id": "anthropic:claude-3-5-haiku-20241022",
+            "data_source": "local",
+        }
+    ]
+
+    grid = models_ag_grid(models)
+    row = grid.rowData[0]
+
+    # Profile model fields should be present
+    assert row["is_profile_model"] is True
+    assert row["resolution_chain"] == ["haiku", "anthropic:claude-3-5-haiku-20241022"]
+    assert row["final_model_id"] == "anthropic:claude-3-5-haiku-20241022"
+    assert row["data_source"] == "local"
+
+
+def test_models_ag_grid_regular_model_row_data_has_is_profile_model_false() -> None:
+    """Test that regular model rows have is_profile_model set to False."""
+    models = [
+        {
+            "id": "claude-3-5-sonnet-20241022",
+            "created": 1758868894776,
+            "owned_by": "Anthropic",
+            "description": "Claude 3.5 Sonnet",
+        }
+    ]
+
+    grid = models_ag_grid(models)
+    row = grid.rowData[0]
+
+    # Regular models should have is_profile_model=False
+    assert row["is_profile_model"] is False
+    # Profile-specific fields should be None or empty
+    assert row.get("resolution_chain") == []
+    assert row.get("final_model_id") is None
+    assert row.get("data_source") is None

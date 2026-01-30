@@ -11,35 +11,35 @@ class TestProviderResolver:
 
     def test_parse_provider_prefix_with_provider(self) -> None:
         """Test parsing model with provider prefix."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         provider, model = resolver.parse_provider_prefix("anthropic:claude-3")
         assert provider == "anthropic"
         assert model == "claude-3"
 
     def test_parse_provider_prefix_without_provider(self) -> None:
         """Test parsing model without provider prefix."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         provider, model = resolver.parse_provider_prefix("gpt-4")
         assert provider is None
         assert model == "gpt-4"
 
     def test_parse_provider_prefix_case_insensitive(self) -> None:
         """Test that provider names are normalized to lowercase."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         provider, model = resolver.parse_provider_prefix("OPENAI:gpt-4")
         assert provider == "openai"
         assert model == "gpt-4"
 
     def test_parse_provider_prefix_with_colon_in_model(self) -> None:
         """Test parsing when model name contains a colon."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         provider, model = resolver.parse_provider_prefix("anthropic:claude:3")
         assert provider == "anthropic"
         assert model == "claude:3"
 
     def test_resolve_provider_with_prefix(self) -> None:
         """Test resolving provider when model has prefix."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}, "anthropic": {}}
         provider, model = resolver.resolve_provider("anthropic:claude-3", available)
         assert provider == "anthropic"
@@ -47,7 +47,7 @@ class TestProviderResolver:
 
     def test_resolve_provider_without_prefix(self) -> None:
         """Test resolving provider when model has no prefix."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}, "anthropic": {}}
         provider, model = resolver.resolve_provider("gpt-4", available)
         assert provider == "openai"
@@ -55,38 +55,38 @@ class TestProviderResolver:
 
     def test_resolve_provider_not_found(self) -> None:
         """Test that ValueError is raised for unknown provider."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}}
         with pytest.raises(ValueError, match="Provider 'unknown' not found"):
             resolver.resolve_provider("unknown:model", available)
 
     def test_resolve_provider_not_found_includes_available(self) -> None:
         """Test that error message includes available providers."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}, "anthropic": {}}
         with pytest.raises(ValueError, match="Available providers: anthropic, openai"):
             resolver.resolve_provider("unknown:model", available)
 
     def test_get_provider_or_default_with_value(self) -> None:
         """Test getting provider name when value is provided."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         assert resolver.get_provider_or_default("Anthropic") == "anthropic"
 
     def test_get_provider_or_default_none(self) -> None:
         """Test getting default provider when value is None."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         assert resolver.get_provider_or_default(None) == "openai"
 
     def test_validate_provider_exists_success(self) -> None:
         """Test validation succeeds when provider exists."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}, "anthropic": {}}
         # Should not raise
         resolver.validate_provider_exists("anthropic", available)
 
     def test_validate_provider_exists_failure(self) -> None:
         """Test validation fails when provider doesn't exist."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}}
         with pytest.raises(ValueError, match="Provider 'unknown' not found"):
             resolver.validate_provider_exists("unknown", available)
@@ -106,7 +106,7 @@ class TestProviderResolver:
         )
 
         resolver = ProviderResolver(
-            default_provider="openai",
+            default_target="openai",
             profile_manager=profile_mgr,
         )
         available = {"openai": {}, "anthropic": {}}
@@ -126,7 +126,7 @@ class TestProviderResolver:
         profile_mgr.load_profiles({"test-profile": {"aliases": {}}})
 
         resolver = ProviderResolver(
-            default_provider="openai",
+            default_target="openai",
             profile_manager=profile_mgr,
         )
         available = {"openai": {}, "anthropic": {}}
@@ -144,7 +144,7 @@ class TestProviderResolver:
         profile_mgr.load_profiles({})
 
         resolver = ProviderResolver(
-            default_provider="openai",
+            default_target="openai",
             profile_manager=profile_mgr,
         )
         available = {"openai": {}, "anthropic": {}}
@@ -155,7 +155,7 @@ class TestProviderResolver:
 
     def test_resolve_provider_empty_string_model(self) -> None:
         """Test resolving with empty string model."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}}
         provider, model = resolver.resolve_provider("", available)
         assert provider == "openai"
@@ -163,7 +163,7 @@ class TestProviderResolver:
 
     def test_resolve_provider_model_with_only_provider(self) -> None:
         """Test resolving model that's just a provider name with colon."""
-        resolver = ProviderResolver(default_provider="openai")
+        resolver = ProviderResolver(default_target="openai")
         available = {"openai": {}, "anthropic": {}}
         provider, model = resolver.resolve_provider("anthropic:", available)
         assert provider == "anthropic"

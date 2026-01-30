@@ -61,8 +61,8 @@ ANTHROPIC_API_KEY="sk-ant-prod1 sk-ant-prod2 sk-ant-backup"
 OPENAI_BASE_URL="https://api.openai.com/v1"
 ANTHROPIC_BASE_URL="https://api.anthropic.com"
 
-# Set default provider
-VDM_DEFAULT_PROVIDER="openai"
+# Set Default Target
+VDM_DEFAULT_TARGET="openai"
 ```
 
 ### Cost Optimization Strategy

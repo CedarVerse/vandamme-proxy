@@ -31,22 +31,22 @@ class ProviderResolver:
     - Default provider selection
 
     Example:
-        resolver = ProviderResolver(default_provider="openai", profile_manager=profile_mgr)
+        resolver = ProviderResolver(default_target="openai", profile_manager=profile_mgr)
         provider, model = resolver.resolve_provider("anthropic:claude-3", available_providers)
     """
 
     def __init__(
         self,
-        default_provider: str,
+        default_target: str,
         profile_manager: ProfileManager | None = None,
     ) -> None:
         """Initialize resolver.
 
         Args:
-            default_provider: Default provider name for fallback
+            default_target: Default provider name for fallback
             profile_manager: Optional profile manager for profile-aware resolution
         """
-        self._default_provider = default_provider
+        self._default_target = default_target
         self._profile_manager = profile_manager
 
     def parse_provider_prefix(self, model: str) -> tuple[str | None, str]:
@@ -110,7 +110,7 @@ class ProviderResolver:
             return self._validate_and_return(provider_name, actual_model, available_providers)
 
         # Use default provider
-        return self._validate_and_return(self._default_provider, model, available_providers)
+        return self._validate_and_return(self._default_target, model, available_providers)
 
     def validate_provider_exists(
         self,
@@ -142,7 +142,7 @@ class ProviderResolver:
             provider_candidate: Optional provider name (may be None)
 
         Returns:
-            Normalized provider name (lowercased) or default_provider
+            Normalized provider name (lowercased) or default_target
 
         Note:
             If provider_candidate is a profile name, returns it with a "#" prefix
@@ -157,11 +157,11 @@ class ProviderResolver:
                 return f"#{provider_candidate.lower()}"
             return provider_candidate.lower()
 
-        # If no candidate and default_provider is also a profile, mark it
-        if self._profile_manager and self._profile_manager.is_profile(self._default_provider):
-            return f"#{self._default_provider.lower()}"
+        # If no candidate and default_target is also a profile, mark it
+        if self._profile_manager and self._profile_manager.is_profile(self._default_target):
+            return f"#{self._default_target.lower()}"
 
-        return self._default_provider
+        return self._default_target
 
     def _validate_and_return(
         self,

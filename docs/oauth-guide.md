@@ -29,7 +29,7 @@ Set the `AUTH_MODE` environment variable for your provider:
 ```bash
 export CHATGPT_AUTH_MODE=oauth
 export CHATGPT_BASE_URL=https://api.openai.com/v1
-export VDM_DEFAULT_PROVIDER=chatgpt
+export VDM_DEFAULT_TARGET=chatgpt
 ```
 
 Alternatively, use the `!OAUTH` sentinel value:

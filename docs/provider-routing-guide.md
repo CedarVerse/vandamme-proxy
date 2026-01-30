@@ -34,14 +34,14 @@ Client Request → Vandamme → Multiple API Providers
 
 ### 1. Provider Prefix Routing
 
-Specify the provider directly in the model name, or omit to use the default provider (set in `VDM_DEFAULT_PROVIDER` env var or defaults.toml):
+Specify the provider directly in the model name, or omit to use the Default Target (set in `VDM_DEFAULT_TARGET` env var or defaults.toml):
 
 ```python
 # Format: provider:model_name
 claude --model openai:gpt-4o             # Routes to OpenAI
 claude --model poe:glm-4.6               # Routes to Poe
 claude --model azure:gpt-4               # Routes to Azure OpenAI
-claude --model gpt-4                     # Routes to the default provider (from VDM_DEFAULT_PROVIDER or defaults.toml)
+claude --model gpt-4                     # Routes to the Default Target (from VDM_DEFAULT_TARGET or defaults.toml)
 ```
 
 ### 2. Automatic Provider Discovery
@@ -133,16 +133,16 @@ BEDROCK_API_FORMAT=anthropic
 
 ## Advanced Features
 
-### 1. Default Provider
+### 1. Default Target
 
-Set a default provider for models without prefixes:
+Set a Default Target for models without prefixes:
 ```bash
 # Optional: overrides defaults.toml
-VDM_DEFAULT_PROVIDER=openai
+VDM_DEFAULT_TARGET=openai
 ```
 
 Now `claude --model gpt-4` (without the provider prefix) routes to OpenAI automatically.
-If `VDM_DEFAULT_PROVIDER` is not set, it uses the `default-provider` from `src/config/defaults.toml` (defaults to "openai").
+If `VDM_DEFAULT_TARGET` is not set, it uses the `default-target` from `src/config/defaults.toml` (defaults to "openai").
 
 ### 2. API Key Passthrough
 

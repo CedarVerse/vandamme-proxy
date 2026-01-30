@@ -514,7 +514,7 @@ class HealthCheckService:
             "timestamp": datetime.now().isoformat(),
             "api_key_valid": self._config.validate_api_key(),
             "client_api_key_validation": bool(self._config.proxy_api_key),
-            "default_provider": configured,  # What user configured
+            "default_target": configured,  # What user configured
             "active_provider": actual or configured,  # What's actually being used
             "providers": providers,
         }
@@ -560,7 +560,7 @@ class HealthCheckService:
             "message": "Server is running but configuration is incomplete",
             "suggestions": [
                 "Set OPENAI_API_KEY environment variable for OpenAI provider",
-                "Set VDM_DEFAULT_PROVIDER to specify your preferred provider",
+                "Set VDM_DEFAULT_TARGET to specify your preferred provider",
                 "Check .env file for required configuration",
             ],
         }
@@ -644,7 +644,7 @@ class TokenCountService:
         """
         try:
             client = self._config.provider_manager.get_client(
-                self._config.provider_manager.default_provider
+                self._config.provider_manager.default_target
             )
 
             # Build minimal request for token counting
@@ -860,8 +860,8 @@ class TestConnectionService:
             TestConnectionResult with test status and details
         """
         try:
-            default_provider = self._config.provider_manager.default_provider
-            provider_config = self._config.provider_manager.get_provider_config(default_provider)
+            default_target = self._config.provider_manager.default_target
+            provider_config = self._config.provider_manager.get_provider_config(default_target)
 
             # Skip connectivity test for passthrough providers (they forward client key)
             if provider_config.uses_passthrough:
@@ -870,10 +870,10 @@ class TestConnectionService:
                     content={
                         "status": "skipped",
                         "message": (
-                            f"Provider {default_provider} uses passthrough mode - "
+                            f"Provider {default_target} uses passthrough mode - "
                             "connectivity cannot be tested without client API key"
                         ),
-                        "provider": default_provider,
+                        "provider": default_target,
                         "auth_mode": "passthrough",
                         "timestamp": datetime.now().isoformat(),
                     },
@@ -884,7 +884,7 @@ class TestConnectionService:
             # No pre-flight check needed - avoids race condition where
             # token verified at line 733 but used at line 757 creates
             # an expiry window for false negatives.
-            default_client = self._config.provider_manager.get_client(default_provider)
+            default_client = self._config.provider_manager.get_client(default_target)
 
             # Minimal test request to verify API connectivity
             test_response = await default_client.create_chat_completion(
@@ -901,8 +901,8 @@ class TestConnectionService:
                     status=503,
                     content={
                         "status": "failed",
-                        "message": f"Provider {default_provider} returned None response",
-                        "provider": default_provider,
+                        "message": f"Provider {default_target} returned None response",
+                        "provider": default_target,
                         "error": "None response from provider",
                         "timestamp": datetime.now().isoformat(),
                     },
@@ -912,8 +912,8 @@ class TestConnectionService:
                 status=200,
                 content={
                     "status": "success",
-                    "message": f"Successfully connected to {default_provider} API",
-                    "provider": default_provider,
+                    "message": f"Successfully connected to {default_target} API",
+                    "provider": default_target,
                     "model_used": "gpt-4o-mini",
                     "timestamp": datetime.now().isoformat(),
                     "response_id": test_response.get("id", "unknown"),

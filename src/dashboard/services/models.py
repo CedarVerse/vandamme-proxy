@@ -77,21 +77,19 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
     health = await fetch_health(cfg=cfg)
     providers = await fetch_all_providers(cfg=cfg)
 
-    default_provider = health.get("default_provider")
-    if not isinstance(default_provider, str):
-        default_provider = ""
+    default_target = health.get("default_target")
+    if not isinstance(default_target, str):
+        default_target = ""
 
     sorted_providers = sorted(p for p in providers if isinstance(p, str) and p)
 
     # Build provider options first (needed for dropdown)
     provider_options: list[dict[str, str]] = []
-    if default_provider and default_provider in sorted_providers:
-        provider_options.append(
-            {"label": f"{default_provider} (default)", "value": default_provider}
-        )
+    if default_target and default_target in sorted_providers:
+        provider_options.append({"label": f"{default_target} (default)", "value": default_target})
 
     provider_options.extend(
-        [{"label": p, "value": p} for p in sorted_providers if p != default_provider]
+        [{"label": p, "value": p} for p in sorted_providers if p != default_target]
     )
 
     # If no provider selected, return empty state (don't auto-select or fetch)
@@ -145,7 +143,7 @@ async def build_provider_models_view(*, cfg: Any, provider_value: str | None) ->
             error_type=error_type,
         )
 
-    inferred_provider = selected_provider or default_provider or "multiple"
+    inferred_provider = selected_provider or default_target or "multiple"
     for model in models:
         if not model.get("provider"):
             model["provider"] = inferred_provider

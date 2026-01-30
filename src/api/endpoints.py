@@ -664,7 +664,7 @@ async def root(cfg: Config = Depends(get_config)) -> dict[str, Any]:
         "config": {
             "base_url": cfg.base_url,
             "max_tokens_limit": cfg.max_tokens_limit,
-            "api_key_configured": bool(cfg.openai_api_key),
+            "api_key_configured": bool(cfg.default_target_api_key),
             "client_api_key_validation": bool(cfg.proxy_api_key),
         },
         "endpoints": {

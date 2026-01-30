@@ -223,12 +223,12 @@ class AliasManager:
         loaded_count = 0
         skipped_count = 0
 
-        # Get default provider (lazily, without triggering ProviderManager init)
+        # Get default target (lazily, without triggering ProviderManager init)
         from src.core.alias_config import AliasConfigLoader
 
         loader = AliasConfigLoader()
         defaults = loader.get_defaults()
-        self._default_provider = defaults.get("default-provider", "openai")
+        self._default_provider = defaults.get("default-target", "openai")
 
         # NOTE: Intentionally do NOT call ProviderManager.load_provider_configs() here.
         # This allows AliasManager to be instantiated without requiring provider API keys.
@@ -378,7 +378,7 @@ class AliasManager:
         }
         available_providers = configured_providers | env_providers
 
-        # Note: "default-provider" is a preference, not proof that a provider is enabled.
+        # Note: "default-target" is a preference, not proof that a provider is enabled.
         # We intentionally do not treat it as "configured" for alias scoping.
 
         for provider, fallback_aliases in self._fallback_aliases.items():
@@ -460,7 +460,7 @@ class AliasManager:
         context = ResolutionContext(
             model=model,
             provider=provider,
-            default_provider=self._default_provider or "openai",
+            default_target=self._default_provider or "openai",
             aliases=self.aliases,
         )
 

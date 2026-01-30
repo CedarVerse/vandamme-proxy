@@ -19,7 +19,7 @@ def test_presenter_empty_summary(capsys):
         total_providers=0,
         total_fallbacks=0,
         providers=[],
-        default_provider=None,
+        default_target=None,
     )
 
     presenter = AliasSummaryPresenter(console=console)
@@ -49,7 +49,7 @@ def test_presenter_with_aliases(capsys):
                 ],
             )
         ],
-        default_provider="openai",
+        default_target="openai",
     )
 
     presenter = AliasSummaryPresenter(console=console)
@@ -88,7 +88,7 @@ def test_presenter_with_multiple_providers(capsys):
                 aliases=[("chat", "claude-3-5-sonnet", Constants.ALIAS_TYPE_EXPLICIT)],
             ),
         ],
-        default_provider="openai",
+        default_target="openai",
     )
 
     presenter = AliasSummaryPresenter(console=console)
@@ -119,7 +119,7 @@ def test_presenter_table_format():
                 ],
             )
         ],
-        default_provider="openai",
+        default_target="openai",
     )
 
     presenter = AliasSummaryPresenter(console=console)

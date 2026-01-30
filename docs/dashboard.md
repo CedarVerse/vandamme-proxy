@@ -202,7 +202,7 @@ providers:
 
 #### Test Connection Feature
 The "Run test connection" button performs a live test:
-- Sends actual request to default provider
+- Sends actual request to Default Target
 - Tests authentication and connectivity
 - Returns detailed success/failure information
 - Includes response ID on success
@@ -505,7 +505,7 @@ curl "http://localhost:8082/metrics/running-totals?provider=openai&model=gpt*"
 - **PORT**: Default 8082 (dashboard adjusts automatically)
 
 #### Optional Enhancements
-- **VDM_DEFAULT_PROVIDER**: Sets default for test connection
+- **VDM_DEFAULT_TARGET**: Sets default for test connection
 - **LOG_LEVEL=DEBUG**: Detailed dashboard troubleshooting
 - **PROXY_API_KEY**: Dashboard access control
 

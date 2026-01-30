@@ -44,20 +44,20 @@ def start(
         configure_root_logging(use_systemd=False)
         console = Console()
 
-        # Detect if default_provider is a profile
+        # Detect if default_target is a profile
         is_default_profile = False
         active_profile_name = None
         profile_manager = cfg.provider_manager.profile_manager
 
-        if profile_manager and profile_manager.is_profile(cfg.default_provider):
+        if profile_manager and profile_manager.is_profile(cfg.default_target):
             is_default_profile = True
-            active_profile_name = cfg.default_provider
+            active_profile_name = cfg.default_target
 
         # Show alias summary using presenter pattern
         if cfg.alias_service:
             from src.cli.presenters.aliases import AliasSummaryPresenter
 
-            summary = cfg.alias_service.get_alias_summary(cfg.default_provider)
+            summary = cfg.alias_service.get_alias_summary(cfg.default_target)
             alias_presenter = AliasSummaryPresenter(console=console)
             alias_presenter.present_summary(summary)
 
@@ -91,13 +91,13 @@ def start(
         table.add_row("Server URL", f"http://{server_host}:{server_port}")
 
         if is_default_profile:
-            # Show "Default Profile" instead of "Default Provider"
-            table.add_row("Default Profile", cfg.default_provider)
+            # Show "Default Profile" instead of "Default Target"
+            table.add_row("Default Profile", cfg.default_target)
         else:
-            # Show "Default Provider" with base_url and api_key
-            table.add_row("Default Provider", cfg.default_provider)
-            table.add_row(f"{cfg.default_provider.title()} Base URL", cfg.base_url)
-            table.add_row(f"{cfg.default_provider.title()} API Key", cfg.api_key_hash)
+            # Show "Default Target" with base_url and api_key
+            table.add_row("Default Target", cfg.default_target)
+            table.add_row(f"{cfg.default_target.title()} Base URL", cfg.base_url)
+            table.add_row(f"{cfg.default_target.title()} API Key", cfg.api_key_hash)
 
         console.print(table)
 

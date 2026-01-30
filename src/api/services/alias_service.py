@@ -48,7 +48,7 @@ class AliasSummary:
         total_providers: Number of active providers
         total_fallbacks: Total number of fallback aliases
         providers: Tuple of provider-specific alias information.
-        default_provider: Default provider name if set
+        default_target: Default provider name if set
 
     Note:
         This dataclass is frozen and uses a tuple for the providers list,
@@ -59,7 +59,7 @@ class AliasSummary:
     total_providers: int
     total_fallbacks: int
     providers: tuple[ProviderAliasInfo, ...]
-    default_provider: str | None
+    default_target: str | None
 
 
 class AliasService:
@@ -140,7 +140,7 @@ class AliasService:
             if provider in active_providers
         }
 
-    def get_alias_summary(self, default_provider: str | None = None) -> AliasSummary:
+    def get_alias_summary(self, default_target: str | None = None) -> AliasSummary:
         """Get structured alias summary for presentation.
 
         This method returns a data structure with all the information needed
@@ -148,7 +148,7 @@ class AliasService:
         responsible for converting this to human-readable output.
 
         Args:
-            default_provider: Optional default provider to highlight in output.
+            default_target: Optional default provider to highlight in output.
 
         Returns:
             AliasSummary with all display data (no formatting).
@@ -161,7 +161,7 @@ class AliasService:
                 total_providers=0,
                 total_fallbacks=0,
                 providers=(),
-                default_provider=default_provider,
+                default_target=default_target,
             )
 
         # Get fallback aliases using public getter (no private attribute access)
@@ -206,5 +206,5 @@ class AliasService:
             total_providers=len(active_aliases),
             total_fallbacks=total_fallbacks,
             providers=tuple(providers_info),
-            default_provider=default_provider,
+            default_target=default_target,
         )

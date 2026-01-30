@@ -43,7 +43,7 @@ def test_provider_manager_loads_api_format():
     os.environ["TEST_API_KEY"] = "test-key"
     os.environ["TEST_BASE_URL"] = "https://api.test.com"
 
-    manager = ProviderManager(default_provider="openai")  # Use different default
+    manager = ProviderManager(default_target="openai")  # Use different default
     manager.load_provider_configs()
 
     # Check that format was loaded for additional provider
@@ -57,7 +57,7 @@ def test_provider_manager_loads_api_format():
     os.environ["TEST2_API_KEY"] = "test-key"
     os.environ["TEST2_BASE_URL"] = "https://api.test2.com"
 
-    manager2 = ProviderManager(default_provider="openai")
+    manager2 = ProviderManager(default_target="openai")
     manager2.load_provider_configs()
 
     config2 = manager2.get_provider_config("test2")
@@ -140,7 +140,7 @@ def test_models_endpoint_openai_format():
     mock_client.base_url = "https://example.com/v1"
 
     mock_provider_manager = MagicMock()
-    mock_provider_manager.default_provider = "openai"
+    mock_provider_manager.default_target = "openai"
     mock_provider_manager.list_providers.return_value = {"openai": mock_provider_config}
     mock_provider_manager.get_client.return_value = mock_client
     mock_provider_manager.get_provider_config.return_value = mock_provider_config

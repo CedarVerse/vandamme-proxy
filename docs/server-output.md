@@ -13,10 +13,10 @@ Shows core server settings:
 | Setting | Description |
 |---------|-------------|
 | Server URL | The URL where the proxy is listening |
-| Default Provider | The default provider (when a provider is the default) |
+| Default Target | The Default Target (when a provider is the default) |
 | Default Profile | The default profile (when a profile is the default) |
-| `{Provider} Base URL` | Base URL for the default provider (only shown when provider is default) |
-| `{Provider} API Key` | Hash of the API key for the default provider (only shown when provider is default) |
+| `{Provider} Base URL` | Base URL for the Default Target (only shown when provider is default) |
+| `{Provider} API Key` | Hash of the API key for the Default Target (only shown when provider is default) |
 
 **Note:** When a profile is set as the default, the Base URL and API Key rows are omitted because profile aliases may point to different providers.
 
@@ -52,32 +52,32 @@ Shows active and configured providers:
 |--------|-------------|
 | Status | ✅ (success) or ❌ (failed/error) |
 | SHA256 | First 8 characters of the API key hash |
-| Name | Provider name (prefixed with `*` if this is the default provider) |
+| Name | Provider name (prefixed with `*` if this is the Default Target) |
 | Base URL | The base URL for the provider's API |
 
 **Legend:**
-- `* = default provider` - The provider that is used when no provider prefix is specified
+- `* = Default Target` - The provider that is used when no provider prefix is specified
 - `🔐 = OAuth authentication` - This provider is configured with OAuth authentication
 
-**Note:** When a profile is set as the default, no provider will show the `*` indicator. Instead, the legend will show `* = default provider (profile active, no default provider)`.
+**Note:** When a profile is set as the default, no provider will show the `*` indicator. Instead, the legend will show `* = Default Target (profile active, no Default Target)`.
 
 ## Default Resolution
 
-The default provider/profile is resolved in the following order:
+The Default Target/profile is resolved in the following order:
 
-1. `VDM_DEFAULT_PROVIDER` environment variable
+1. `VDM_DEFAULT_TARGET` environment variable
 2. `default_provider` in `vandamme-config.toml`
 3. `default_provider` in `~/.config/vandamme-proxy/vandamme-config.toml`
 4. Built-in default (first available provider)
 
 ## Profile vs Provider as Default
 
-When `VDM_DEFAULT_PROVIDER` is set to a profile name:
+When `VDM_DEFAULT_TARGET` is set to a profile name:
 - The configuration table shows "Default Profile"
 - The profiles section shows the profile with a `*` indicator
 - The providers section shows no `*` indicator (since the profile may use different providers for different aliases)
 
-When `VDM_DEFAULT_PROVIDER` is set to a provider name:
-- The configuration table shows "Default Provider" with Base URL and API Key
+When `VDM_DEFAULT_TARGET` is set to a provider name:
+- The configuration table shows "Default Target" with Base URL and API Key
 - The profiles section shows no `*` indicator
 - The providers section shows the provider with a `*` indicator

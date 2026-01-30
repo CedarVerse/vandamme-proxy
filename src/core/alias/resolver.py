@@ -21,14 +21,14 @@ class ResolutionContext:
     Attributes:
         model: The original model name to resolve
         provider: Optional provider scope for resolution
-        default_provider: Default provider from configuration
+        default_target: Default provider from configuration
         aliases: All configured aliases {provider: {alias: target}}
         metadata: Additional context data for resolver communication
     """
 
     model: str
     provider: str | None
-    default_provider: str
+    default_target: str
     aliases: dict[str, dict[str, str]]
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -44,7 +44,7 @@ class ResolutionContext:
         return ResolutionContext(  # type: ignore[arg-type]
             model=kwargs.get("model", self.model),
             provider=kwargs.get("provider", self.provider),
-            default_provider=kwargs.get("default_provider", self.default_provider),
+            default_target=kwargs.get("default_target", self.default_target),
             aliases=kwargs.get("aliases", self.aliases),
             metadata=kwargs.get("metadata", self.metadata.copy()),
         )
@@ -174,7 +174,7 @@ class LiteralPrefixResolver(AliasResolver):
             provider, model = literal_part.split(":", 1)
             resolved = f"{provider.lower()}:{model}"
         else:
-            provider = context.provider or context.default_provider
+            provider = context.provider or context.default_target
             resolved = f"{provider}:{literal_part}" if provider else literal_part
 
         logger.debug(f"[{self.name}] Literal: '{context.model}' -> '{resolved}'")
@@ -415,7 +415,7 @@ class MatchRanker(AliasResolver):
             key=lambda m: (
                 0 if m.is_exact else 1,  # Exact first
                 -m.length,  # Longer first
-                0 if m.provider == context.default_provider else 1,  # Default provider
+                0 if m.provider == context.default_target else 1,  # Default provider
                 m.provider,  # Provider alphabetical
                 m.alias,  # Alias alphabetical
             )
@@ -517,7 +517,7 @@ class AliasResolverChain:
                             provider = (
                                 result.provider
                                 or current_context.provider
-                                or current_context.default_provider
+                                or current_context.default_target
                             )
                             if (
                                 ":" in resolved_model
@@ -527,7 +527,7 @@ class AliasResolverChain:
                                 chain_context = ResolutionContext(
                                     model=resolved_model,
                                     provider=provider,
-                                    default_provider=current_context.default_provider,
+                                    default_target=current_context.default_target,
                                     aliases=current_context.aliases,
                                 )
                                 chain_result = chain_resolver.resolve(chain_context)
@@ -562,7 +562,7 @@ class AliasResolverChain:
         self._logger.debug(f"No resolver matched, returning original: '{context.model}'")
         return ResolutionResult(
             resolved_model=context.model,
-            provider=context.provider or context.default_provider,
+            provider=context.provider or context.default_target,
             was_resolved=False,
             resolution_path=(),
         )

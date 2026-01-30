@@ -43,7 +43,7 @@ Environment Variables (highest priority)
 └── Package: src/config/defaults.toml (lowest priority)
 ```
 
-The `VDM_DEFAULT_PROVIDER` environment variable overrides the default provider from `src/config/defaults.toml`.
+The `VDM_DEFAULT_TARGET` environment variable overrides the Default Target from `src/config/defaults.toml`.
 
 ### Interactive Setup (Easiest)
 
@@ -55,7 +55,7 @@ vdm config setup
 The wizard will guide you through:
 - Selecting your LLM provider(s)
 - Entering API keys
-- Setting default provider
+- Setting Default Target
 - Configuring optional features
 
 ### Manual Configuration
@@ -65,7 +65,7 @@ Create a `.env` file with your provider configuration:
 #### OpenAI
 ```bash
 OPENAI_API_KEY="sk-your-openai-key"
-VDM_DEFAULT_PROVIDER="openai"  # Optional: overrides defaults.toml
+VDM_DEFAULT_TARGET="openai"  # Optional: overrides defaults.toml
 ```
 
 #### Poe.com
@@ -76,7 +76,7 @@ POE_API_KEY="your-poe-api-key"
 #### Anthropic (Direct)
 ```bash
 ANTHROPIC_API_KEY="sk-ant-your-key"
-VDM_DEFAULT_PROVIDER="anthropic"  # Optional: overrides defaults.toml
+VDM_DEFAULT_TARGET="anthropic"  # Optional: overrides defaults.toml
 ```
 
 #### Azure OpenAI
@@ -84,14 +84,14 @@ VDM_DEFAULT_PROVIDER="anthropic"  # Optional: overrides defaults.toml
 AZURE_API_KEY="your-azure-key"
 AZURE_BASE_URL="https://your-resource.openai.azure.com/"
 AZURE_API_VERSION="2024-03-01-preview"
-VDM_DEFAULT_PROVIDER="azure"  # Optional: overrides defaults.toml
+VDM_DEFAULT_TARGET="azure"  # Optional: overrides defaults.toml
 ```
 
 #### Local Models (Ollama)
 ```bash
 OLLAMA_API_KEY="dummy-key"
 OLLAMA_BASE_URL="http://localhost:11434/v1"
-VDM_DEFAULT_PROVIDER="ollama"  # Optional: overrides defaults.toml
+VDM_DEFAULT_TARGET="ollama"  # Optional: overrides defaults.toml
 ```
 
 #### Multiple Providers
@@ -101,8 +101,8 @@ OPENAI_API_KEY="sk-..."
 POE_API_KEY="..."
 ANTHROPIC_API_KEY="sk-ant-..."
 
-# Set default provider (optional, overrides defaults.toml)
-VDM_DEFAULT_PROVIDER="poe"
+# Set Default Target (optional, overrides defaults.toml)
+VDM_DEFAULT_TARGET="poe"
 ```
 
 See `.env.example` for all configuration options.
@@ -164,7 +164,7 @@ Claude Code → Vandamme Proxy → LLM Provider(s)
 
 | Your Request | Provider Selection | Result |
 |-------------|-------------------|---------|
-| `claude-3-5-sonnet-20241022` | Uses configured default provider | Routes to default (from VDM_DEFAULT_PROVIDER or defaults.toml) |
+| `claude-3-5-sonnet-20241022` | Uses configured Default Target | Routes to default (from VDM_DEFAULT_TARGET or defaults.toml) |
 | `poe:gpt-4o` | Uses Poe provider | Routes to Poe with `gpt-4o` model |
 | `anthropic:claude-3-5-sonnet` | Uses Anthropic provider | Direct passthrough to Anthropic |
 | `openai:gpt-4o` | Uses OpenAI provider | Routes to OpenAI |
@@ -224,10 +224,10 @@ curl http://localhost:8082/v1/models
 # Configure in .env
 OPENAI_API_KEY="sk-..."
 POE_API_KEY="..."
-VDM_DEFAULT_PROVIDER="poe"
+VDM_DEFAULT_TARGET="poe"
 
 # Use different providers per request
-claude --model gemini-3.5-flash "Use Poe" # Poe was set as the default provider
+claude --model gemini-3.5-flash "Use Poe" # Poe was set as the Default Target
 claude --model poe:gemini-flash "Use Poe" # explicit provider prefix
 claude --model openai:gpt-4o "Use OpenAI" # explicit provider prefix
 claude "Use default (poe)"

@@ -81,8 +81,8 @@ class ProviderManager(ProviderClientFactory):
 
     def __init__(
         self,
-        default_provider: str | None = None,
-        default_provider_source: str | None = None,
+        default_target: str | None = None,
+        default_target_source: str | None = None,
         middleware_config: "MiddlewareConfig | None" = None,
         profile_manager: "ProfileManager | None" = None,
         provider_resolver: "Any" = None,  # ProviderResolver, but use Any to avoid circular import
@@ -105,11 +105,12 @@ class ProviderManager(ProviderClientFactory):
         self._middleware_manager = middleware_manager or MiddlewareManager(middleware_config)
         self._config_loader = config_loader or ProviderConfigLoader()
 
-        # Default provider selection
-        default = default_provider if default_provider is not None else "openai"
+        # Default target selection
+        target = default_target if default_target is not None else "openai"
+        source = default_target_source or "system"
         self._default_selector = default_selector or DefaultProviderSelector(
-            default_provider=default,
-            source=default_provider_source or "system",
+            default_provider=target,  # DefaultProviderSelector still uses old naming internally
+            source=source,
         )
 
         # Load tracking
@@ -117,8 +118,8 @@ class ProviderManager(ProviderClientFactory):
         self._loaded = False
 
     @property
-    def default_provider(self) -> str:
-        """Get the default provider name.
+    def default_target(self) -> str:
+        """Get the default target name (provider or profile).
 
         This property is part of the ProviderClientFactory protocol.
         It can be modified internally by _select_default_from_available()
@@ -128,25 +129,34 @@ class ProviderManager(ProviderClientFactory):
 
     @property
     def configured_default(self) -> str:
-        """Get the configured default provider name (from env/TOML).
+        """Get the configured default target name (from env/TOML).
 
-        This is the default provider as configured by the user, without
+        This is the default target as configured by the user, without
         any fallback logic applied.
+
+        Note: Despite the name, this returns the default target
+        (which may be a profile or provider).
         """
         return self._default_selector.configured_default
 
     @property
     def actual_default(self) -> str | None:
-        """Get the actual default provider being used (after fallback).
+        """Get the actual default target being used (after fallback).
 
         This may differ from configured_default if the configured default
-        provider is not available and a fallback was selected.
+        target is not available and a fallback was selected.
+
+        Note: Despite the name, this returns the default target
+        (which may be a profile or provider).
         """
         return self._default_selector.actual_default
 
     @property
     def default_provider_source(self) -> str:
-        """Get the source of the default provider configuration."""
+        """Get the source of the default target configuration.
+
+        Note: Despite the name, this returns the source of the default target.
+        """
         return self._default_selector._source
 
     @property
@@ -205,10 +215,13 @@ class ProviderManager(ProviderClientFactory):
         return hashlib.sha256(api_key.encode()).hexdigest()[:8]
 
     def _select_default_from_available(self) -> None:
-        """Select a default provider from available providers if original default is unavailable.
+        """Select a default target from available providers if original default is unavailable.
 
         Delegates to DefaultProviderSelector for cleaner separation of concerns.
         Also syncs the legacy _default_provider attribute for backward compatibility.
+
+        Note: Despite legacy naming, this selects the default target
+        (which may be a profile or provider).
         """
         selected = self._default_selector.select(
             dict(self._registry.list_all())  # type: ignore[arg-type]
@@ -474,14 +487,14 @@ class ProviderManager(ProviderClientFactory):
         if self._provider_resolver is not None:
             provider, actual_model = self._provider_resolver.parse_provider_prefix(model)
             if provider is None:
-                provider = self.default_provider
+                provider = self.default_target
             return provider, actual_model
 
         # Fallback to legacy implementation for backward compatibility
         if ":" in model:
             provider, actual_model = model.split(":", 1)
             return provider.lower(), actual_model
-        return self.default_provider, model
+        return self.default_target, model
 
     def get_client(
         self,
@@ -634,14 +647,14 @@ class ProviderManager(ProviderClientFactory):
         all_results = self._load_results.copy()
 
         # Check if default provider is already in results
-        default_in_results = any(r.name == self.default_provider for r in all_results)
+        default_in_results = any(r.name == self.default_target for r in all_results)
 
         # If not, add it from registry
         if not default_in_results:
-            default_config = self._registry.get(self.default_provider)
+            default_config = self._registry.get(self.default_target)
             if default_config:
                 default_result = ProviderLoadResult(
-                    name=self.default_provider,
+                    name=self.default_target,
                     status="success",
                     api_key_hash=self.get_api_key_hash(default_config.api_key),
                     base_url=default_config.base_url,
@@ -659,7 +672,7 @@ class ProviderManager(ProviderClientFactory):
 
         for result in all_results:
             # Check if this is the default provider (only when not a profile default)
-            is_default = not is_default_profile and result.name == self.default_provider
+            is_default = not is_default_profile and result.name == self.default_target
             default_indicator = "  * " if is_default else "    "
 
             # Check if this provider uses OAuth authentication

@@ -223,7 +223,7 @@ The exclusion is a **substring match** against the full model identifier (e.g., 
 vdm models top --limit 1
 ```
 
-Take the first `id` as your `VDM_DEFAULT_PROVIDER` or document it as the team default.
+Take the first `id` as your `VDM_DEFAULT_TARGET` or document it as the team default.
 
 ### Operators: “Excluding expensive/providers we don’t trust”
 

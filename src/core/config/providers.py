@@ -1,11 +1,11 @@
 """Provider configuration module.
 
 This module handles provider-related configuration including:
-- Default provider resolution from environment, TOML, or system defaults
+- Default target resolution from environment, TOML, or system defaults
 - Provider API key retrieval
 - Provider base URL configuration
 
-Now uses schema-based loading for default provider configuration.
+Now uses schema-based loading for default target configuration.
 """
 
 import logging
@@ -23,14 +23,14 @@ class ProviderConfig:
     """Configuration for provider-related settings.
 
     Attributes:
-        default_provider: The name of the default provider (e.g., "openai", "anthropic")
-        default_provider_source: Where the default provider came from ("env", "toml", "system")
-        default_provider_api_key: The API key for the default provider, if available
+        default_target: The name of the default target (e.g., "openai", "anthropic", or a profile)
+        default_target_source: Where the default target came from ("env", "toml", "system")
+        default_target_api_key: The API key for the default target, if available
     """
 
-    default_provider: str
-    default_provider_source: str
-    default_provider_api_key: str | None
+    default_target: str
+    default_target_source: str
+    default_target_api_key: str | None
 
 
 class ProviderSettings:
@@ -84,22 +84,22 @@ class ProviderSettings:
         return "https://api.openai.com/v1"
 
     @staticmethod
-    def resolve_default_provider() -> tuple[str, str]:
-        """Resolve default provider from env, TOML, or system default.
+    def resolve_default_target() -> tuple[str, str]:
+        """Resolve default target from env, TOML, or system default.
 
         Checks sources in priority order:
-        1. Environment variable VDM_DEFAULT_PROVIDER
-        2. TOML configuration (default-provider in defaults section)
+        1. Environment variable VDM_DEFAULT_TARGET
+        2. TOML configuration (default-target in defaults section)
         3. System default ("openai")
 
         Returns:
-            Tuple of (provider_name, source) where source is "env", "toml", or "system"
+            Tuple of (target_name, source) where source is "env", "toml", or "system"
         """
         # Check environment variable first (highest priority)
-        env_provider = load_env_var(ConfigSchema.VDM_DEFAULT_PROVIDER)
-        if env_provider != "openai":  # If not the default, it was explicitly set
-            logger.debug(f"Using default provider from environment: {env_provider}")
-            return env_provider, "env"
+        env_target = load_env_var(ConfigSchema.VDM_DEFAULT_TARGET)
+        if env_target != "openai":  # If not the default, it was explicitly set
+            logger.debug(f"Using default target from environment: {env_target}")
+            return env_target, "env"
 
         # Try TOML configuration
         try:
@@ -107,16 +107,16 @@ class ProviderSettings:
 
             loader = AliasConfigLoader()
             defaults = loader.get_defaults()
-            toml_provider = defaults.get("default-provider")
-            if toml_provider:
-                logger.debug(f"Using default provider from TOML: {toml_provider}")
-                return toml_provider, "toml"
+            toml_target = defaults.get("default-target")
+            if toml_target:
+                logger.debug(f"Using default target from TOML: {toml_target}")
+                return toml_target, "toml"
         except Exception as e:
-            logger.debug(f"Failed to load default provider from TOML: {e}")
+            logger.debug(f"Failed to load default target from TOML: {e}")
 
         # Fall back to system default
-        logger.debug("Using system default provider: openai")
-        return env_provider, "system"
+        logger.debug("Using system default target: openai")
+        return env_target, "system"
 
     @staticmethod
     def get_provider_api_key(provider: str) -> str | None:
@@ -152,20 +152,20 @@ class ProviderSettings:
         """Load provider configuration using schema-based validation.
 
         Returns:
-            ProviderConfig with resolved default provider and its API key
+            ProviderConfig with resolved default target and its API key
 
         Raises:
             ConfigError: If any environment variable fails validation
         """
-        provider, source = ProviderSettings.resolve_default_provider()
-        api_key = ProviderSettings.get_provider_api_key(provider)
+        target, source = ProviderSettings.resolve_default_target()
+        api_key = ProviderSettings.get_provider_api_key(target)
 
         # Note: Warning about missing API key is deferred to
         # ProviderManager._load_default_provider() where ProfileManager.is_profile()
         # is available to avoid false positives for profile names
 
         return ProviderConfig(
-            default_provider=provider,
-            default_provider_source=source,
-            default_provider_api_key=api_key,
+            default_target=target,
+            default_target_source=source,
+            default_target_api_key=api_key,
         )
