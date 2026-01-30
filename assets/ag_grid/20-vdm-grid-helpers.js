@@ -126,3 +126,32 @@ window.vdmFormatDurationTooltip = function(ms) {
     if (!isFinite(n) || n <= 0) return '0 ms';
     return `${Math.round(n).toLocaleString('en-US')} ms`;
 };
+
+// Quick filter keyboard shortcuts for Models page
+(function() {
+    'use strict';
+
+    document.addEventListener('keydown', function(event) {
+        // Focus filter on "/" key (only when not typing in input)
+        if (event.key === '/' &&
+            event.target.tagName !== 'INPUT' &&
+            event.target.tagName !== 'TEXTAREA' &&
+            event.target.tagName !== 'SELECT') {
+            event.preventDefault();
+            const filterInput = document.getElementById('vdm-models-quick-filter');
+            if (filterInput) {
+                filterInput.focus();
+            }
+        }
+
+        // Clear filter on "Escape" key when filter is focused
+        if (event.key === 'Escape') {
+            const filterInput = document.getElementById('vdm-models-quick-filter');
+            if (filterInput && document.activeElement === filterInput) {
+                filterInput.value = '';
+                // Trigger input event to update Dash callback and AG Grid
+                filterInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+    });
+})();

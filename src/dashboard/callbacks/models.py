@@ -261,6 +261,63 @@ def register_models_callbacks(
         focused = rows[0] if isinstance(rows[0], dict) else None
         return {"focused": focused, "selected_count": len(rows)}, True
 
+    def _render_resolution_chain(
+        resolution_chain: list[str] | None,
+        final_model_id: str | None,
+    ) -> Any:
+        """Render resolution chain visualization for profile models.
+
+        Shows how aliases resolve through the chain to the final model.
+        Example: opus → agentrouter:opus → ✓ claude-opus-4-5-20251101
+
+        Args:
+            resolution_chain: List of model IDs in resolution order
+            final_model_id: The ultimate resolved model ID
+
+        Returns:
+            Dash component with visual chain representation, or empty Div if no chain
+        """
+        if not resolution_chain or len(resolution_chain) <= 1:
+            # No meaningful chain to display
+            return html.Div()
+
+        # Build chain visualization with arrows and final checkmark
+        chain_items: list[Any] = []
+        for i, step in enumerate(resolution_chain):
+            is_final = i == len(resolution_chain) - 1
+            is_last_intermediate = i == len(resolution_chain) - 2
+
+            if is_final:
+                # Final step with checkmark
+                chain_items.append(
+                    html.Span(
+                        [
+                            html.Span("✓ ", className="text-success me-1"),
+                            monospace(step),
+                        ],
+                        className="text-success fw-semibold",
+                    )
+                )
+            else:
+                # Intermediate step
+                chain_items.append(monospace(step))
+
+                # Add arrow between steps
+                if not is_last_intermediate:
+                    chain_items.append(html.Span(" → ", className="text-muted mx-1"))
+
+        return html.Div(
+            [
+                html.Div("Resolved as…", className="text-muted small mb-1"),
+                html.Div(
+                    chain_items,
+                    className="d-flex flex-wrap align-items-center",
+                    style={"fontSize": "0.9rem"},
+                ),
+            ],
+            className="mb-3",
+        )
+
     @app.callback(
         Output("vdm-model-details-header", "children"),
         Output("vdm-model-details-body", "children"),
@@ -293,6 +350,7 @@ def register_models_callbacks(
 
         # Profile model handling
         is_profile_model = focused.get("is_profile_model", False)
+        resolution_chain = focused.get("resolution_chain")
         final_model_id = focused.get("final_model_id")
 
         actual_provider: str | None = None
@@ -477,6 +535,10 @@ def register_models_callbacks(
             ),
         ]
 
+        # Show resolution chain for profile models
+        resolution_chain_section = _render_resolution_chain(resolution_chain, final_model_id)
+        if isinstance(resolution_chain_section, html.Div) and resolution_chain_section.children:
+            body_children.append(resolution_chain_section)
 
         body = dbc.Card(
             dbc.CardBody(body_children),
@@ -484,6 +546,16 @@ def register_models_callbacks(
         )
 
         return header, body
+
+    @app.callback(
+        Output("vdm-models-provider-grid", "quickFilter"),
+        Output("vdm-models-profile-grid", "quickFilter"),
+        Input("vdm-models-quick-filter", "value"),
+        prevent_initial_call=True,
+    )
+    def update_quick_filter(filter_value: str | None) -> tuple[str, str]:
+        """Update quick filter for both Provider and Profile model grids."""
+        return filter_value or "", filter_value or ""
 
 
 def _build_docs_link_component(
