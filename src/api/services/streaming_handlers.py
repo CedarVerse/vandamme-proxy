@@ -7,6 +7,7 @@ This eliminates deep nesting in the endpoint by using a strategy pattern.
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from fastapi import HTTPException
@@ -246,10 +247,31 @@ class ResponsesStreamingHandler(StreamingHandler):
             # Step 2: Stream raw SSE from the Responses API.
             # context.openai_client is a ResponsesAPIClient when is_responses_format is True
             # (guaranteed by ClientFactory — see test_responses_client.py).
-            raw_stream = context.openai_client.stream_responses(
+            #
+            # IMPORTANT: The generator is lazy — HTTP errors (400, 401, 403) from
+            # the ChatGPT API only fire when the first chunk is consumed.  We eagerly
+            # fetch the first line here so that pre-stream errors (wrong model name,
+            # expired token, missing instructions) are caught by the except block
+            # below and surfaced as a proper error response, instead of silently
+            # producing an empty stream inside the already-started StreamingResponse.
+            raw_stream_gen = context.openai_client.stream_responses(
                 responses_request,
                 context.request_id,
             )
+            try:
+                first_line = await raw_stream_gen.__anext__()
+            except StopAsyncIteration:
+                # Empty stream — still return a valid (empty) streaming response
+                first_line = "data: [DONE]"
+
+            async def _prepend_first_line(
+                first: str, rest: AsyncGenerator[str, None]
+            ) -> AsyncGenerator[str, None]:
+                yield first
+                async for line in rest:
+                    yield line
+
+            raw_stream = _prepend_first_line(first_line, raw_stream_gen)
 
             # Step 3: Translate Responses API SSE → OpenAI Chat Completions SSE.
             openai_sse_stream = translate_responses_sse_to_openai(
