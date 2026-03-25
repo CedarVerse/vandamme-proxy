@@ -625,7 +625,7 @@ class ProviderConfigLoader:
         config = ProviderConfig(
             name=default_provider,
             api_key=api_key,
-            api_keys=api_keys if len(api_keys) > 1 else None,
+            api_keys=api_keys if api_keys is not None and len(api_keys) > 1 else None,
             base_url=base_url,
             api_version=os.environ.get(f"{provider_upper}_API_VERSION")
             or toml_config.get("api-version"),

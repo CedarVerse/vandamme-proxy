@@ -154,3 +154,62 @@ class TestProviderConfigLoaderResponsesFormat:
         assert config.api_format == "anthropic"
         assert config.is_anthropic_format is True
         assert config.is_responses_format is False
+
+    def test_load_default_provider_preserves_responses_format(self, monkeypatch):
+        """_load_default_provider() must NOT coerce DFLTTEST_API_FORMAT=responses → 'openai'.
+
+        This path is reached when the loader initialises the *default* provider
+        (i.e. the one pointed at by VDM_DEFAULT_TARGET).  It shared the same silent
+        coercion bug as load_provider() and also had a missing ``api_keys is not None``
+        guard that would have raised TypeError on OAuth mode.  Both are fixed; this
+        test guards the format-preservation invariant.
+
+        We call the private method directly to avoid the overhead of spinning up a full
+        ProviderManager, using a lightweight MagicMock for the registry (the method
+        only calls registry.register(config)).
+        """
+        from unittest.mock import MagicMock
+
+        monkeypatch.setenv("DFLTTEST_API_KEY", "sk-default-test")
+        monkeypatch.setenv("DFLTTEST_BASE_URL", "https://dflt.example.com/v1")
+        monkeypatch.setenv("DFLTTEST_API_FORMAT", "responses")
+
+        loader = ProviderConfigLoader()
+        mock_registry = MagicMock()
+        # default_selector is accepted by the method but not used in its body
+        mock_selector = MagicMock()
+
+        result = loader._load_default_provider("dflttest", mock_selector, mock_registry)
+
+        assert result is not None
+        assert result.status == "success"
+        # The config passed to registry.register() must carry api_format='responses'
+        registered_config = mock_registry.register.call_args[0][0]
+        assert registered_config.api_format == "responses"
+        assert registered_config.is_responses_format is True
+
+    def test_load_provider_config_with_result_preserves_responses_format(self, monkeypatch):
+        """_load_provider_config_with_result() must NOT coerce ADDLTEST_API_FORMAT=responses.
+
+        This path is reached when the loader processes *additional* (non-default)
+        providers — discovered either from TOML sections or from ``*_API_KEY`` env-var
+        scanning.  It is a separate code path from both load_provider() and
+        _load_default_provider(), so it needs its own regression guard.
+        """
+        from unittest.mock import MagicMock
+
+        monkeypatch.setenv("ADDLTEST_API_KEY", "sk-addl-test")
+        monkeypatch.setenv("ADDLTEST_BASE_URL", "https://addl.example.com/v1")
+        monkeypatch.setenv("ADDLTEST_API_FORMAT", "responses")
+
+        loader = ProviderConfigLoader()
+        mock_registry = MagicMock()
+
+        result = loader._load_provider_config_with_result("addltest", mock_registry)
+
+        assert result is not None
+        assert result.status == "success"
+        # The config passed to registry.register() must carry api_format='responses'
+        registered_config = mock_registry.register.call_args[0][0]
+        assert registered_config.api_format == "responses"
+        assert registered_config.is_responses_format is True
