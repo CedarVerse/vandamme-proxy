@@ -25,6 +25,10 @@ from src.api.services.streaming import (
     with_streaming_error_handling,
 )
 from src.conversion.response_converter import convert_openai_streaming_to_claude
+from src.conversion.responses_converter import (
+    convert_openai_to_responses_request,
+    translate_responses_sse_to_openai,
+)
 from src.middleware import RequestContext
 
 logger = logging.getLogger(__name__)
@@ -207,6 +211,95 @@ class OpenAIStreamingHandler(StreamingHandler):
             )
 
 
+class ResponsesStreamingHandler(StreamingHandler):
+    """Handler for ChatGPT Responses API streaming requests.
+
+    Pipeline (see responses_converter.py for full rationale):
+
+        Claude request
+            → [request_converter]              (already done by the endpoint)
+            → convert_openai_to_responses_request()
+            → ResponsesAPIClient.stream_responses()
+            → translate_responses_sse_to_openai()
+            → convert_openai_streaming_to_claude()
+            → with_streaming_error_handling()
+
+    The Responses API *only* supports streaming, so non-streaming callers are
+    rejected earlier in the pipeline (non_streaming_handlers.py).
+
+    Design choice — two-step conversion rather than a direct Responses→Claude
+    translator: this keeps the translation chain composable and leverages the
+    already-tested OpenAI→Claude state machine without reimplementing it.
+    """
+
+    async def handle_with_context(
+        self,
+        context: "ApiRequestContext",
+    ) -> "StreamingResponse | JSONResponse":
+        """Handle Responses-API streaming via two-step SSE translation."""
+        try:
+            # Step 1: Convert the already OpenAI-formatted request to Responses API format.
+            # context.openai_request was produced by request_converter.convert_claude_to_openai()
+            # and contains OpenAI Chat Completions fields (messages, model, tools, …).
+            responses_request = convert_openai_to_responses_request(context.openai_request)
+
+            # Step 2: Stream raw SSE from the Responses API.
+            # context.openai_client is a ResponsesAPIClient when is_responses_format is True
+            # (guaranteed by ClientFactory — see test_responses_client.py).
+            raw_stream = context.openai_client.stream_responses(
+                responses_request,
+                context.request_id,
+            )
+
+            # Step 3: Translate Responses API SSE → OpenAI Chat Completions SSE.
+            openai_sse_stream = translate_responses_sse_to_openai(
+                raw_stream,
+                model=context.resolved_model,
+                request_id=context.request_id,
+            )
+
+            # Step 4: Translate OpenAI SSE → Claude SSE using the existing converter.
+            # Passing tool_name_map_inverse preserves tool name sanitization round-trips.
+            converted_stream = convert_openai_streaming_to_claude(
+                openai_sse_stream,
+                context.request,
+                logger,
+                tool_name_map_inverse=context.tool_name_map_inverse,
+                http_request=context.http_request,
+                openai_client=context.openai_client,
+                request_id=context.request_id,
+                metrics=context.metrics,
+                enable_usage_tracking=context.is_metrics_enabled,
+            )
+
+            # Step 5: Wrap with error handling and metrics finalisation.
+            stream_with_error_handling = with_streaming_error_handling(
+                original_stream=converted_stream,
+                http_request=context.http_request,
+                request_id=context.request_id,
+                provider_name=context.provider_name,
+                metrics_enabled=context.is_metrics_enabled,
+            )
+
+            return streaming_response(stream=stream_with_error_handling, headers=sse_headers())
+
+        except (HTTPException, ConnectionError, TimeoutError) as e:
+            error_msg = str(e.detail) if isinstance(e, HTTPException) else str(e)
+            await finalize_metrics_on_streaming_error(
+                metrics=context.metrics,
+                error=error_msg,
+                tracker=context.tracker,
+                request_id=context.request_id,
+            )
+            return build_streaming_error_response(
+                exception=e,
+                openai_client=context.openai_client,
+                metrics=context.metrics,
+                tracker=context.tracker,
+                request_id=context.request_id,
+            )
+
+
 def get_streaming_handler(config: Any, provider_config: Any | None) -> StreamingHandler:
     """Factory function to get the appropriate streaming handler.
 
@@ -217,15 +310,12 @@ def get_streaming_handler(config: Any, provider_config: Any | None) -> Streaming
     Returns:
         The appropriate streaming handler for the provider's API format.
     """
-    # Three-way dispatch: responses → anthropic → openai (default)
-    # The responses format uses a different API schema (OpenAI /v1/responses endpoint)
-    # and will get its own handler in a future task. Raise clearly for now so
-    # misconfigured providers fail loudly instead of silently using the wrong path.
+    # Three-way dispatch: responses → anthropic → openai (default).
+    # The order matters: is_responses_format must be checked before
+    # is_anthropic_format because they are mutually exclusive but both
+    # could theoretically match a misconfigured provider.
     if provider_config and provider_config.is_responses_format:
-        raise NotImplementedError(
-            "Responses API format streaming is not yet implemented. "
-            "A dedicated ResponsesStreamingHandler will be wired up in a future task."
-        )
+        return ResponsesStreamingHandler()
     if provider_config and provider_config.is_anthropic_format:
         return AnthropicStreamingHandler()
     return OpenAIStreamingHandler()
