@@ -16,26 +16,32 @@ except ImportError:
 
 if TYPE_CHECKING:
     from src.core.anthropic_client import AnthropicClient
+    from src.core.responses_client import ResponsesAPIClient
 
 
 class ClientFactory:
     """Creates and caches API client instances per provider.
 
     Responsibilities:
-    - Create OpenAI/Anthropic clients based on api_format
+    - Create OpenAI/Anthropic/ResponsesAPI clients based on api_format
     - Cache clients per provider
     - Handle passthrough mode (no API key in client)
 
     Clients are cached to avoid creating new HTTP connections for each request.
+
+    Client type selection by api_format:
+      "responses"  → ResponsesAPIClient (httpx, internal ChatGPT Responses API)
+      "anthropic"  → AnthropicClient    (httpx, Anthropic-compatible passthrough)
+      "openai"     → OpenAIClient       (OpenAI SDK, default)
     """
 
     def __init__(self) -> None:
         """Initialize a new client factory."""
-        self._clients: dict[str, OpenAIClient | AnthropicClient] = {}
+        self._clients: dict[str, OpenAIClient | AnthropicClient | ResponsesAPIClient] = {}
 
     def get_or_create_client(
         self, config: ProviderConfig
-    ) -> Union[OpenAIClient, "AnthropicClient"]:
+    ) -> Union[OpenAIClient, "AnthropicClient", "ResponsesAPIClient"]:
         """Get cached client or create new one for the provider config.
 
         Args:
@@ -68,16 +74,21 @@ class ClientFactory:
 
             # Three-way dispatch: responses → anthropic → openai (default)
             if config.is_responses_format:
-                # TODO (Task 5): Replace with dedicated ResponsesAPIClient backed by
-                # httpx.AsyncClient that targets /v1/responses instead of
-                # /v1/chat/completions. OpenAIClient is used here as a stub so the
-                # factory doesn't crash on provider discovery; the responses handler
-                # (Task 4 NotImplementedError) will fire before any actual request is made.
-                self._clients[cache_key] = OpenAIClient(
-                    api_key=api_key_for_init,
+                from src.core.responses_client import ResponsesAPIClient
+
+                # ResponsesAPIClient uses httpx directly (not the OpenAI SDK) because
+                # the internal ChatGPT Responses API endpoint (/v1/responses) is not
+                # supported by any public SDK.  It requires OAuth tokens and specific
+                # headers that differ from both OpenAI and Anthropic auth flows.
+                #
+                # NOTE: api_key_for_init is intentionally NOT passed here.  The
+                # Responses API is OAuth-only; there is no fallback to static API keys.
+                # If oauth_token_manager is None, stream_responses() will raise a
+                # clear ValueError on first use, prompting the user to run
+                # 'vdm oauth login <provider>'.
+                self._clients[cache_key] = ResponsesAPIClient(
                     base_url=config.base_url,
                     timeout=config.timeout,
-                    api_version=config.api_version,
                     custom_headers=config.custom_headers,
                     oauth_token_manager=oauth_token_manager,
                 )
