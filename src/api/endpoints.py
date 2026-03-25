@@ -232,9 +232,11 @@ async def create_message(
         # Log request start
         _log_request_start(ctx)
 
-        # Route to appropriate handler based on streaming mode
+        # Route to appropriate handler based on streaming mode.
+        # The ChatGPT Responses API is streaming-only — force non-streaming
+        # requests through the streaming handler so they still work.
         try:
-            if ctx.is_streaming:
+            if ctx.is_streaming or ctx.is_responses_format:
                 return await _handle_streaming(ctx)
             else:
                 return await _handle_non_streaming(ctx)

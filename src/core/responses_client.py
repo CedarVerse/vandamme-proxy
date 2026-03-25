@@ -368,3 +368,27 @@ class ResponsesAPIClient(OAuthClientMixin):
                 duration_ms,
                 request_id or "n/a",
             )
+
+    def classify_openai_error(self, error_detail: Any) -> str:
+        """Provide error guidance for ChatGPT Responses API issues.
+
+        Required by the error handling pipeline in endpoints.py which calls
+        this method on whatever client object is in the request context.
+        """
+        error_str = str(error_detail).lower()
+        if "unauthorized" in error_str or "401" in error_str:
+            return (
+                "ChatGPT OAuth token expired or invalid. "
+                "Run 'vdm oauth login chatgpt' to re-authenticate."
+            )
+        if "not supported" in error_str:
+            return (
+                "Model not supported by ChatGPT Responses API. "
+                "Use a ChatGPT-compatible model (e.g., gpt-5, gpt-5.2-codex)."
+            )
+        if "instructions are required" in error_str:
+            return (
+                "ChatGPT Responses API requires an 'instructions' field. "
+                "Ensure a system message is included in the request."
+            )
+        return f"ChatGPT Responses API error: {error_detail}"
