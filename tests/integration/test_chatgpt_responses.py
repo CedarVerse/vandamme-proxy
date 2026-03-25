@@ -195,6 +195,7 @@ def _collect_sse_json_from_streaming_response(response: Any) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_full_pipeline_text_response(chatgpt_provider_env):
     """Full pipeline: Claude request → Responses API (RESPX-mocked) → Claude response.
@@ -308,6 +309,7 @@ async def test_full_pipeline_text_response(chatgpt_provider_env):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_full_pipeline_tool_use(chatgpt_provider_env):
     """Full pipeline with tool definitions: verify tool_use content block in Claude response.
@@ -422,6 +424,7 @@ async def test_full_pipeline_tool_use(chatgpt_provider_env):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_error_handling_http_401_upstream(chatgpt_provider_env):
     """HTTP 401 from Responses API → error surfaced to Claude client.
@@ -497,6 +500,7 @@ async def test_error_handling_http_401_upstream(chatgpt_provider_env):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_error_handling_response_failed_event(chatgpt_provider_env):
     """HTTP 200 with response.failed SSE event → error surfaced to Claude client.
@@ -592,6 +596,7 @@ async def test_error_handling_response_failed_event(chatgpt_provider_env):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_empty_stream_graceful_handling(chatgpt_provider_env):
     """Minimal Responses API stream with no text output → graceful handling, no crash.
@@ -685,6 +690,7 @@ async def test_empty_stream_graceful_handling(chatgpt_provider_env):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_request_format_sent_to_responses_api(chatgpt_provider_env):
     """Verify the request body sent to the Responses API matches the expected schema.
