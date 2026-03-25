@@ -13,6 +13,12 @@ from src.core.provider_config import (
     ProviderConfig,
 )
 
+# Canonical set of valid api_format values.  Kept here (not in ProviderConfig)
+# so the loader can validate and log a warning before delegating to __post_init__.
+# Keeping this in sync with ProviderConfig.__post_init__ is the single source of
+# truth — update both if a new format is introduced.
+_VALID_API_FORMATS: frozenset[str] = frozenset({"openai", "anthropic", "responses"})
+
 if TYPE_CHECKING:
     from src.core.alias_config import AliasConfigLoader
 
@@ -294,11 +300,17 @@ class ProviderConfigLoader:
                 # For optional providers, return None if base URL is missing
                 return None
 
-        # API format
+        # API format: env > TOML > "openai" default.
+        # Unknown values are logged and fall back to "openai" so misconfigured
+        # providers don't silently break; valid formats include "responses".
         api_format = os.environ.get(
             f"{provider_upper}_API_FORMAT", toml_config.get("api-format", "openai")
         )
-        if api_format not in ("openai", "anthropic"):
+        if api_format not in _VALID_API_FORMATS:
+            self._logger.warning(
+                f"Unknown api_format '{api_format}' for provider '{provider_name}'; "
+                f"falling back to 'openai'. Valid values: {sorted(_VALID_API_FORMATS)}"
+            )
             api_format = "openai"
 
         # Detect OAuth mode (priority order: env var > sentinel > TOML)
@@ -330,7 +342,8 @@ class ProviderConfigLoader:
         return ProviderConfig(
             name=provider_name,
             api_key=api_key,
-            api_keys=api_keys if len(api_keys) > 1 else None,
+            # api_keys is None when OAuth mode sets it to None; guard len() accordingly.
+            api_keys=api_keys if (api_keys is not None and len(api_keys) > 1) else None,
             base_url=base_url,
             api_version=os.environ.get(f"{provider_upper}_API_VERSION")
             or toml_config.get("api-version"),
@@ -596,11 +609,16 @@ class ProviderConfigLoader:
             provider_name=default_provider,
         )
 
-        # Get API format
+        # Get API format: env > TOML > "openai" default.
+        # Unknown values are logged and fall back to "openai"; "responses" is valid.
         api_format = os.environ.get(
             f"{provider_upper}_API_FORMAT", toml_config.get("api-format", "openai")
         )
-        if api_format not in ("openai", "anthropic"):
+        if api_format not in _VALID_API_FORMATS:
+            self._logger.warning(
+                f"Unknown api_format '{api_format}' for provider '{default_provider}'; "
+                f"falling back to 'openai'. Valid values: {sorted(_VALID_API_FORMATS)}"
+            )
             api_format = "openai"
 
         # Create config
@@ -763,12 +781,17 @@ class ProviderConfigLoader:
                 base_url=None,
             )
 
-        # Load other settings with precedence: env > TOML > defaults
+        # Load other settings with precedence: env > TOML > defaults.
+        # Unknown formats are logged and fall back to "openai"; "responses" is valid.
         api_format = os.environ.get(
             f"{provider_upper}_API_FORMAT", toml_config.get("api-format", "openai")
         )
-        if api_format not in ["openai", "anthropic"]:
-            api_format = "openai"  # Default to openai if invalid
+        if api_format not in _VALID_API_FORMATS:
+            self._logger.warning(
+                f"Unknown api_format '{api_format}' for provider '{provider_name}'; "
+                f"falling back to 'openai'. Valid values: {sorted(_VALID_API_FORMATS)}"
+            )
+            api_format = "openai"
 
         # Get defaults section for fallback
         defaults_section = self._get_alias_config_loader().get_defaults()

@@ -34,7 +34,7 @@ class ProviderConfig:
     timeout: int = 90
     max_retries: int = 2
     custom_headers: dict[str, str] = field(default_factory=dict)
-    api_format: str = "openai"  # "openai" or "anthropic"
+    api_format: str = "openai"  # "openai", "anthropic", or "responses"
     tool_name_sanitization: bool = False
     auth_mode: str = AuthMode.API_KEY  # Authentication mode: api_key, passthrough, or oauth
     models_url: str | None = None  # Provider models documentation URL
@@ -48,6 +48,16 @@ class ProviderConfig:
     def is_anthropic_format(self) -> bool:
         """Check if this provider uses Anthropic API format"""
         return self.api_format == "anthropic"
+
+    @property
+    def is_responses_format(self) -> bool:
+        """Check if this provider uses the OpenAI Responses API format.
+
+        The Responses API is a ChatGPT-internal format distinct from the standard
+        OpenAI Chat Completions API. It is used for providers like ChatGPT that
+        require the /v1/responses endpoint and its associated request/response schema.
+        """
+        return self.api_format == "responses"
 
     @property
     def uses_passthrough(self) -> bool:
@@ -96,10 +106,10 @@ class ProviderConfig:
             raise ValueError("Provider name is required")
         if not self.base_url:
             raise ValueError(f"Base URL is required for provider '{self.name}'")
-        if self.api_format not in ["openai", "anthropic"]:
+        if self.api_format not in ("openai", "anthropic", "responses"):
             raise ValueError(
                 f"Invalid API format '{self.api_format}' for provider '{self.name}'. "
-                "Must be 'openai' or 'anthropic'"
+                "Must be 'openai', 'anthropic', or 'responses'"
             )
 
         # Detect OAuth sentinel value in api_key
