@@ -235,14 +235,31 @@ class RequestOrchestrator:
     ) -> str | None:
         """Prepare authentication for the request.
 
+        There are three mutually exclusive authentication modes (three-way dispatch):
+
+        1. PASSTHROUGH — client's own API key is forwarded verbatim to the upstream.
+           Used when the operator doesn't want to hold provider keys server-side.
+
+        2. OAUTH — credentials live in a per-provider TokenManager; the HTTP client
+           (e.g. ResponsesAPIClient) injects the Bearer token per-request.  The
+           orchestrator has nothing to do here: the client already holds the token
+           manager reference from ClientFactory.
+
+        3. API_KEY (default) — static provider API key managed by the operator.
+           We call get_next_provider_api_key() for round-robin rotation across
+           multiple configured keys.
+
         Returns:
-            The provider API key to use, or None for passthrough.
+            The provider API key to use, or None for passthrough/OAuth.
 
         Raises:
             HTTPException: If passthrough required but no client API key provided.
         """
-        # Validate passthrough requirement
-        if provider_config and provider_config.uses_passthrough:
+        if provider_config is None:
+            return None
+
+        # Mode 1: PASSTHROUGH — client's API key is forwarded as-is
+        if provider_config.uses_passthrough:
             if not client_api_key:
                 raise HTTPException(
                     status_code=401,
@@ -250,14 +267,20 @@ class RequestOrchestrator:
                     f"but no client API key was provided",
                 )
             self.logger.debug(f"Using client API key for provider '{provider_name}'")
-            return None  # Passthrough uses client key
+            return None  # Passthrough: the client key is used directly downstream
 
-        # For non-passthrough providers, get next provider API key
-        if provider_config and not provider_config.uses_passthrough:
-            key = await self.client_factory.get_next_provider_api_key(provider_name)
-            return key  # type: ignore[no-any-return]
+        # Mode 2: OAUTH — the HTTP client manages credentials via TokenManager.
+        # Nothing to do here; ResponsesAPIClient (and other OAuth-aware clients) call
+        # _get_oauth_token() internally when building per-request headers.
+        if provider_config.uses_oauth:
+            self.logger.debug(
+                f"Provider '{provider_name}' uses OAuth — skipping static key rotation"
+            )
+            return None
 
-        return None
+        # Mode 3: API_KEY — rotate through statically configured keys
+        key = await self.client_factory.get_next_provider_api_key(provider_name)
+        return key  # type: ignore[no-any-return]
 
     async def _apply_middleware_preprocessing(
         self,
