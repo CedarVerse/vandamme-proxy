@@ -90,18 +90,22 @@ sonnet = "gpt-5.1-codex"
 opus = "gpt-5.2"
 extract = "gpt-4o"
 
-# ChatGPT provider defaults (OAuth authentication)
+# ChatGPT subscription provider — uses internal Responses API at chatgpt.com
+# (not the public OpenAI API at api.openai.com). Requires OAuth: `vdm oauth login chatgpt`
+# Streaming-only: the Responses API rejects non-streaming requests.
+# Model names are ChatGPT-specific — standard OpenAI model names (gpt-4o, o4-mini) are rejected.
 [chatgpt]
-base-url = "https://api.openai.com/v1"
-models-url = "https://platform.openai.com/docs/models"
-api-format = "openai"
+base-url = "https://chatgpt.com/backend-api/codex"
+models-url = "https://chatgpt.com"
+api-format = "responses"
 auth-mode = "oauth"
-timeout = 90
+timeout = 300
 max-retries = 2
 [chatgpt.aliases]
-haiku = "gpt-5-mini-2025-08-07"
+# Confirmed working via spike test (2026-03-25). Model availability may change.
+haiku = "gpt-5"
 sonnet = "gpt-5.2-codex"
-opus = "gpt-5.2-2025-12-11"
+opus = "gpt-5.2"
 
 # Poe provider defaults
 [poe]
