@@ -30,7 +30,7 @@ from src.core.responses_client import _SAFE_HOST_SUFFIX, ResponsesAPIClient, _to
 # ---------------------------------------------------------------------------
 
 _CHATGPT_BASE_URL = "https://chatgpt.com/backend-api"
-_RESPONSES_URL = f"{_CHATGPT_BASE_URL}/v1/responses"
+_RESPONSES_URL = f"{_CHATGPT_BASE_URL}/responses"
 
 
 def _make_token_manager(
@@ -310,7 +310,7 @@ class TestResponsesAPIClientStreaming:
         )
 
     async def test_correct_url_is_called(self):
-        """The client must POST to {base_url}/v1/responses."""
+        """The client must POST to {base_url}/responses."""
         client = _make_client()
 
         called_urls: list[str] = []
@@ -543,7 +543,7 @@ class TestClientFactoryResponsesFormat:
 
         This is the contract that wires provider discovery to the correct HTTP
         client implementation.  Breaking this means all ChatGPT requests fall
-        back to OpenAIClient (which would fail to target /v1/responses).
+        back to OpenAIClient (which would fail to target /responses).
         """
         from src.core.provider.client_factory import ClientFactory
         from src.core.provider_config import ProviderConfig

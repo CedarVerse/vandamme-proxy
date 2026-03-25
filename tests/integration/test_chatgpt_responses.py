@@ -22,7 +22,7 @@ The key difference from tests/unit/test_api_endpoints_mocked.py:
 - These tests specifically exercise the Responses API three-way dispatch path
 - Provider setup is done per-test (chatgpt provider with api_format=responses)
 - OAuth token injection is mocked at the TokenManager level
-- RESPX intercepts https://chatgpt.com/backend-api/codex/v1/responses
+- RESPX intercepts https://chatgpt.com/backend-api/codex/responses
 
 RESPX mocking pattern
 ---------------------
@@ -60,9 +60,9 @@ from tests.config import TEST_HEADERS
 # ---------------------------------------------------------------------------
 
 # ChatGPT provider uses this base URL in defaults.toml.
-# The Responses API endpoint is appended as /v1/responses.
+# The Responses API endpoint is appended as /responses.
 _CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex"
-_RESPONSES_API_URL = f"{_CHATGPT_BASE_URL}/v1/responses"
+_RESPONSES_API_URL = f"{_CHATGPT_BASE_URL}/responses"
 
 # Model name to use in Claude requests — must match a known chatgpt alias or
 # a valid Responses API model name.  "gpt-5" is the haiku alias in defaults.toml.

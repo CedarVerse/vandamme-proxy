@@ -71,7 +71,8 @@ conversation_logger = ConversationLogger.get_logger()
 logger = logging.getLogger(__name__)
 
 # The Responses API always requires streaming; non-stream mode is unsupported.
-_RESPONSES_ENDPOINT = "/v1/responses"
+# ChatGPT internal API: /responses (no /v1 prefix — that's the public OpenAI API convention)
+_RESPONSES_ENDPOINT = "/responses"
 
 # Header required by the Responses API to opt-in to the experimental format.
 _BETA_HEADER = "responses=experimental"
@@ -193,6 +194,8 @@ class ResponsesAPIClient(OAuthClientMixin):
 
         headers: dict[str, str] = {
             "content-type": "application/json",
+            # Required for SSE streaming — ChatGPT API may reject without it.
+            "accept": "text/event-stream",
             # CRITICAL: chatgpt-account-id is NOT x-account-id.
             # OAuthClientMixin._inject_oauth_headers() sets x-account-id for generic
             # OAuth flows, but the Responses API requires this specific header name.
