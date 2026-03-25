@@ -233,10 +233,12 @@ async def create_message(
         _log_request_start(ctx)
 
         # Route to appropriate handler based on streaming mode.
-        # The ChatGPT Responses API is streaming-only — force non-streaming
-        # requests through the streaming handler so they still work.
+        # The ChatGPT Responses API is streaming-only — for non-streaming requests
+        # to responses-format providers, stream internally then collect into JSON.
         try:
-            if ctx.is_streaming or ctx.is_responses_format:
+            if ctx.is_responses_format and not ctx.is_streaming:
+                return await _handle_responses_non_streaming(ctx)
+            elif ctx.is_streaming:
                 return await _handle_streaming(ctx)
             else:
                 return await _handle_non_streaming(ctx)
@@ -276,6 +278,87 @@ async def _handle_streaming(ctx: Any) -> StreamingResponse | JSONResponse:
 
     # Use new context-based method
     return await handler.handle_with_context(ctx)
+
+
+async def _handle_responses_non_streaming(ctx: Any) -> JSONResponse:
+    """Handle non-streaming requests to responses-format providers.
+
+    The ChatGPT Responses API is streaming-only. For clients that send
+    stream=false (e.g. Claude Code's /model validation), we stream
+    internally, collect the Claude SSE events, and reconstruct a single
+    JSON response that matches the Claude non-streaming message format.
+    """
+    import json as _json
+
+    provider_config = ctx.config.provider_manager.get_provider_config(ctx.provider_name)
+    handler = get_streaming_handler(ctx.config, provider_config)
+    streaming_response = await handler.handle_with_context(ctx)
+
+    # Collect the SSE stream into individual events
+    content_blocks: list[dict[str, Any]] = []
+    usage: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0}
+    stop_reason = "end_turn"
+    model = ctx.request.model
+
+    body_iter = streaming_response.body_iterator  # type: ignore[union-attr]
+    async for raw_chunk in body_iter:
+        chunk_str = raw_chunk if isinstance(raw_chunk, str) else bytes(raw_chunk).decode("utf-8")
+        for line in chunk_str.split("\n"):
+            line = line.strip()
+            if not line.startswith("data: "):
+                continue
+            payload = line[len("data: ") :]
+            if payload == "[DONE]":
+                continue
+            try:
+                event = _json.loads(payload)
+            except _json.JSONDecodeError:
+                continue
+
+            event_type = event.get("type", "")
+            if event_type == "content_block_start":
+                content_blocks.append(event.get("content_block", {}))
+            elif event_type == "content_block_delta":
+                idx = event.get("index", 0)
+                delta = event.get("delta", {})
+                if idx < len(content_blocks):
+                    block = content_blocks[idx]
+                    if delta.get("type") == "text_delta":
+                        block["text"] = block.get("text", "") + delta.get("text", "")
+                    elif delta.get("type") == "input_json_delta":
+                        block["input"] = block.get("input", "") + delta.get("partial_json", "")
+            elif event_type == "message_delta":
+                delta = event.get("delta", {})
+                if delta.get("stop_reason"):
+                    stop_reason = delta["stop_reason"]
+                if event.get("usage"):
+                    usage = event["usage"]
+            elif event_type == "message_start":
+                msg = event.get("message", {})
+                model = msg.get("model", model)
+                if msg.get("usage"):
+                    usage = msg["usage"]
+
+    # Parse tool_use input from collected JSON strings
+    for block in content_blocks:
+        if block.get("type") == "tool_use" and isinstance(block.get("input"), str):
+            try:
+                block["input"] = _json.loads(block["input"])
+            except _json.JSONDecodeError:
+                block["input"] = {}
+
+    response_body = {
+        "id": f"msg_{ctx.request_id}",
+        "type": "message",
+        "role": "assistant",
+        "model": model,
+        "content": content_blocks,
+        "stop_reason": stop_reason,
+        "stop_sequence": None,
+        "usage": usage,
+    }
+
+    return JSONResponse(content=response_body)
 
 
 async def _handle_non_streaming(ctx: Any) -> JSONResponse:
