@@ -50,7 +50,6 @@ from src.conversion.responses_converter import (
     translate_responses_sse_to_openai,
 )
 
-
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -82,7 +81,7 @@ def _parse_data(sse_line: str) -> dict[str, Any] | None:
     """Extract and parse the JSON payload from a 'data: {...}' SSE line."""
     if not sse_line.startswith("data: "):
         return None
-    payload = sse_line[len("data: "):].strip()
+    payload = sse_line[len("data: ") :].strip()
     if payload == "[DONE]":
         return None
     return json.loads(payload)
@@ -397,7 +396,16 @@ class TestTranslateResponsesSSEToOpenAI:
         event = {"type": "response.output_text.delta", "delta": "Hello, "}
         lines = [
             f"data: {json.dumps(event)}",
-            'data: {"type": "response.completed", "response": {"id": "resp_1", "usage": {"input_tokens": 10, "output_tokens": 5}}}',
+            "data: "
+            + json.dumps(
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_1",
+                        "usage": {"input_tokens": 10, "output_tokens": 5},
+                    },
+                }
+            ),
         ]
 
         chunks = await _collect_sse(lines)
@@ -483,9 +491,7 @@ class TestTranslateResponsesSSEToOpenAI:
         """response.failed must emit an error chunk and then data: [DONE]."""
         event = {
             "type": "response.failed",
-            "response": {
-                "error": {"message": "Something went wrong", "code": "server_error"}
-            },
+            "response": {"error": {"message": "Something went wrong", "code": "server_error"}},
         }
         chunks = await _collect_sse([f"data: {json.dumps(event)}"])
 
@@ -559,9 +565,7 @@ class TestTranslateResponsesSSEToOpenAI:
                 c
                 for c in chunks
                 if _parse_data(c)
-                and _parse_data(c).get("choices", [{}])[0]
-                .get("delta", {})
-                .get("tool_calls")
+                and _parse_data(c).get("choices", [{}])[0].get("delta", {}).get("tool_calls")
             ),
             None,
         )
@@ -617,8 +621,7 @@ class TestTranslateResponsesSSEToOpenAI:
         ]
         assert len(tc_chunks) == 2
         indices = [
-            _parse_data(c)["choices"][0]["delta"]["tool_calls"][0]["index"]
-            for c in tc_chunks
+            _parse_data(c)["choices"][0]["delta"]["tool_calls"][0]["index"] for c in tc_chunks
         ]
         assert sorted(indices) == [0, 1]
 
@@ -715,9 +718,7 @@ class TestExtractUsage:
         """Must map input_tokens→prompt_tokens and output_tokens→completion_tokens."""
         event = {
             "type": "response.completed",
-            "response": {
-                "usage": {"input_tokens": 100, "output_tokens": 50}
-            },
+            "response": {"usage": {"input_tokens": 100, "output_tokens": 50}},
         }
         result = _extract_usage(event)
 
@@ -729,9 +730,7 @@ class TestExtractUsage:
     def test_total_tokens_explicit(self):
         """If total_tokens is present, it must be used directly."""
         event = {
-            "response": {
-                "usage": {"input_tokens": 10, "output_tokens": 20, "total_tokens": 999}
-            }
+            "response": {"usage": {"input_tokens": 10, "output_tokens": 20, "total_tokens": 999}}
         }
         result = _extract_usage(event)
 

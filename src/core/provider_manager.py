@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from src.core.config.middleware import MiddlewareConfig
     from src.core.profile_config import ProfileConfig
     from src.core.profile_manager import ProfileManager
+    from src.core.responses_client import ResponsesAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -501,7 +502,7 @@ class ProviderManager(ProviderClientFactory):
         provider_name: str,
         client_api_key: str
         | None = None,  # Client's API key for passthrough (unused, kept for compat)
-    ) -> Union[OpenAIClient, "AnthropicClient"]:
+    ) -> Union[OpenAIClient, "AnthropicClient", "ResponsesAPIClient"]:
         """Get or create a client for the specified provider.
 
         Delegates to ClientFactory for cleaner separation of concerns.

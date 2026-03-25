@@ -7,7 +7,7 @@ allowing different backends (filesystem, memory, custom) to be used.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..validation import (
@@ -76,7 +76,7 @@ class AuthData:
             "id_token": self.id_token,
             "account_id": self.account_id,
             "expires_at": self.expires_at,
-            "last_refresh": self.last_refresh or datetime.now(timezone.utc).isoformat(),
+            "last_refresh": self.last_refresh or datetime.now(UTC).isoformat(),
         }
 
     @classmethod

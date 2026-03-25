@@ -302,11 +302,12 @@ def _convert_tools(tools: Any) -> list[dict[str, Any]]:
             continue
         if t.get("type") != "function":
             continue
-        fn = t.get("function") if isinstance(t.get("function"), dict) else {}
-        name = fn.get("name") if fn else None
+        fn_raw = t.get("function")
+        fn: dict[str, Any] = fn_raw if isinstance(fn_raw, dict) else {}
+        name = fn.get("name")
         if not isinstance(name, str) or not name:
             continue
-        desc = fn.get("description") or ""
+        desc = str(fn.get("description") or "")
         params = fn.get("parameters")
         if not isinstance(params, dict):
             params = {"type": "object", "properties": {}}
@@ -436,7 +437,7 @@ async def translate_responses_sse_to_openai(
         if not line.startswith("data: "):
             continue
 
-        data_str = line[len("data: "):].strip()
+        data_str = line[len("data: ") :].strip()
         if not data_str:
             continue
 
@@ -481,9 +482,7 @@ async def translate_responses_sse_to_openai(
                 response_id=response_id,
                 created=created,
                 model=effective_model,
-                choices=[
-                    {"index": 0, "delta": {"content": delta_text}, "finish_reason": None}
-                ],
+                choices=[{"index": 0, "delta": {"content": delta_text}, "finish_reason": None}],
             )
             yield f"data: {json.dumps(chunk)}\n\n"
 

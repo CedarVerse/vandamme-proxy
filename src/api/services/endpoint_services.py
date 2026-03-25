@@ -653,6 +653,9 @@ class TokenCountService:
                 "messages": self._build_messages_for_counting(system, messages),
             }
 
+            # ResponsesAPIClient is streaming-only and never reaches this path
+            # (token counting is bypassed for responses format providers).
+            assert hasattr(client, "create_chat_completion")
             count_response = await client.create_chat_completion(
                 {**count_request, "max_tokens": 1}, "count_tokens"
             )
@@ -887,6 +890,9 @@ class TestConnectionService:
             default_client = self._config.provider_manager.get_client(default_target)
 
             # Minimal test request to verify API connectivity
+            # ResponsesAPIClient is streaming-only; test-connection uses the
+            # default target which is typically an OpenAI-format provider.
+            assert hasattr(default_client, "create_chat_completion")
             test_response = await default_client.create_chat_completion(
                 {
                     "model": "gpt-4o-mini",

@@ -23,8 +23,7 @@ import httpx
 import pytest
 import respx
 
-from src.core.responses_client import ResponsesAPIClient, _SAFE_HOST_SUFFIX, _token_hash
-
+from src.core.responses_client import _SAFE_HOST_SUFFIX, ResponsesAPIClient, _token_hash
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -127,9 +126,7 @@ class TestResponsesAPIClientOAuth:
         h1 = client._build_request_headers()
         h2 = client._build_request_headers()
 
-        uuid_re = re.compile(
-            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        )
+        uuid_re = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         assert uuid_re.match(h1["session_id"]), f"Not a UUID: {h1['session_id']}"
         assert uuid_re.match(h2["session_id"]), f"Not a UUID: {h2['session_id']}"
 
@@ -196,9 +193,9 @@ class TestResponsesAPIClientHostPinning:
         # Client is still created (not blocked)
         assert isinstance(client, ResponsesAPIClient)
         # Warning was emitted
-        assert any(
-            _SAFE_HOST_SUFFIX in record.message for record in caplog.records
-        ), "Expected host-pinning warning not found in log records"
+        assert any(_SAFE_HOST_SUFFIX in record.message for record in caplog.records), (
+            "Expected host-pinning warning not found in log records"
+        )
 
     def test_non_chatgpt_production_url_warns(self, caplog):
         """Non-chatgpt.com production URLs must also warn."""
@@ -207,9 +204,9 @@ class TestResponsesAPIClientHostPinning:
                 base_url="https://api.openai.com/v1",
                 oauth_token_manager=_make_token_manager(),
             )
-        assert any(
-            "chatgpt.com" in record.message for record in caplog.records
-        ), "Expected chatgpt.com warning for non-chatgpt URL"
+        assert any("chatgpt.com" in record.message for record in caplog.records), (
+            "Expected chatgpt.com warning for non-chatgpt URL"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +290,7 @@ class TestResponsesAPIClientStreaming:
 
         async def capture_and_respond(request: httpx.Request) -> httpx.Response:
             import json as _json
+
             captured_request.update(_json.loads(request.content))
             return httpx.Response(
                 200,
@@ -352,9 +350,7 @@ class TestResponsesAPIClientErrors:
         error_body = {"error": {"type": "authentication_error", "message": "Invalid token"}}
 
         with respx.mock(assert_all_mocked=True) as respx_mock:
-            respx_mock.post(_RESPONSES_URL).mock(
-                return_value=httpx.Response(401, json=error_body)
-            )
+            respx_mock.post(_RESPONSES_URL).mock(return_value=httpx.Response(401, json=error_body))
 
             with pytest.raises(HTTPException) as exc_info:
                 async for _ in client.stream_responses({"model": "gpt-4o"}):
@@ -491,14 +487,14 @@ class TestResponsesAPIClientLogSecurity:
             content=sse_body,
         )
 
-        with caplog.at_level(logging.DEBUG, logger="src.core.responses_client"):
-            with respx.mock(assert_all_mocked=True) as respx_mock:
-                respx_mock.post(_RESPONSES_URL).mock(return_value=mock_response)
+        with (
+            caplog.at_level(logging.DEBUG, logger="src.core.responses_client"),
+            respx.mock(assert_all_mocked=True) as respx_mock,
+        ):
+            respx_mock.post(_RESPONSES_URL).mock(return_value=mock_response)
 
-                async for _ in client.stream_responses(
-                    {"model": "gpt-4o"}, request_id="test-req-1"
-                ):
-                    pass
+            async for _ in client.stream_responses({"model": "gpt-4o"}, request_id="test-req-1"):
+                pass
 
         # The literal token value must not appear in any log record
         for record in caplog.records:
@@ -518,12 +514,14 @@ class TestResponsesAPIClientLogSecurity:
             content=b"data: ok\n",
         )
 
-        with caplog.at_level(logging.DEBUG, logger="src.core.responses_client"):
-            with respx.mock(assert_all_mocked=True) as respx_mock:
-                respx_mock.post(_RESPONSES_URL).mock(return_value=mock_response)
+        with (
+            caplog.at_level(logging.DEBUG, logger="src.core.responses_client"),
+            respx.mock(assert_all_mocked=True) as respx_mock,
+        ):
+            respx_mock.post(_RESPONSES_URL).mock(return_value=mock_response)
 
-                async for _ in client.stream_responses({"model": "gpt-4o"}):
-                    pass
+            async for _ in client.stream_responses({"model": "gpt-4o"}):
+                pass
 
         for record in caplog.records:
             assert account_id not in record.getMessage(), (

@@ -35,7 +35,8 @@ class RequestContext:
     Access Pattern:
         Always check `if context.is_metrics_enabled:` before accessing metrics fields.
         Always check `if context.metrics:` before accessing metrics fields directly.
-        Use computed properties (is_metrics_enabled, is_anthropic_format, is_responses_format) for boolean checks.
+        Use computed properties (is_metrics_enabled, is_anthropic_format,
+        is_responses_format) for boolean checks.
     """
 
     # === Core Request ===

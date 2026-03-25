@@ -46,6 +46,7 @@ Design decisions
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -290,39 +291,35 @@ class ResponsesAPIClient(OAuthClientMixin):
         # Each streaming call opens its own connection.  Connection reuse is a Tier-2
         # optimisation that can be added later without changing the public API.
         try:
-            async with httpx.AsyncClient(
-                timeout=self._get_streaming_timeout()
-            ) as http_client:
-                async with http_client.stream(
+            async with (
+                httpx.AsyncClient(timeout=self._get_streaming_timeout()) as http_client,
+                http_client.stream(
                     "POST",
                     endpoint_url,
                     json=request,
                     headers=headers,
-                ) as response:
-                    # Raise immediately on HTTP errors before consuming the body.
-                    # For 4xx/5xx, the server sends a JSON error body (not SSE),
-                    # so we can read it synchronously here.
-                    if response.status_code >= 400:
-                        await response.aread()
-                        error_detail: Any = response.text
-                        try:
-                            error_detail = response.json()
-                        except (json.JSONDecodeError, ValueError):
-                            pass  # Keep raw text as fallback
-                        raise HTTPException(
-                            status_code=response.status_code, detail=error_detail
-                        )
+                ) as response,
+            ):
+                # Raise immediately on HTTP errors before consuming the body.
+                # For 4xx/5xx, the server sends a JSON error body (not SSE),
+                # so we can read it synchronously here.
+                if response.status_code >= 400:
+                    await response.aread()
+                    error_detail: Any = response.text
+                    with contextlib.suppress(json.JSONDecodeError, ValueError):
+                        error_detail = response.json()
+                    raise HTTPException(status_code=response.status_code, detail=error_detail)
 
-                    # Stream SSE lines to the caller.
-                    # aiter_lines() handles chunked transfer encoding and
-                    # gives us one logical line per iteration.
-                    async for line in response.aiter_lines():
-                        if line.strip():
-                            yield line
+                # Stream SSE lines to the caller.
+                # aiter_lines() handles chunked transfer encoding and
+                # gives us one logical line per iteration.
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        yield line
 
-                    # Emit the [DONE] sentinel so downstream consumers know the
-                    # stream completed cleanly (vs. being cut off by an error).
-                    yield "data: [DONE]"
+                # Emit the [DONE] sentinel so downstream consumers know the
+                # stream completed cleanly (vs. being cut off by an error).
+                yield "data: [DONE]"
 
         except HTTPException:
             # HTTP errors are already formatted; let them propagate as-is.
@@ -361,9 +358,7 @@ class ResponsesAPIClient(OAuthClientMixin):
                 e,
                 exc_info=True,
             )
-            raise HTTPException(
-                status_code=500, detail=f"Responses API client error: {e}"
-            ) from e
+            raise HTTPException(status_code=500, detail=f"Responses API client error: {e}") from e
 
         # Log timing only on clean completion (errors log separately above)
         if log_request_metrics():

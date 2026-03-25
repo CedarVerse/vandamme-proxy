@@ -40,6 +40,7 @@ to activate the responses-format dispatch path.  The TokenManager is patched at
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -180,13 +181,11 @@ def _collect_sse_json_from_streaming_response(response: Any) -> list[dict]:
     for line in body.decode().splitlines():
         stripped = line.strip()
         if stripped.startswith("data:"):
-            payload = stripped[len("data:"):].strip()
+            payload = stripped[len("data:") :].strip()
             if payload == "[DONE]":
                 continue
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 results.append(json.loads(payload))
-            except json.JSONDecodeError:
-                pass  # Ignore non-JSON data lines
     return results
 
 
@@ -299,8 +298,7 @@ async def test_full_pipeline_text_response(chatgpt_provider_env):
     ]
     full_text = "".join(text_deltas)
     assert "Hello, world!" in full_text, (
-        f"Expected 'Hello, world!' in assembled text, got: {full_text!r}. "
-        f"Full SSE chunks: {chunks}"
+        f"Expected 'Hello, world!' in assembled text, got: {full_text!r}. Full SSE chunks: {chunks}"
     )
 
 
@@ -485,9 +483,9 @@ async def test_error_handling_http_401_upstream(chatgpt_provider_env):
     if response.status_code == 200:
         # Error was embedded in SSE stream
         body_text = b"".join(response.iter_bytes()).decode()
-        assert '"error"' in body_text or "authentication_error" in body_text or "401" in body_text, (
-            f"Expected error information in SSE stream for 401 upstream, got: {body_text[:500]!r}"
-        )
+        assert (
+            '"error"' in body_text or "authentication_error" in body_text or "401" in body_text
+        ), f"Expected error information in SSE stream for 401 upstream, got: {body_text[:500]!r}"
     else:
         # Direct HTTP error response
         assert response.status_code in (401, 403, 500, 502), (
@@ -717,11 +715,14 @@ async def test_request_format_sent_to_responses_api(chatgpt_provider_env):
 
     sse_events = [
         {"type": "response.output_text.delta", "delta": "OK"},
-        {"type": "response.completed", "response": {
-            "id": "resp_verify01",
-            "status": "completed",
-            "usage": {"input_tokens": 12, "output_tokens": 1, "total_tokens": 13},
-        }},
+        {
+            "type": "response.completed",
+            "response": {
+                "id": "resp_verify01",
+                "status": "completed",
+                "usage": {"input_tokens": 12, "output_tokens": 1, "total_tokens": 13},
+            },
+        },
     ]
     sse_body = _make_sse_body(sse_events)
 
@@ -789,15 +790,11 @@ async def test_request_format_sent_to_responses_api(chatgpt_provider_env):
     # User content must use the 'input_text' type (not 'text')
     # This is the Responses API's content type for user-turn text.
     user_msgs = [
-        item for item in input_items
-        if isinstance(item, dict) and item.get("role") == "user"
+        item for item in input_items if isinstance(item, dict) and item.get("role") == "user"
     ]
     assert len(user_msgs) >= 1, "Expected at least one user message in input"
     user_content = user_msgs[0].get("content", [])
     assert any(
         isinstance(c, dict) and c.get("type") == "input_text"
         for c in (user_content if isinstance(user_content, list) else [])
-    ), (
-        f"Expected 'input_text' type for user content in Responses API, "
-        f"got: {user_content!r}"
-    )
+    ), f"Expected 'input_text' type for user content in Responses API, got: {user_content!r}"
