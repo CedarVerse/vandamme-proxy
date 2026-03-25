@@ -35,7 +35,7 @@ class RequestContext:
     Access Pattern:
         Always check `if context.is_metrics_enabled:` before accessing metrics fields.
         Always check `if context.metrics:` before accessing metrics fields directly.
-        Use computed properties (is_metrics_enabled, is_anthropic_format) for boolean checks.
+        Use computed properties (is_metrics_enabled, is_anthropic_format, is_responses_format) for boolean checks.
     """
 
     # === Core Request ===
@@ -93,6 +93,17 @@ class RequestContext:
     def is_anthropic_format(self) -> bool:
         """Check if provider uses Anthropic API format."""
         return self.provider_config.is_anthropic_format if self.provider_config else False
+
+    @property
+    def is_responses_format(self) -> bool:
+        """Check if provider uses the OpenAI Responses API format.
+
+        The Responses API targets /v1/responses instead of /v1/chat/completions
+        and has a different request/response schema. It is used for ChatGPT-internal
+        providers. Handlers check this BEFORE is_anthropic_format to implement the
+        correct three-way dispatch: responses → anthropic → openai.
+        """
+        return self.provider_config.is_responses_format if self.provider_config else False
 
     @property
     def openai_messages(self) -> list[dict[str, Any]]:

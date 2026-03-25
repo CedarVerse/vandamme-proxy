@@ -262,6 +262,20 @@ def get_non_streaming_handler(config: Any, provider_config: Any | None) -> NonSt
     Returns:
         The appropriate non-streaming handler for the provider's API format.
     """
+    # Three-way dispatch: responses → anthropic → openai (default)
+    #
+    # The ChatGPT Responses API only supports streaming — it rejects `stream: false`
+    # with a 400. Non-streaming callers must be told up-front rather than receiving
+    # a cryptic upstream error.
+    #
+    # TODO (future task): support non-streaming for responses format by forcing
+    # streaming internally and accumulating the stream into a single response.
+    if provider_config and provider_config.is_responses_format:
+        raise ValueError(
+            "ChatGPT Responses API requires streaming. "
+            "Non-streaming requests are not supported for providers with api_format='responses'. "
+            "Configure the client to use streaming, or switch to api_format='openai'."
+        )
     if provider_config and provider_config.is_anthropic_format:
         return AnthropicNonStreamingHandler()
     return OpenAINonStreamingHandler()

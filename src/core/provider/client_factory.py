@@ -66,7 +66,22 @@ class ClientFactory:
                     raise_on_refresh_failure=False,
                 )
 
-            if config.is_anthropic_format:
+            # Three-way dispatch: responses → anthropic → openai (default)
+            if config.is_responses_format:
+                # TODO (Task 5): Replace with dedicated ResponsesAPIClient backed by
+                # httpx.AsyncClient that targets /v1/responses instead of
+                # /v1/chat/completions. OpenAIClient is used here as a stub so the
+                # factory doesn't crash on provider discovery; the responses handler
+                # (Task 4 NotImplementedError) will fire before any actual request is made.
+                self._clients[cache_key] = OpenAIClient(
+                    api_key=api_key_for_init,
+                    base_url=config.base_url,
+                    timeout=config.timeout,
+                    api_version=config.api_version,
+                    custom_headers=config.custom_headers,
+                    oauth_token_manager=oauth_token_manager,
+                )
+            elif config.is_anthropic_format:
                 from src.core.anthropic_client import AnthropicClient
 
                 self._clients[cache_key] = AnthropicClient(

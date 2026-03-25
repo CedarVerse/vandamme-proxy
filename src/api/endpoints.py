@@ -468,13 +468,18 @@ async def _fetch_models_authenticated(
                 f"Run 'vdm oauth login {provider_config.name}' first."
             ) from oauth_error
 
-    # API_KEY mode: Inject appropriate header
+    # API_KEY mode: Inject appropriate header based on API format.
+    # Three-way dispatch: responses → anthropic → openai (default).
+    # The Responses API uses the same Bearer-token header as standard OpenAI,
+    # so it falls through to the else branch. The explicit check is kept for
+    # documentation clarity and to make future divergence easy to add.
     else:
         api_key = provider_config.api_key
         if provider_config.is_anthropic_format:
+            # Anthropic uses the non-standard x-api-key header instead of Authorization.
             headers["x-api-key"] = api_key
         else:
-            # OpenAI-compatible format
+            # OpenAI-compatible format AND Responses API format both use Bearer tokens.
             headers["Authorization"] = f"Bearer {api_key}"
 
     async with httpx.AsyncClient(timeout=30) as client:

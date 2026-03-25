@@ -217,6 +217,15 @@ def get_streaming_handler(config: Any, provider_config: Any | None) -> Streaming
     Returns:
         The appropriate streaming handler for the provider's API format.
     """
+    # Three-way dispatch: responses → anthropic → openai (default)
+    # The responses format uses a different API schema (OpenAI /v1/responses endpoint)
+    # and will get its own handler in a future task. Raise clearly for now so
+    # misconfigured providers fail loudly instead of silently using the wrong path.
+    if provider_config and provider_config.is_responses_format:
+        raise NotImplementedError(
+            "Responses API format streaming is not yet implemented. "
+            "A dedicated ResponsesStreamingHandler will be wired up in a future task."
+        )
     if provider_config and provider_config.is_anthropic_format:
         return AnthropicStreamingHandler()
     return OpenAIStreamingHandler()

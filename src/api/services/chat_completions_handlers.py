@@ -270,6 +270,16 @@ def get_chat_completions_handler(provider_config: Any | None) -> ChatCompletions
     Returns:
         The appropriate chat completions handler for the provider's API format
     """
+    # Three-way dispatch: responses → anthropic → openai (default)
+    # The responses format bypasses the chat completions path entirely — it routes
+    # directly through its own client (ResponsesAPIClient, future task). For now,
+    # raise NotImplementedError so responses-format providers fail loudly here
+    # rather than silently hitting the wrong endpoint.
+    if provider_config and provider_config.is_responses_format:
+        raise NotImplementedError(
+            "Responses API format is not yet implemented for chat completions. "
+            "A dedicated responses routing path will be wired up in a future task."
+        )
     if provider_config and provider_config.is_anthropic_format:
         return AnthropicChatCompletionsHandler()
     return OpenAIChatCompletionsHandler()
