@@ -12,8 +12,10 @@ from typing import Any
 from fastapi.responses import JSONResponse
 
 from src.core.error_types import ErrorType
+from src.core.logging import ConversationLogger
 
 logger = logging.getLogger(__name__)
+conversation_logger = ConversationLogger.get_logger()
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +252,130 @@ def _log_traceback(log: Any = logger) -> None:
         log: The logger to use (defaults to module logger).
     """
     log.error(traceback.format_exc())
+
+
+# =============================================================================
+# Shared Non-Streaming Response Helpers
+# =============================================================================
+
+
+def detect_error_response(response: dict[str, Any]) -> bool:
+    """Check if a provider response is an error response.
+
+    Compatible with both OpenAI-style {msg, code} errors and
+    Anthropic-style {error: {...}} error structures.
+
+    Args:
+        response: The raw provider response dict.
+
+    Returns:
+        True if the response is an error, False otherwise.
+    """
+    if response.get("msg") is not None:
+        return True
+    return response.get("error") is not None
+
+
+def extract_error_info(response: dict[str, Any]) -> tuple[str, int | None]:
+    """Extract error message and code from an error response.
+
+    Compatible with both OpenAI-style {msg, code} errors and
+    Anthropic-style {error: {message, code}} error structures.
+
+    Args:
+        response: The raw provider error response dict.
+
+    Returns:
+        Tuple of (error_message, error_code). code may be None if not present.
+    """
+    # OpenAI-style: {"msg": "...", "code": 400}
+    if response.get("msg") is not None:
+        return response.get("msg", "Provider error"), response.get("code")
+
+    # Anthropic-style: {"error": {"message": "...", "code": ...}}
+    error_val = response.get("error")
+    if error_val is not None:
+        if isinstance(error_val, dict):
+            return error_val.get("message", "Provider error"), error_val.get("code")
+        return str(error_val), None
+
+    return "Provider error", None
+
+
+async def finalize_nonstreaming_metrics(
+    *,
+    context: Any,
+    response: dict[str, Any],
+) -> None:
+    """Update metrics and end request tracker for non-streaming responses.
+
+    Extracts usage from OpenAI-format responses (prompt_tokens/completion_tokens)
+    and updates context.metrics with response_size, token counts, and cache tokens.
+
+    Args:
+        context: RequestContext with metrics, tracker, config, etc.
+        response: The raw provider response dict.
+    """
+    import json
+    import time
+
+    response_json = json.dumps(response)
+    response_size = len(response_json)
+
+    usage = response.get("usage")
+    if usage is None:
+        input_tokens = 0
+        output_tokens = 0
+        if context.config.log_request_metrics:
+            conversation_logger.warning("No usage information in response")
+    else:
+        input_tokens = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+
+    # Count tool calls in response
+    choices = response.get("choices") or []
+    response_message = choices[0].get("message", {}) if choices else {}
+    tool_calls = response_message.get("tool_calls", []) or []
+    tool_call_count = len(tool_calls)
+
+    # Update metrics
+    if context.is_metrics_enabled and context.metrics:
+        context.metrics.response_size = response_size
+        context.metrics.input_tokens = input_tokens
+        context.metrics.output_tokens = output_tokens
+        context.metrics.cache_creation_tokens = (
+            usage.get("cache_creation_tokens", 0) if usage else 0
+        )
+        context.metrics.tool_call_count = tool_call_count
+
+        # Debug logging
+        conversation_logger.debug(f"📡 RESPONSE STRUCTURE: {list(response.keys())}")
+        conversation_logger.debug(f"📡 FULL RESPONSE: {response}")
+
+    # Log successful completion
+    duration_ms = (time.time() - context.start_time) * 1000
+    if context.config.log_request_metrics:
+        tool_call_display = ""
+        if context.metrics and context.metrics.tool_call_count > 0:
+            tool_call_display = f" | Tool Calls: {context.metrics.tool_call_count}"
+        elif context.tool_use_count > 0 or context.tool_result_count > 0:
+            tool_call_display = (
+                f" | Tool Uses: {context.tool_use_count} | "
+                f"Tool Results: {context.tool_result_count}"
+            )
+
+        conversation_logger.info(
+            f"✅ SUCCESS | Duration: {duration_ms:.0f}ms | "
+            f"Tokens: {input_tokens:,}→{output_tokens:,} | "
+            f"Size: {context.request_size:,}→{response_size:,} bytes"
+            f"{tool_call_display}"
+        )
+        await context.tracker.end_request(context.request_id)
+
+
+# =============================================================================
+# Shared Non-Streaming Response Processing
+# =============================================================================
 
 
 def build_streaming_error_response(
