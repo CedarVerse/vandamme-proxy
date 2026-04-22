@@ -5,7 +5,6 @@ the logic for handling non-streaming requests with different API formats.
 This eliminates deep nesting in the endpoint by using a strategy pattern.
 """
 
-import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -15,6 +14,13 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from src.api.context.request_context import RequestContext as ApiRequestContext
+from src.api.services.error_handling import (
+    ANTHROPIC_TOKEN_FIELDS,
+    OPENAI_TOKEN_FIELDS,
+    detect_error_response,
+    extract_error_info,
+    finalize_nonstreaming_metrics,
+)
 from src.api.services.key_rotation import build_api_key_params
 from src.api.services.request_builder import build_anthropic_passthrough_request
 from src.conversion.response_converter import convert_openai_to_claude_response
@@ -100,18 +106,37 @@ class AnthropicNonStreamingHandler(NonStreamingHandler):
             processed_response = await middleware_chain.process_response(response_context)
             anthropic_response = processed_response.response
 
-        # Update metrics
-        if context.is_metrics_enabled and context.metrics:
-            response_json = json.dumps(anthropic_response)
-            context.metrics.response_size = len(response_json)
+        # --- Centralized error detection ---
+        # Previously the Anthropic handler had NO error detection — it silently
+        # returned upstream errors as HTTP 200.  Now it uses the same detection
+        # logic as the OpenAI handler.
+        if detect_error_response(anthropic_response):
+            error_info = extract_error_info(anthropic_response)
+            logger.error(
+                f"[{context.request_id}] Provider {context.provider_name} "
+                f"returned error: {error_info.message}"
+            )
+            await finalize_nonstreaming_metrics(
+                response=anthropic_response,
+                context=context,
+                field_map=ANTHROPIC_TOKEN_FIELDS,
+                count_tool_calls=False,
+            )
+            error_code = error_info.code
+            raise HTTPException(
+                status_code=error_code if isinstance(error_code, int) else 500,
+                detail=f"Provider error: {error_info.message}",
+            )
 
-            usage = anthropic_response.get("usage", {})
-            context.metrics.input_tokens = usage.get("input_tokens", 0)
-            context.metrics.output_tokens = usage.get("output_tokens", 0)
-            context.metrics.cache_read_tokens = usage.get("cache_read_tokens", 0)
-            context.metrics.cache_creation_tokens = usage.get("cache_creation_tokens", 0)
-
-            await context.tracker.end_request(context.request_id)
+        # --- Centralized metrics finalization ---
+        # WHY count_tool_calls=False: Anthropic passthrough doesn't use OpenAI's
+        # choices[].message.tool_calls structure — tool use is in content blocks.
+        await finalize_nonstreaming_metrics(
+            response=anthropic_response,
+            context=context,
+            field_map=ANTHROPIC_TOKEN_FIELDS,
+            count_tool_calls=False,
+        )
 
         return JSONResponse(status_code=200, content=anthropic_response)
 
@@ -158,65 +183,41 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
             processed_response = await middleware_chain.process_response(response_context)
             openai_response = processed_response.response
 
-        # Error detection
-        if self._is_error_response(openai_response):
-            error_msg = openai_response.get("msg", "Provider returned error response")
-            error_code = openai_response.get("code", 500)
+        # --- Centralized error detection ---
+        # Replaces the old _is_error_response() which only checked "msg" and
+        # "error" keys. The centralized version also catches Anthropic-style
+        # {"type": "error"} and None responses.
+        if detect_error_response(openai_response):
+            error_info = extract_error_info(openai_response)
             logger.error(
                 f"[{context.request_id}] Provider {context.provider_name} "
-                f"returned error: {error_msg}"
+                f"returned error: {error_info.message}"
             )
-            response_keys = list(openai_response.keys())
-            logger.error(f"[{context.request_id}] Error response structure: {response_keys}")
             if context.config.log_request_metrics:
-                logger.error(f"[{context.request_id}] Full error response: {openai_response}")
+                response_keys = list(openai_response.keys()) if openai_response else []
+                logger.error(f"[{context.request_id}] Error response structure: {response_keys}")
+            await finalize_nonstreaming_metrics(
+                response=openai_response,
+                context=context,
+                field_map=OPENAI_TOKEN_FIELDS,
+                count_tool_calls=True,
+            )
+            error_code = error_info.code
             raise HTTPException(
                 status_code=error_code if isinstance(error_code, int) else 500,
-                detail=f"Provider error: {error_msg}",
+                detail=f"Provider error: {error_info.message}",
             )
 
-        # Defensive check
-        if openai_response is None:
-            logger.error(f"Received None response from provider {context.provider_name}")
-            logger.error(f"Request was: {context.openai_request}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Provider {context.provider_name} returned None response",
-            )
-
-        # Calculate response size and extract token usage
-        response_json = json.dumps(openai_response)
-        response_size = len(response_json)
-
-        usage = openai_response.get("usage")
-        if usage is None:
-            input_tokens = 0
-            output_tokens = 0
-            if context.config.log_request_metrics:
-                conversation_logger.warning("No usage information in response")
-        else:
-            input_tokens = usage.get("prompt_tokens", 0)
-            output_tokens = usage.get("completion_tokens", 0)
-
-        # Count tool calls in response
-        choices = openai_response.get("choices") or []
-        response_message = choices[0].get("message", {}) if choices else {}
-        tool_calls = response_message.get("tool_calls", []) or []
-        tool_call_count = len(tool_calls)
-
-        # Update metrics
-        if context.is_metrics_enabled and context.metrics:
-            context.metrics.response_size = response_size
-            context.metrics.input_tokens = input_tokens
-            context.metrics.output_tokens = output_tokens
-            context.metrics.cache_creation_tokens = (
-                usage.get("cache_creation_tokens", 0) if usage else 0
-            )
-            context.metrics.tool_call_count = tool_call_count
-
-            # Debug logging
-            conversation_logger.debug(f"📡 RESPONSE STRUCTURE: {list(openai_response.keys())}")
-            conversation_logger.debug(f"📡 FULL RESPONSE: {openai_response}")
+        # --- Centralized metrics finalization ---
+        # tracker.end_request() is called inside finalize_nonstreaming_metrics,
+        # NOT gated by log_request_metrics.  This fixes a bug where the old code
+        # only ended the request when verbose logging was on.
+        await finalize_nonstreaming_metrics(
+            response=openai_response,
+            context=context,
+            field_map=OPENAI_TOKEN_FIELDS,
+            count_tool_calls=True,
+        )
 
         # Convert to Claude format
         claude_response = convert_openai_to_claude_response(
@@ -225,9 +226,14 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
             tool_name_map_inverse=context.tool_name_map_inverse,
         )
 
-        # Log successful completion
+        # Log successful completion (gated by verbose logging, NOT metrics tracking).
+        # Token values come from context.metrics (populated above) — single source of truth.
         duration_ms = (time.time() - context.start_time) * 1000
         if context.config.log_request_metrics:
+            input_tokens = context.metrics.input_tokens if context.metrics else 0
+            output_tokens = context.metrics.output_tokens if context.metrics else 0
+            response_size = context.metrics.response_size if context.metrics else 0
+
             tool_call_display = ""
             if context.metrics and context.metrics.tool_call_count > 0:
                 tool_call_display = f" | Tool Calls: {context.metrics.tool_call_count}"
@@ -243,13 +249,8 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
                 f"Size: {context.request_size:,}→{response_size:,} bytes"
                 f"{tool_call_display}"
             )
-            await context.tracker.end_request(context.request_id)
 
         return JSONResponse(status_code=200, content=claude_response)
-
-    def _is_error_response(self, response: dict) -> bool:
-        """Check if the response is an error response."""
-        return response.get("msg") is not None or response.get("error") is not None
 
 
 def get_non_streaming_handler(config: Any, provider_config: Any | None) -> NonStreamingHandler:

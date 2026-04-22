@@ -10,7 +10,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from src.api.services.chat_completions_handlers import (
     AnthropicChatCompletionsHandler,
@@ -749,3 +749,103 @@ async def test_openai_handler_with_empty_response(
     )
 
     assert response.status_code == 200
+
+
+# === Error Detection Tests ===
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_anthropic_handler_non_streaming_error_detection(
+    mock_provider_config_anthropic,
+    mock_tracker,
+    mock_config,
+    mock_http_request,
+    openai_chat_request,
+):
+    """Anthropic handler non-streaming error detection.
+
+    When the upstream returns an Anthropic-style error payload
+    (e.g. {"type": "error", "error": {"message": "..."}}), the handler
+    must raise HTTPException and still call tracker.end_request so that
+    running totals remain accurate.
+    """
+    handler = AnthropicChatCompletionsHandler()
+    openai_request = {**openai_chat_request, "stream": False}
+
+    error_response = {
+        "type": "error",
+        "error": {"type": "authentication_error", "message": "Invalid API key"},
+    }
+
+    mock_client = AsyncMock()
+    mock_client.create_chat_completion = AsyncMock(return_value=error_response)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await handler.handle(
+            openai_request=openai_request,
+            resolved_model="claude-3-5-sonnet-20241022",
+            provider_name="anthropic",
+            provider_config=mock_provider_config_anthropic,
+            provider_api_key="test-key",
+            client_api_key=None,
+            config=mock_config,
+            openai_client=mock_client,
+            request_id="req-err-anth",
+            http_request=mock_http_request,
+            is_metrics_enabled=True,
+            metrics=MagicMock(),
+            tracker=mock_tracker,
+        )
+
+    assert exc_info.value.status_code == 500
+    assert "Invalid API key" in exc_info.value.detail
+    # Tracker must be called even on error path to keep running totals accurate
+    mock_tracker.end_request.assert_called_once_with("req-err-anth")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_openai_handler_non_streaming_error_detection(
+    mock_provider_config_openai,
+    mock_tracker,
+    mock_config,
+    mock_http_request,
+    openai_chat_request,
+):
+    """OpenAI handler non-streaming error detection.
+
+    When the upstream returns an OpenAI-style error payload
+    (e.g. {"msg": "...", "code": 401}), the handler must raise
+    HTTPException with the correct status code and still call
+    tracker.end_request.
+    """
+    handler = OpenAIChatCompletionsHandler()
+    openai_request = {**openai_chat_request, "stream": False}
+
+    error_response = {"msg": "invalid key", "code": 401}
+
+    mock_client = AsyncMock()
+    mock_client.create_chat_completion = AsyncMock(return_value=error_response)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await handler.handle(
+            openai_request=openai_request,
+            resolved_model="gpt-4",
+            provider_name="openai",
+            provider_config=mock_provider_config_openai,
+            provider_api_key="test-key",
+            client_api_key=None,
+            config=mock_config,
+            openai_client=mock_client,
+            request_id="req-err-openai",
+            http_request=mock_http_request,
+            is_metrics_enabled=True,
+            metrics=MagicMock(),
+            tracker=mock_tracker,
+        )
+
+    assert exc_info.value.status_code == 401
+    assert "invalid key" in exc_info.value.detail
+    # Tracker must be called even on error path to keep running totals accurate
+    mock_tracker.end_request.assert_called_once_with("req-err-openai")

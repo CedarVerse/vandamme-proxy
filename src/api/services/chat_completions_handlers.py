@@ -7,11 +7,20 @@ The strategy pattern allows each handler to encapsulate the logic for processing
 requests in a specific API format, making the endpoint code cleaner and more maintainable.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
+
+from src.api.services.error_handling import (
+    detect_error_response,
+    extract_error_info,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class ChatCompletionsHandler(ABC):
@@ -176,6 +185,23 @@ class AnthropicChatCompletionsHandler(ChatCompletionsHandler):
                 **api_key_params,
             )
 
+            # WHY: Without this check, Anthropic error payloads like
+            # {"type": "error", ...} get silently converted to OpenAI format
+            # and returned as HTTP 200 — the client sees a garbled response
+            # instead of a clear error.
+            if detect_error_response(anthropic_response):
+                error_info = extract_error_info(anthropic_response)
+                logger.error(
+                    f"[{request_id}] Provider {provider_name} returned error: {error_info.message}"
+                )
+                if is_metrics_enabled and metrics and tracker:
+                    await tracker.end_request(request_id)
+                error_code = error_info.code
+                raise HTTPException(
+                    status_code=error_code if isinstance(error_code, int) else 500,
+                    detail=f"Provider error: {error_info.message}",
+                )
+
             openai_response = anthropic_message_to_openai_chat_completion(
                 anthropic=anthropic_response
             )
@@ -254,6 +280,21 @@ class OpenAIChatCompletionsHandler(ChatCompletionsHandler):
                 request_id,
                 **api_key_params,
             )
+
+            # WHY: The passthrough handler returned EVERYTHING as 200, including
+            # upstream errors.  Clients couldn't distinguish success from failure.
+            if detect_error_response(openai_response):
+                error_info = extract_error_info(openai_response)
+                logger.error(
+                    f"[{request_id}] Provider {provider_name} returned error: {error_info.message}"
+                )
+                if is_metrics_enabled and metrics and tracker:
+                    await tracker.end_request(request_id)
+                error_code = error_info.code
+                raise HTTPException(
+                    status_code=error_code if isinstance(error_code, int) else 500,
+                    detail=f"Provider error: {error_info.message}",
+                )
 
             if is_metrics_enabled and metrics and tracker:
                 await tracker.end_request(request_id)
