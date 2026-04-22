@@ -9,7 +9,7 @@ Key learnings:
   guards against regressions on that code path.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -49,10 +49,10 @@ class TestAuthDataToDict:
 
     def test_to_dict_last_refresh_none_returns_iso_timestamp(self):
         """When last_refresh is None, to_dict() substitutes the current UTC time."""
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         auth = _make_auth_data(last_refresh=None)
         result = auth.to_dict()
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
 
         last_refresh_str = result["last_refresh"]
         assert isinstance(last_refresh_str, str), "last_refresh must be an ISO string"
@@ -62,7 +62,7 @@ class TestAuthDataToDict:
         ts = datetime.fromisoformat(last_refresh_str)
         # Make ts timezone-aware for comparison (it carries +00:00 from isoformat)
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         assert before <= ts <= after, (
             f"Fallback timestamp {ts!r} should be between {before!r} and {after!r}"
         )

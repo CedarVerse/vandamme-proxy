@@ -10,9 +10,8 @@ These tests guard two critical invariants:
 
 import pytest
 
-from src.core.provider_config import ProviderConfig
 from src.core.provider.provider_config_loader import ProviderConfigLoader
-
+from src.core.provider_config import ProviderConfig
 
 # ─── ProviderConfig unit tests ────────────────────────────────────────────────
 
@@ -117,9 +116,7 @@ class TestProviderConfigLoaderResponsesFormat:
         assert config is not None
         assert config.api_format == "openai"
 
-    def test_load_provider_falls_back_to_openai_for_unknown_format(
-        self, monkeypatch, caplog
-    ):
+    def test_load_provider_falls_back_to_openai_for_unknown_format(self, monkeypatch, caplog):
         """Unknown formats emit a warning and fall back to 'openai' (not a hard error).
 
         The loader is intentionally lenient here: raising an exception would break
