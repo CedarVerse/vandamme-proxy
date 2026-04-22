@@ -15,6 +15,10 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from src.api.context.request_context import RequestContext as ApiRequestContext
+from src.api.services.error_handling import (
+    detect_error_response,
+    extract_error_info,
+)
 from src.api.services.key_rotation import build_api_key_params
 from src.api.services.request_builder import build_anthropic_passthrough_request
 from src.conversion.response_converter import convert_openai_to_claude_response
@@ -158,10 +162,9 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
             processed_response = await middleware_chain.process_response(response_context)
             openai_response = processed_response.response
 
-        # Error detection
-        if self._is_error_response(openai_response):
-            error_msg = openai_response.get("msg", "Provider returned error response")
-            error_code = openai_response.get("code", 500)
+        # Error detection - unified helpers (replaces duplicated _is_error_response method)
+        if detect_error_response(openai_response):
+            error_msg, error_code = extract_error_info(openai_response)
             logger.error(
                 f"[{context.request_id}] Provider {context.provider_name} "
                 f"returned error: {error_msg}"
@@ -246,10 +249,6 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
             await context.tracker.end_request(context.request_id)
 
         return JSONResponse(status_code=200, content=claude_response)
-
-    def _is_error_response(self, response: dict) -> bool:
-        """Check if the response is an error response."""
-        return response.get("msg") is not None or response.get("error") is not None
 
 
 def get_non_streaming_handler(config: Any, provider_config: Any | None) -> NonStreamingHandler:
