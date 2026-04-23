@@ -830,3 +830,117 @@ def test_non_thinking_provider_no_reasoning_content(mock_openai_api):
     upstream_json = json.loads(mock_openai_api.calls[-1].request.content)
     assistant_msg = [m for m in upstream_json["messages"] if m["role"] == "assistant"][0]
     assert "reasoning_content" not in assistant_msg
+
+
+@pytest.mark.unit
+def test_kimi_reasoning_content_response_non_streaming(mock_openai_api):
+    """reasoning_content from upstream is converted to a thinking content block.
+
+    When a provider has reasoning_content_passthrough=True (e.g. Kimi), the proxy
+    must convert the upstream 'reasoning_content' field into a Claude-format
+    'thinking' content block so the Claude client can display chain-of-thought.
+    """
+    from src.main import app
+
+    mock_openai_api.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-kimi-r2",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "kimi-k2-thinking-turbo",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "The answer is 42.",
+                            "reasoning_content": "I need to think about this carefully. First...",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "kimi:sonnet",
+                "max_tokens": 200,
+                "messages": [{"role": "user", "content": "What is the answer?"}],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    thinking_blocks = [b for b in data["content"] if b.get("type") == "thinking"]
+    assert len(thinking_blocks) == 1
+    assert thinking_blocks[0]["thinking"] == "I need to think about this carefully. First..."
+    # Text block should also be present
+    text_blocks = [b for b in data["content"] if b.get("type") == "text"]
+    assert len(text_blocks) == 1
+    assert text_blocks[0]["text"] == "The answer is 42."
+
+
+@pytest.mark.unit
+def test_non_thinking_provider_ignores_reasoning_content_response(mock_openai_api):
+    """Providers without reasoning_content_passthrough must NOT produce thinking blocks.
+
+    Even if an upstream provider unexpectedly returns reasoning_content, the proxy
+    must ignore it for providers that don't have the flag enabled. This prevents
+    thinking blocks from leaking into responses to clients that don't expect them.
+    """
+    from src.main import app
+
+    # OpenAI does NOT have reasoning_content_passthrough enabled
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-openai-r3",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "gpt-4",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "The answer is 42.",
+                            # Unexpected reasoning_content from a provider that shouldn't emit it
+                            "reasoning_content": "I need to think about this carefully...",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "openai:gpt-4",
+                "max_tokens": 200,
+                "messages": [{"role": "user", "content": "What is the answer?"}],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    # No thinking blocks should be present for non-flagged providers
+    thinking_blocks = [b for b in data["content"] if b.get("type") == "thinking"]
+    assert len(thinking_blocks) == 0
+    # Only text block should be present
+    text_blocks = [b for b in data["content"] if b.get("type") == "text"]
+    assert len(text_blocks) == 1
+    assert text_blocks[0]["text"] == "The answer is 42."

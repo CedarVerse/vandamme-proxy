@@ -131,8 +131,26 @@ def convert_openai_to_claude_response(
     openai_response: dict,
     original_request: ClaudeMessagesRequest,
     tool_name_map_inverse: dict[str, str] | None = None,
+    *,
+    reasoning_content_passthrough: bool = False,
 ) -> dict:
-    """Convert OpenAI response to Claude format."""
+    """Convert OpenAI response to Claude format.
+
+    Args:
+        openai_response: Raw OpenAI-format response dict.
+        original_request: The original Claude MessagesRequest (for model name, etc.).
+        tool_name_map_inverse: Inverse mapping for tool name sanitization.
+        reasoning_content_passthrough: When True, convert upstream ``reasoning_content``
+            into a Claude-format ``thinking`` content block.  This MUST be gated on
+            the provider's flag to prevent non-thinking providers from emitting
+            thinking blocks that the Claude client does not expect.
+
+    Design note (DX review finding #21):
+        Only providers that advertise ``reasoning_content_passthrough=True`` in their
+        config (e.g. Kimi, OpenCodeGo) should have this set to ``True``.  For all
+        other providers the flag defaults to ``False`` and any ``reasoning_content``
+        in the upstream response is silently ignored.
+    """
 
     # Extract response data
     choices = openai_response.get("choices", [])
@@ -152,6 +170,21 @@ def convert_openai_to_claude_response(
     text_content = message.get("content")
     if text_content is not None:
         content_blocks.append({"type": Constants.CONTENT_TEXT, "text": text_content})
+
+    # Convert upstream reasoning_content to a Claude thinking block.
+    # Per Claude convention, thinking blocks precede text blocks in content order.
+    # This is gated on the provider's reasoning_content_passthrough flag so that
+    # non-thinking providers never emit unexpected thinking blocks.
+    if reasoning_content_passthrough:
+        reasoning_content = message.get("reasoning_content")
+        if reasoning_content:
+            content_blocks.insert(
+                0,
+                {
+                    "type": Constants.CONTENT_THINKING,
+                    "thinking": reasoning_content,
+                },
+            )
 
     tool_name_map_inverse = tool_name_map_inverse or {}
 

@@ -224,6 +224,11 @@ class OpenAINonStreamingHandler(NonStreamingHandler):
             openai_response,
             context.request,
             tool_name_map_inverse=context.tool_name_map_inverse,
+            reasoning_content_passthrough=(
+                context.provider_config.reasoning_content_passthrough
+                if context.provider_config
+                else False
+            ),
         )
 
         # Log successful completion (gated by verbose logging, NOT metrics tracking).
