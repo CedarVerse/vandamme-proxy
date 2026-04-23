@@ -77,8 +77,10 @@ if ":" in model:
 1. Split the model string on the first `:` to get a potential prefix.
 2. Ask the `ProfileManager` whether that prefix is a known profile.
 3. If yes: record the profile and strip the prefix, continuing with the remainder.
-4. If no: leave `profile = None` and proceed to Phase 4 (the `:` will be parsed
-   as a provider prefix in Phase 6).
+4. If no: leave `profile = None`. The model retains its `:` prefix, so Phase 2
+   is skipped (it only applies to bare names). The model continues through
+   Phase 4/5 logic with the colon intact, and Phase 6 parses it as a
+   provider prefix.
 
 ### Profiles take precedence over providers (intentional)
 
@@ -129,8 +131,10 @@ The default target (`VDM_DEFAULT_TARGET`) can be either a provider name or a pro
 name. When it is a profile, the proxy still needs a real provider for actual API
 routing. The `DefaultProviderSelector` handles this split:
 
-- `default_target` property always returns a **real provider name** (backward
-  compatible with code that needs a provider).
+- `default_target` property always returns a **real provider name** after
+  provider initialization (backward compatible with code that needs a provider).
+  Before initialization, it may return the raw configured value (which could be
+  a profile name).
 - `default_profile` property returns the **profile name** separately (e.g., `"top"`),
   or `None` if the default target is a provider.
 
@@ -222,8 +226,10 @@ Resolution examples with default profile `top`:
 | `"unknown-model"` | No match | `"unknown-model"` (unchanged) | Phase 5 |
 | `"long"` | `long` -> `"opencodego:mimo-v2.5-pro"` | `"opencodego:mimo-v2.5-pro"` | Phase 6 |
 
-Note that profile alias targets always contain a provider prefix (e.g., `"zai:haiku"`),
-so after Phase 3, the model goes directly to Phase 6 (provider prefix parsing).
+In the default configuration, profile alias targets contain a provider prefix
+(e.g., `"zai:haiku"`), so after Phase 3, the model typically goes directly to
+Phase 6. If a profile alias target lacks a provider prefix, it falls through to
+Phase 5 instead.
 
 ---
 
