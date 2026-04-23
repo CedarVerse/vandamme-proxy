@@ -278,3 +278,71 @@ max-retries = 2
 haiku = "claude-3-5-haiku-20241022"
 sonnet = "claude-3-5-sonnet-20241022"
 opus = "claude-3-opus-20240229"
+
+# OpenCode Zen — multi-provider aggregator charged per token (not flat rate).
+# WHY models from GPT/Claude/Gemini coexist here: Zen routes to whichever provider
+# owns the model, so you get one API key for multiple providers.
+[opencode]
+base-url = "https://opencode.ai/zen/v1"
+api-format = "openai"
+timeout = 90
+max-retries = 2
+[opencode.aliases]
+# WHY haiku/sonnet/opus map to GPT, not their namesake families: these are
+# cost-optimized picks for coding proxies where GPT codex models outperform
+# Claude/Gemini at the same price tier for code generation tasks.
+haiku = "gpt-5.1-codex-mini"
+sonnet = "gpt-5.3-codex"
+opus = "claude-opus-4-7"
+# Free-tier models (zero cost, lower quality). Useful for bulk non-critical tasks.
+free = "big-pickle"
+free1 = "ling-2.6-flash-free"
+free2 = "nemotron-3-super-free"
+mini = "gpt-5.4-mini"
+nano = "gpt-5.4-nano"
+# Family shortcuts — each points to the latest available model from that family.
+# DECISION: these default to the strongest model per family, not the cheapest.
+# Revisit if cost matters more than quality for your workload.
+claude = "claude-opus-4-7"
+gpt = "gpt-5.4-pro"
+gemini = "gemini-3.1-pro"
+glm = "glm-5.1"
+kimi = "kimi-k2.6"
+minimax = "minimax-m2.7"
+qwen = "qwen3.6-plus"
+# GPT codex variants — differ in speed vs. depth tradeoff.
+# codex: balanced, codex-max: deepest reasoning, spark: fastest responses.
+codex = "gpt-5.3-codex"
+codex-max = "gpt-5.1-codex-max"
+spark = "gpt-5.3-codex-spark"
+
+# OpenCode Go — flat-rate plan (no per-token billing). All models share one quota.
+# Quota tiers (req/5h, as of 2026-04): qwen3.5-plus=10,200 > minimax-m2.7=3,400 >
+# kimi-k2.6=1,150 > mimo-v2.5-pro=1,290 > glm-5.1=880.
+# WHY aliases map to quota tiers, not model families: on a flat-rate plan, the
+# "cheapest" alias should maximize quota, not minimize token cost.
+[opencodego]
+base-url = "https://opencode.ai/zen/go/v1"
+api-format = "openai"
+timeout = 90
+max-retries = 2
+[opencodego.aliases]
+# WHY haiku=qwen3.5-plus (not GLM-5.1): qwen3.5-plus has 10,200 req/5h — 12x more
+# quota than GLM-5.1 (880). On flat-rate, volume beats quality for "haiku" tasks.
+haiku = "qwen3.5-plus"
+sonnet = "minimax-m2.7"
+opus = "kimi-k2.6"
+# GOTCHA: mimo-v2.5-pro has 1M context window but only 1,290 req/5h quota.
+# Reserve for tasks that actually need long context; don't use as a default.
+long = "mimo-v2.5-pro"
+# Free-tier models — same zero-cost models as Zen, but here they eat Go plan quota.
+free = "big-pickle"
+free1 = "ling-2.6-flash-free"
+free2 = "nemotron-3-super-free"
+# Family shortcuts — each points to the latest available model from that family.
+glm = "glm-5.1"
+kimi = "kimi-k2.6"
+mimo = "mimo-v2.5-pro"
+minimax = "minimax-m2.7"
+qwen = "qwen3.6-plus"
+
