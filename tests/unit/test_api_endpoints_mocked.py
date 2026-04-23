@@ -656,3 +656,26 @@ def test_anthropic_passthrough_mocked(mock_anthropic_api, anthropic_message_resp
     pass
 
     # Cleanup handled by setup_test_env fixture
+
+
+@pytest.mark.unit
+def test_thinking_content_block_parsed_in_request():
+    """ClaudeContentBlockThinking blocks in assistant messages are accepted by the Pydantic model.
+
+    This is a pure model validation test -- no HTTP fixtures needed.
+    The thinking block is what Claude Code sends when extended thinking is enabled,
+    and the proxy must be able to parse it so it can be passed through to
+    Anthropic-compatible backends.
+    """
+    from src.models.claude import ClaudeContentBlockThinking, ClaudeMessage
+
+    msg = ClaudeMessage(
+        role="assistant",
+        content=[
+            ClaudeContentBlockThinking(type="thinking", thinking="Let me reason about this..."),
+            {"type": "text", "text": "Here is my answer."},
+        ],
+    )
+    assert len(msg.content) == 2
+    assert msg.content[0].type == "thinking"
+    assert msg.content[0].thinking == "Let me reason about this..."

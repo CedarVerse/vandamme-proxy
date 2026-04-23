@@ -195,6 +195,8 @@ def setup_test_environment_for_unit_tests():
             # Note: 'top' is a profile name (#top), not a provider - no TOP_API_KEY needed
             "ZAI_API_KEY": "test-zai-key",
             "AGENTROUTER_API_KEY": "test-agentrouter-key",
+            # opencodego provider is referenced by the 'top' profile aliases in defaults.toml
+            "OPENCODEGO_API_KEY": "test-opencodego-key",
             "VDM_DEFAULT_TARGET": DEFAULT_TEST_CONFIG["DEFAULT_PROVIDER"],
             "LOG_LEVEL": DEFAULT_TEST_CONFIG["LOG_LEVEL"],
             "LOG_REQUEST_METRICS": "true",

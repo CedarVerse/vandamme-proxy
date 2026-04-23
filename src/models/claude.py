@@ -26,6 +26,18 @@ class ClaudeContentBlockToolResult(BaseModel):
     content: str | list[dict[str, Any]] | dict[str, Any]
 
 
+class ClaudeContentBlockThinking(BaseModel):
+    """Extended-thinking (reasoning) block sent by Claude Code when thinking is enabled.
+
+    Claude Code includes these in assistant messages so the model's chain-of-thought
+    can be replayed on subsequent turns. The proxy must accept them to avoid silently
+    dropping reasoning context when routing to Anthropic-compatible backends.
+    """
+
+    type: Literal["thinking"] = "thinking"
+    thinking: str
+
+
 class ClaudeSystemContent(BaseModel):
     type: Literal["text"]
     text: str
@@ -40,6 +52,7 @@ class ClaudeMessage(BaseModel):
             | ClaudeContentBlockImage
             | ClaudeContentBlockToolUse
             | ClaudeContentBlockToolResult
+            | ClaudeContentBlockThinking
         ]
     )
 
