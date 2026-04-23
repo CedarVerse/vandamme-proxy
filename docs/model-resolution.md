@@ -382,9 +382,12 @@ chains up to 10 levels, with cycle detection to prevent infinite loops.
 
 ### Provider scoping (critical detail)
 
-This is the most commonly misunderstood part of alias resolution. The `:` in a
-model name always **scopes** resolution to the named provider -- it does NOT
-trigger a cross-provider search.
+> **CORRECTION:** Previous versions of this documentation incorrectly described
+> `:` as triggering cross-provider resolution. This is wrong -- `:` always scopes
+> to a single provider.
+
+The `:` in a model name always **scopes** resolution to the named provider -- it
+does NOT trigger a cross-provider search.
 
 ```python
 # src/core/model_manager.py:117-125
@@ -605,20 +608,20 @@ Phase 7: ("zai", "my-exact-model")
 
 ### Example 6: `claude --model fast-chat` where alias "fast" exists
 
-Assume no profile matches (e.g., `VDM_DEFAULT_TARGET=openai`, a provider):
+Assume `VDM_DEFAULT_TARGET=poe` (a provider with a `fast` alias):
 
 ```
 Phase 1: "fast-chat" has no ":" -> skip
-Phase 2: default target "openai" is NOT a profile -> skip
+Phase 2: default target "poe" is NOT a profile -> skip
 Phase 3: profile=None -> skip
 Phase 4: model does not start with "!" -> skip
 Phase 5: AliasManager
-  - SubstringMatcher: searches default target's aliases
+  - SubstringMatcher: searches poe's aliases (scoped to default provider)
     - "fast" IS a substring of "fast-chat" -> match found
   - MatchRanker: only one match -> selects "fast"
-    - Result: "openai:grok-4.1-fast-non-reasoning" (if fast=grok-4.1-fast-non-reasoning is configured)
-Phase 6: "openai:grok-4.1-fast-non-reasoning" -> provider=openai, model=grok-4.1-fast-non-reasoning
-Phase 7: ("openai", "grok-4.1-fast-non-reasoning")
+    - Result: "poe:grok-4.1-fast-non-reasoning" (from poe.aliases.fast)
+Phase 6: "poe:grok-4.1-fast-non-reasoning" -> provider=poe, model=grok-4.1-fast-non-reasoning
+Phase 7: ("poe", "grok-4.1-fast-non-reasoning")
 ```
 
 If you wanted to use the literal model name `fast-chat`, use `!fast-chat` instead.
