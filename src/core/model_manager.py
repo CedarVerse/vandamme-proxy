@@ -50,17 +50,25 @@ class ModelManager(ModelResolver):
         self.alias_manager: AliasManager | None = getattr(config, "alias_manager", None)  # type: ignore[attr-defined]
 
     def resolve_model(self, model: str) -> tuple[str, str]:
-        """Resolve model name to (provider, actual_model)
+        """Resolve model name to (provider, actual_model).
 
-        Resolution process:
-        1. Check for profile prefix (profiles take precedence over providers)
-        2. If profile prefix, use profile's aliases for resolution
-        3. Otherwise, use existing alias resolution logic
-        4. Parse provider prefix from resolved value
-        5. Return provider and actual model name
+        The resolution pipeline runs these phases in order (first match wins):
+
+        1. Profile prefix: "profile:model" -> detect profile, strip prefix
+        2. Default profile: bare name + VDM_DEFAULT_TARGET is a profile -> set profile
+        3. Profile aliases: exact-match (case-insensitive) in profile.aliases
+        4. Literal bypass: "!model" -> skip substring matching
+        5. AliasManager: substring match, chained resolution, ranked by priority
+        6. Provider prefix: "provider:model" or default target fallback
+        7. Return (provider_name, actual_model_name)
+
+        See docs/model-resolution.md for the full guide with examples.
 
         Returns:
             Tuple[str, str]: (provider_name, actual_model_name)
+
+        Note:
+            If you add or remove a phase, update docs/model-resolution.md.
         """
         logger.debug(f"Starting model resolution for: '{model}'")
 
