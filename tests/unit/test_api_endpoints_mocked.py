@@ -679,3 +679,36 @@ def test_thinking_content_block_parsed_in_request():
     assert len(msg.content) == 2
     assert msg.content[0].type == "thinking"
     assert msg.content[0].thinking == "Let me reason about this..."
+
+
+@pytest.mark.unit
+def test_kimi_provider_has_reasoning_content_passthrough():
+    """Kimi provider config should have reasoning_content_passthrough enabled."""
+    from src.core.dependencies import get_config
+
+    cfg = get_config()
+    kimi_config = cfg.provider_manager.get_provider_config("kimi")
+    assert kimi_config is not None
+    assert kimi_config.reasoning_content_passthrough is True
+
+
+@pytest.mark.unit
+def test_opencodego_provider_has_reasoning_content_passthrough():
+    """OpenCodeGo provider config should have reasoning_content_passthrough enabled."""
+    from src.core.dependencies import get_config
+
+    cfg = get_config()
+    opencodego_config = cfg.provider_manager.get_provider_config("opencodego")
+    assert opencodego_config is not None
+    assert opencodego_config.reasoning_content_passthrough is True
+
+
+@pytest.mark.unit
+def test_openai_provider_no_reasoning_content_passthrough():
+    """Providers without the flag should default to False."""
+    from src.core.dependencies import get_config
+
+    cfg = get_config()
+    openai_config = cfg.provider_manager.get_provider_config("openai")
+    assert openai_config is not None
+    assert openai_config.reasoning_content_passthrough is False

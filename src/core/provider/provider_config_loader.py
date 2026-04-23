@@ -350,6 +350,9 @@ class ProviderConfigLoader:
             custom_headers=self.get_custom_headers(provider_upper),
             api_format=api_format,
             tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
+            reasoning_content_passthrough=bool(
+                toml_config.get("reasoning-content-passthrough", False)
+            ),
             auth_mode=auth_mode,
             models_url=models_url,
         )
@@ -632,6 +635,9 @@ class ProviderConfigLoader:
             custom_headers=self.get_custom_headers(provider_upper),
             api_format=api_format,
             tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
+            reasoning_content_passthrough=bool(
+                toml_config.get("reasoning-content-passthrough", False)
+            ),
             auth_mode=auth_mode,
             models_url=os.environ.get(f"{provider_upper}_MODELS_URL")
             or toml_config.get("models-url"),
@@ -831,6 +837,9 @@ class ProviderConfigLoader:
             custom_headers=self.get_custom_headers(provider_upper),
             api_format=api_format,
             tool_name_sanitization=bool(toml_config.get("tool-name-sanitization", False)),
+            reasoning_content_passthrough=bool(
+                toml_config.get("reasoning-content-passthrough", False)
+            ),
             auth_mode=auth_mode,
             models_url=os.environ.get(f"{provider_upper}_MODELS_URL")
             or toml_config.get("models-url"),

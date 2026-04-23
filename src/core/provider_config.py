@@ -36,6 +36,11 @@ class ProviderConfig:
     custom_headers: dict[str, str] = field(default_factory=dict)
     api_format: str = "openai"  # "openai", "anthropic", or "responses"
     tool_name_sanitization: bool = False
+    # When True, thinking/reasoning blocks from the upstream provider are preserved
+    # in the conversion pipeline instead of being stripped.  Enabled for providers
+    # that expose reasoning_content (e.g. Kimi, OpenCodeGo) so the Claude client
+    # can display chain-of-thought output.
+    reasoning_content_passthrough: bool = False
     auth_mode: str = AuthMode.API_KEY  # Authentication mode: api_key, passthrough, or oauth
     models_url: str | None = None  # Provider models documentation URL
 

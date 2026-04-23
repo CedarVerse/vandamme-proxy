@@ -252,6 +252,7 @@ api-format = "openai"
 timeout = 90
 max-retries = 2
 tool-name-sanitization = true
+reasoning-content-passthrough = true
 [kimi.aliases]
 haiku = "kimi-k2-thinking-turbo"
 sonnet = "kimi-k2-thinking-turbo"
@@ -345,6 +346,7 @@ base-url = "https://opencode.ai/zen/go/v1"
 api-format = "openai"
 timeout = 90
 max-retries = 2
+reasoning-content-passthrough = true
 [opencodego.aliases]
 # WHY haiku=qwen3.5-plus (not GLM-5.1): qwen3.5-plus has 10,200 req/5h — 12x more
 # quota than GLM-5.1 (880). On flat-rate, volume beats quality for "haiku" tasks.
