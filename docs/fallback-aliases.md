@@ -4,14 +4,16 @@
 
 When using Claude Code with Vandamme Proxy, you often work with standard model names like `haiku`, `sonnet`, and `opus`. But what happens when your configured provider doesn't have models with those exact names? Previously, you'd need to manually configure aliases for every provider. Now, Vandamme Proxy automatically provides sensible fallback defaults.
 
+> **See also:** [Model Name Resolution Guide](model-resolution.md) — how fallback aliases fit into the full resolution pipeline.
+
 ## The Problem: One Size Doesn't Fit All
 
 Different LLM providers have different model naming conventions:
 
 | Provider | Available Models | Claude Code Names |
 |----------|------------------|------------------|
-| OpenAI | `gpt-4o-mini`, `gpt-4`, `o1-preview` | haiku, sonnet, opus |
-| Poe | `grok-4.1-fast`, `glm-4.6`, `claude-sonnet` | haiku, sonnet, opus |
+| OpenAI | `gpt-5.1-mini`, `gpt-5.1-codex`, `gpt-5.2` | haiku, sonnet, opus |
+| Poe | `gpt-5.1-mini`, `gpt-5.1-codex-mini`, `gpt-5.1-codex-max` | haiku, sonnet, opus |
 | Anthropic | `claude-3-5-haiku-20241022`, `claude-3-5-sonnet-20241022` | haiku, sonnet, opus |
 
 Without aliases, requests like "claude --model haiku" would fail with "model not found" errors.
@@ -27,13 +29,15 @@ Vandamme Proxy now automatically maps standard Claude model names to appropriate
 
 ### Default Fallback Mappings
 
-For the Poe provider (commonly used for fast access):
+Each provider defines its own aliases in `src/config/defaults.toml`:
 
-```bash
-haiku     → grok-4.1-fast-non-reasoning  # Fast, lightweight
-sonnet    → glm-4.6                       # Balanced, versatile
-opus      → gpt-5.2                       # Powerful, advanced
-```
+| Alias | Poe Provider | OpenAI Provider | Anthropic Provider |
+|-------|-------------|-----------------|-------------------|
+| `haiku` | `gpt-5.1-mini` | `gpt-5.1-mini` | `claude-3-5-haiku-20241022` |
+| `sonnet` | `gpt-5.1-codex-mini` | `gpt-5.1-codex` | `claude-3-5-sonnet-20241022` |
+| `opus` | `gpt-5.1-codex-max` | `gpt-5.2` | `claude-3-opus-20240229` |
+
+Additionally, `[defaults.aliases]` provides global fallback aliases that apply to **all** providers when no provider-specific alias exists. These typically use chained aliases (e.g. `haiku = "zai:haiku"`) so that updating one provider's aliases automatically propagates everywhere.
 
 ## How It Works
 
@@ -64,9 +68,9 @@ Fallbacks follow a clear priority order:
 # Lowest Priority (built-in defaults)
 src/config/defaults.toml
 └── [poe.aliases]
-    ├── haiku = "grok-4.1-fast-non-reasoning"
-    ├── sonnet = "glm-4.6"
-    └── opus = "gpt-5.2"
+    ├── haiku = "gpt-5.1-mini"
+    ├── sonnet = "gpt-5.1-codex-mini"
+    └── opus = "gpt-5.1-codex-max"
 ```
 
 ### 3. Smart Resolution
@@ -81,7 +85,7 @@ When you request a model:
 "poe:haiku" → uses poe provider's haiku alias
 
 # 3. Resolve to actual model
-"haiku" → "poe:grok-4.1-fast-non-reasoning"
+"haiku" → "poe:gpt-5.1-mini"
 ```
 
 ## Usage Examples
@@ -95,9 +99,9 @@ No configuration needed - fallbacks work immediately:
 export POE_API_KEY=your-poe-key
 
 # Use Claude Code with standard model names
-claude --model haiku "Quick response"      # Uses grok-4.1-fast
-claude --model sonnet "Balanced task"     # Uses glm-4.6
-claude --model opus "Complex reasoning"    # Uses gpt-5.2
+claude --model haiku "Quick response"      # Uses gpt-5.1-mini
+claude --model sonnet "Balanced task"     # Uses gpt-5.1-codex-mini
+claude --model opus "Complex reasoning"    # Uses gpt-5.1-codex-max
 ```
 
 ### Custom Overrides
@@ -111,7 +115,7 @@ export POE_ALIAS_SONNET="my-preferred-sonnet"
 
 # Keep opus fallback
 claude --model haiku "Uses your custom model"
-claude --model opus "Still uses gpt-5.2 fallback"
+claude --model opus "Still uses gpt-5.1-codex-max fallback"
 ```
 
 ### Project-Specific Settings
@@ -129,9 +133,9 @@ sonnet = "team-sonnet-choice"
 [openai]
 timeout = 120
 [openai.aliases]
-haiku = "gpt-4o-mini"
-sonnet = "gpt-4o"
-fast = "gpt-4o-mini"
+haiku = "gpt-5.1-mini"
+sonnet = "gpt-5.1-codex"
+fast = "gpt-5.1-mini"
 ```
 
 ### Personal Defaults
@@ -148,7 +152,7 @@ opus = "poe-claude-sonnet-20241022"
 [openai]
 # When I use OpenAI directly
 [openai.aliases]
-haiku = "gpt-4o-mini"
+haiku = "gpt-5.1-mini"
 ```
 
 ## Visual Feedback
@@ -162,12 +166,12 @@ When Vandamme Proxy starts, it shows active aliases:
    poe (3 aliases, 3 fallbacks):
    Alias                Target Model                             Type
    -------------------- ---------------------------------------- ----------
-   haiku                grok-4.1-fast-non-reasoning             fallback
-   sonnet               glm-4.6                             fallback
-   opus                 gpt-5.2                             fallback
+   haiku                gpt-5.1-mini                             fallback
+   sonnet               gpt-5.1-codex-mini                       fallback
+   opus                 gpt-5.1-codex-max                        fallback
 
    💡 Use aliases in your requests:
-      Example: model='haiku' → resolves to 'poe:grok-4.1-fast-non-reasoning'
+      Example: model='haiku' → resolves to 'poe:gpt-5.1-mini'
                 (from configuration defaults)
 ```
 
