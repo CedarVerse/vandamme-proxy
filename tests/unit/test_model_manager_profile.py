@@ -16,7 +16,7 @@ class TestModelManagerProfileResolution:
         """Test that profile prefix is detected before provider."""
         with patch("src.core.provider_manager.ProviderManager") as mock_pm_class:
             mock_pm = MagicMock()
-            mock_pm.default_provider = "openai"
+            mock_pm.default_target = "openai"
             # Mock parse_model_name to return the input split by ":"
             # This allows us to see what model name was actually passed
             mock_pm.parse_model_name.side_effect = lambda m: (
@@ -68,7 +68,7 @@ class TestModelManagerProfileResolution:
         """Test that models without profile prefix use default provider."""
         with patch("src.core.provider_manager.ProviderManager") as mock_pm_class:
             mock_pm = MagicMock()
-            mock_pm.default_provider = "openai"
+            mock_pm.default_target = "openai"
             mock_pm.parse_model_name.return_value = ("openai", "gpt-4o")
 
             mock_pm_class.return_value = mock_pm
@@ -95,7 +95,7 @@ class TestModelManagerProfileResolution:
         """Test direct provider prefix works even with ProfileManager."""
         with patch("src.core.provider_manager.ProviderManager") as mock_pm_class:
             mock_pm = MagicMock()
-            mock_pm.default_provider = "openai"
+            mock_pm.default_target = "openai"
             mock_pm.parse_model_name.return_value = ("anthropic", "claude-3-5-sonnet-20241022")
 
             mock_pm_class.return_value = mock_pm
@@ -124,7 +124,7 @@ class TestModelManagerProfileResolution:
         """Test that profile wins if name matches both profile and provider."""
         with patch("src.core.provider_manager.ProviderManager") as mock_pm_class:
             mock_pm = MagicMock()
-            mock_pm.default_provider = "openai"
+            mock_pm.default_target = "openai"
             mock_pm.parse_model_name.return_value = ("poe", "gpt-5.1-mini")
 
             mock_pm_class.return_value = mock_pm

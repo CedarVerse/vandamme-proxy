@@ -34,7 +34,8 @@ def mock_config():
     config = MagicMock()
     config.provider_manager = MagicMock()
     config.proxy_api_key = None
-    config.default_provider = "openai"
+    config.default_target = "openai"
+    config.provider_manager.default_target = "openai"
     config.openai_api_key = "test-key"
     config.openai_base_url = "https://api.openai.com/v1"
     config.log_level = "DEBUG"

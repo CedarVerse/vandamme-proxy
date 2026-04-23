@@ -17,7 +17,7 @@ def test_claude_wrapper_environment():
     env = wrapper.prepare_environment([])
 
     assert env["ANTHROPIC_BASE_URL"] == "http://127.0.0.1:8082"
-    assert env["ANTHROPIC_API_KEY"] == "proxy-auth-required"
+    assert env["ANTHROPIC_API_KEY"] == ""
     # Should preserve other environment variables
     assert "PATH" in env
 

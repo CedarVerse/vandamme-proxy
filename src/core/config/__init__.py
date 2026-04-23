@@ -24,7 +24,7 @@ Example:
     from src.core.config import Config
 
     cfg = Config()
-    provider = cfg.default_provider
+    provider = cfg.default_target
     port = cfg.port
 """
 

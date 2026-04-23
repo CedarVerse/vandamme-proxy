@@ -35,7 +35,7 @@ class TestModelManager:
     def mock_config(self):
         """Create a mock config with provider manager and alias manager."""
         mock_provider_manager = Mock()
-        mock_provider_manager.default_provider = "poe"
+        mock_provider_manager.default_target = "poe"
         mock_provider_manager.parse_model_name.side_effect = lambda model: (
             (model.split(":", 1)[0], model.split(":", 1)[1]) if ":" in model else ("poe", model)
         )
@@ -138,7 +138,7 @@ class TestModelManager:
 
     def test_resolve_model_different_default_provider(self, mock_config):
         """Test with a different default provider."""
-        mock_config.provider_manager.default_provider = "openai"
+        mock_config.provider_manager.default_target = "openai"
         mock_config.alias_manager.resolve_alias.return_value = "openai:gpt-4o-mini"
 
         model_manager = ModelManager(mock_config)
@@ -179,7 +179,7 @@ class TestModelManager:
         # Mock provider manager
         with patch("src.core.provider_manager.ProviderManager") as mock_provider_manager_class:
             mock_provider_manager = mock_provider_manager_class.return_value
-            mock_provider_manager.default_provider = "poe"
+            mock_provider_manager.default_target = "poe"
             mock_provider_manager._configs = {"poe": {}}
             mock_provider_manager.parse_model_name.side_effect = lambda model: (
                 (model.split(":", 1)[0], model.split(":", 1)[1]) if ":" in model else ("poe", model)
@@ -215,7 +215,7 @@ class TestModelManager:
                 for record in caplog.records
             )
             assert any(
-                "Resolving alias 'haiku' with provider scope 'poe'" in record.message
+                "Resolving alias 'haiku' with target scope 'poe'" in record.message
                 for record in caplog.records
             )
             assert any(
@@ -235,7 +235,7 @@ class TestModelManager:
         # Mock provider manager
         with patch("src.core.provider_manager.ProviderManager") as mock_provider_manager_class:
             mock_provider_manager = mock_provider_manager_class.return_value
-            mock_provider_manager.default_provider = "xpoe"
+            mock_provider_manager.default_target = "xpoe"
             mock_provider_manager._configs = {"xpoe": {}}
             mock_provider_manager.parse_model_name.side_effect = lambda model: (
                 (model.split(":", 1)[0], model.split(":", 1)[1])

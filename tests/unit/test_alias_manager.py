@@ -366,7 +366,7 @@ class TestAliasManager:
             mock_pm = mock_provider_manager.return_value
             mock_pm.load_provider_configs.return_value = None
             mock_pm._configs = {"poe": {}}
-            mock_pm.default_provider = "poe"
+            mock_pm.default_target = "poe"
             mock_pm.parse_model_name.return_value = ("poe", "my-literal-model")
 
             mock_loader_instance = mock_config_loader.return_value

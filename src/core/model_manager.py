@@ -87,9 +87,9 @@ class ModelManager(ModelResolver):
             # Still allow AliasManager to normalize into provider:model form when needed.
             if model.startswith("!"):
                 if ":" not in model:
-                    default_provider = self.provider_manager.default_provider
+                    default_target = self.provider_manager.default_target
                     resolved_model = (
-                        self.alias_manager.resolve_alias(model, provider=default_provider) or model
+                        self.alias_manager.resolve_alias(model, provider=default_target) or model
                     )
                 else:
                     resolved_model = self.alias_manager.resolve_alias(model) or model
@@ -100,13 +100,13 @@ class ModelManager(ModelResolver):
 
                 # Check if model already has provider prefix
                 if ":" not in model:
-                    # No provider prefix - resolve using default provider only
-                    default_provider = self.provider_manager.default_provider
+                    # No provider prefix - resolve using default target only
+                    default_target = self.provider_manager.default_target
                     logger.debug(
-                        f"Resolving alias '{model}' with provider scope '{default_provider}'"
+                        f"Resolving alias '{model}' with target scope '{default_target}'"
                     )
                     alias_target = self.alias_manager.resolve_alias(
-                        model, provider=default_provider
+                        model, provider=default_target
                     )
                 else:
                     # Has provider prefix - allow cross-provider resolution
