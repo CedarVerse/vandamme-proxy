@@ -14,6 +14,28 @@ from src.core.exceptions import ConfigurationError
 from src.core.provider_manager import ProviderManager
 
 
+@pytest.fixture(autouse=True)
+def _reset_config_loader_singletons():
+    """Reset module-level AliasConfigLoader singletons so mocks take effect.
+
+    Two modules cache AliasConfigLoader in module-level globals:
+    - src.core.provider.provider_config_loader._alias_config_loader
+    - src.core.provider_manager._alias_config_loader
+
+    Without this, a prior test's real instance persists and bypasses
+    the patched AliasConfigLoader class, causing the real defaults.toml
+    (e.g., timeout=90) to win over the test's mock (e.g., timeout=60).
+    """
+    import src.core.provider.provider_config_loader as pcl_mod
+    import src.core.provider_manager as pm_mod
+
+    pcl_mod._alias_config_loader = None
+    pm_mod._alias_config_loader = None
+    yield
+    pcl_mod._alias_config_loader = None
+    pm_mod._alias_config_loader = None
+
+
 class TestDefaultsTimeoutMaxRetries:
     """Test [defaults] section fallback for timeout and max-retries."""
 

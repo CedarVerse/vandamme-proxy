@@ -75,6 +75,32 @@ def _create_mock_provider_manager(
     return pm
 
 
+def _create_mock_provider_config(
+    name: str = "openai",
+    uses_passthrough: bool = False,
+    uses_oauth: bool = False,
+    is_anthropic_format: bool = False,
+) -> MagicMock:
+    """Create a mock ProviderConfig with explicit boolean defaults.
+
+    MagicMock auto-creates truthy attributes for undefined properties.
+    This factory forces every dispatch boolean to False so tests hit the
+    intended code path instead of accidentally entering the OAuth branch.
+
+    Background: _prepare_authentication has a three-way dispatch
+    (passthrough → oauth → api_key).  A bare MagicMock makes every
+    attribute truthy, so ``provider_config.uses_oauth`` evaluates as True
+    and the OAuth branch returns None before ``get_next_provider_api_key``
+    is ever called — breaking tests that expect a real API key.
+    """
+    config = MagicMock()
+    config.name = name
+    config.uses_passthrough = uses_passthrough
+    config.uses_oauth = uses_oauth
+    config.is_anthropic_format = is_anthropic_format
+    return config
+
+
 def _create_mock_model_manager(
     provider: str = "openai", model: str = "gpt-4o", resolve_raises: Exception | None = None
 ) -> Mock:
@@ -343,10 +369,7 @@ async def test_orchestrator_request_conversion_pipeline_failure() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
 
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
@@ -400,10 +423,7 @@ async def test_orchestrator_request_conversion_invalid_tool_schema() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
 
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
@@ -443,10 +463,7 @@ async def test_orchestrator_request_conversion_missing_required_fields() -> None
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
 
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
@@ -496,10 +513,7 @@ async def test_orchestrator_auth_provider_not_configured() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "unconfigured"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config(name="unconfigured")
 
     # get_next_provider_api_key raises ValueError for unconfigured provider
     mock_config = _create_mock_config(
@@ -544,10 +558,7 @@ async def test_orchestrator_auth_empty_api_key_list() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "empty_keys"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config(name="empty_keys")
 
     # get_next_provider_api_key raises for empty key list
     mock_config = _create_mock_config(
@@ -592,10 +603,7 @@ async def test_orchestrator_auth_rotation_failure() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "rotation_fail"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config(name="rotation_fail")
 
     # get_next_provider_api_key raises during rotation
     mock_config = _create_mock_config(
@@ -645,10 +653,7 @@ async def test_orchestrator_client_retrieval_unknown_provider() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
 
     # get_client raises ValueError for unknown provider
     mock_config = _create_mock_config(
@@ -696,10 +701,7 @@ async def test_orchestrator_client_initialization_failure() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
 
     # get_client raises due to invalid config (e.g., bad base URL)
     mock_config = _create_mock_config(
@@ -752,10 +754,7 @@ async def test_orchestrator_metrics_tracker_not_configured() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
 
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
@@ -809,13 +808,10 @@ async def test_orchestrator_metrics_start_request_failure() -> None:
     mock_config = MagicMock(
         log_request_metrics=True,
         provider_manager=_create_mock_provider_manager(
-            provider_config=MagicMock(),
+            provider_config=_create_mock_provider_config(),
             client=MagicMock(),
         ),
     )
-    mock_config.provider_manager.get_provider_config.return_value.name = "openai"
-    mock_config.provider_manager.get_provider_config.return_value.uses_passthrough = False
-    mock_config.provider_manager.get_provider_config.return_value.is_anthropic_format = False
 
     mock_model_manager = _create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
@@ -866,13 +862,10 @@ async def test_orchestrator_metrics_update_last_accessed_failure() -> None:
     mock_config = MagicMock(
         log_request_metrics=True,
         provider_manager=_create_mock_provider_manager(
-            provider_config=MagicMock(),
+            provider_config=_create_mock_provider_config(),
             client=MagicMock(),
         ),
     )
-    mock_config.provider_manager.get_provider_config.return_value.name = "openai"
-    mock_config.provider_manager.get_provider_config.return_value.uses_passthrough = False
-    mock_config.provider_manager.get_provider_config.return_value.is_anthropic_format = False
 
     mock_model_manager = _create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
@@ -925,10 +918,7 @@ async def test_orchestrator_middleware_raises_exception() -> None:
         side_effect=ValueError("Middleware processing failed")
     )
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "gemini"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config(name="gemini")
 
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
@@ -994,10 +984,7 @@ async def test_orchestrator_middleware_returns_malformed_context() -> None:
         )
     )
 
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "gemini"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config(name="gemini")
 
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,

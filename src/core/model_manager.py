@@ -102,12 +102,8 @@ class ModelManager(ModelResolver):
                 if ":" not in model:
                     # No provider prefix - resolve using default target only
                     default_target = self.provider_manager.default_target
-                    logger.debug(
-                        f"Resolving alias '{model}' with target scope '{default_target}'"
-                    )
-                    alias_target = self.alias_manager.resolve_alias(
-                        model, provider=default_target
-                    )
+                    logger.debug(f"Resolving alias '{model}' with target scope '{default_target}'")
+                    alias_target = self.alias_manager.resolve_alias(model, provider=default_target)
                 else:
                     # Has provider prefix - allow cross-provider resolution
                     logger.debug(f"Resolving alias '{model}' across all providers")

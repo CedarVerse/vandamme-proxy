@@ -49,6 +49,32 @@ def _create_mock_provider_manager(
     return pm
 
 
+def _create_mock_provider_config(
+    name: str = "openai",
+    uses_passthrough: bool = False,
+    uses_oauth: bool = False,
+    is_anthropic_format: bool = False,
+) -> MagicMock:
+    """Create a mock ProviderConfig with explicit boolean defaults.
+
+    MagicMock auto-creates truthy attributes for undefined properties.
+    This factory forces every dispatch boolean to False so tests hit the
+    intended code path instead of accidentally entering the OAuth branch.
+
+    Background: _prepare_authentication has a three-way dispatch
+    (passthrough → oauth → api_key).  A bare MagicMock makes every
+    attribute truthy, so ``provider_config.uses_oauth`` evaluates as True
+    and the OAuth branch returns None before ``get_next_provider_api_key``
+    is ever called — breaking tests that expect a real API key.
+    """
+    config = MagicMock()
+    config.name = name
+    config.uses_passthrough = uses_passthrough
+    config.uses_oauth = uses_oauth
+    config.is_anthropic_format = is_anthropic_format
+    return config
+
+
 def _create_mock_model_manager(provider: str = "openai", model: str = "gpt-4o") -> Mock:
     """Create a mock ModelManager.
 
@@ -141,10 +167,7 @@ async def test_orchestrator_prepares_basic_context() -> None:
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
     # Create mock config with provider_manager
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
@@ -204,10 +227,7 @@ async def test_orchestrator_with_metrics_enabled() -> None:
     mock_tracker.end_request = AsyncMock()
 
     # Create mock config with provider_manager
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
@@ -266,10 +286,11 @@ async def test_orchestrator_passthrough_validation_requires_client_key() -> None
     mock_http_request.is_disconnected = AsyncMock(return_value=False)
 
     # Create mock config with provider_manager for passthrough provider
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "anthropic"
-    mock_provider_config.uses_passthrough = True
-    mock_provider_config.is_anthropic_format = True
+    mock_provider_config = _create_mock_provider_config(
+        name="anthropic",
+        uses_passthrough=True,
+        is_anthropic_format=True,
+    )
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
@@ -329,10 +350,7 @@ async def test_orchestrator_client_disconnect_before_processing() -> None:
     mock_tracker.end_request = AsyncMock()
 
     # Create mock config with provider_manager
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
@@ -397,10 +415,7 @@ async def test_orchestrator_applies_middleware_preprocessing() -> None:
     mock_middleware_chain.process_request = AsyncMock(return_value=mock_processed_context)
 
     # Create mock config with provider_manager and middleware
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "gemini"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config(name="gemini")
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
@@ -453,10 +468,7 @@ async def test_orchestrator_no_middleware_when_not_configured() -> None:
     mock_http_request.is_disconnected = AsyncMock(return_value=False)
 
     # Create mock config with provider_manager (no middleware)
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
@@ -528,10 +540,7 @@ async def test_orchestrator_context_contains_all_required_fields() -> None:
     start = time.time()
 
     # Create mock config with provider_manager
-    mock_provider_config = MagicMock()
-    mock_provider_config.name = "openai"
-    mock_provider_config.uses_passthrough = False
-    mock_provider_config.is_anthropic_format = False
+    mock_provider_config = _create_mock_provider_config()
     mock_config = _create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
