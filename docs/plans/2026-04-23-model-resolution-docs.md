@@ -65,9 +65,9 @@ Input: "model-name"
 | 2. Default profile | Bare name + default is profile | `"opus"` (VDM_DEFAULT_TARGET=top) | profile=top, model="opus" |
 | 3. Profile aliases | Exact-match in profile.aliases | `"opus"` (profile has opus→kimi-k2.6) | `"opencodego:kimi-k2.6"` |
 | 4. Literal bypass | `!` prefix skips substring matching | `"!my-exact-model"` | `"my-exact-model"` (no substring) |
-| 5. AliasManager | Substring + chained + ranked | `"haiku"` | `"poe:grok-4.1-fast-non-reasoning"` |
+| 5. AliasManager | Substring + chained + ranked | `"haiku"` | `"zai:GLM-4.7-Flash"` (via `defaults.aliases` → `zai:haiku` → chain) |
 | 6. Provider prefix | Parse `"provider:model"` | `"openai:gpt-4o"` | provider=openai, model=gpt-4o |
-| 7. Final | Return tuple | — | `("poe", "grok-4.1-fast-non-reasoning")` |
+| 7. Final | Return tuple | — | `("zai", "GLM-4.7-Flash")` |
 ```
 
 **Step 2: Add Phase 1 — Profile Prefix Detection section**
@@ -133,8 +133,10 @@ This is the most detailed section. Cover:
 - **Chained resolution**: aliases can point to other aliases, resolved up to 10 levels with cycle detection
   - Example: `fast → sonnet → gpt-4o-mini` (follows the chain)
 - **Provider-scoped vs cross-provider**:
-  - No `:` in model → scoped to default provider only
-  - Has `:` in model → cross-provider search
+  - No `:` in model → scoped to default provider only (SubstringMatcher searches only the default provider's aliases)
+  - Has `provider:` in model → scoped to that explicit provider only (SubstringMatcher searches only the named provider's aliases)
+  - Cross-provider resolution happens when an alias TARGET contains a different provider prefix (e.g., `haiku = "zai:haiku"` in `[defaults.aliases]` resolves through the chain to the `zai` provider)
+  - **IMPORTANT**: The previous version of this doc incorrectly stated "Has `:` → cross-provider search". That is wrong. The `:` always scopes to the named provider. Cross-provider only happens through alias chain targets.
 
 **Step 3: Add Phase 6 — Provider Prefix Parsing section**
 
@@ -150,27 +152,29 @@ This is the most detailed section. Cover:
 
 **Step 5: Add End-to-End Examples section**
 
-8-10 "What happens when..." examples tracing through the full pipeline:
+8-10 "What happens when..." examples tracing through the full pipeline. **NOTE: The actual default target in defaults.toml is `"top"` (a profile), not a provider name. Examples below use realistic scenarios.**
 
-1. `claude --model opus` with VDM_DEFAULT_TARGET=top → Phase 2+3 → profile alias
+1. `claude --model opus` with VDM_DEFAULT_TARGET=top (default) → Phase 2+3 → profile alias (top profile resolves opus)
 2. `claude --model top:opus` → Phase 1+3 → explicit profile prefix
 3. `claude --model openai:gpt-4o` → Phase 1 (not profile) → Phase 5 (no alias) → Phase 6
-4. `claude --model haiku` with VDM_DEFAULT_TARGET=poe → Phase 5 → AliasManager substring match
+4. `claude --model haiku` with VDM_DEFAULT_TARGET=top (default) → Phase 2+3 → profile alias → chained: `haiku` → `zai:haiku` → `GLM-4.7-Flash`
 5. `claude --model !my-exact-model` → Phase 4 → literal bypass
 6. `claude --model fast-chat` where alias "fast" exists → Phase 5 → substring match
-7. `claude --model opus` with VDM_DEFAULT_TARGET=openai (not a profile) → Phase 5 → fallback alias
+7. `claude --model opus` with VDM_DEFAULT_TARGET=openai (not a profile) → Phase 5 → AliasManager fallback alias
 8. `claude --model webdev-good:unknown` → Phase 1 (profile) → Phase 3 (no alias) → Phase 5+6
+9. `claude --model poe:haiku` → Phase 1 (not profile) → Phase 5 (scoped to poe provider only) → poe's haiku alias
 
 **Step 6: Add Configuration Quick Reference section**
 
 Single table:
 | What | Where | Example |
 |------|-------|---------|
-| Provider alias | `{PROVIDER}_ALIAS_{NAME}` env var | `POE_ALIAS_HAIKU=grok-4.1-fast` |
+| Provider alias | `{PROVIDER}_ALIAS_{NAME}` env var | `POE_ALIAS_HAIKU=gpt-5.1-mini` |
 | Profile | `vandamme-config.toml [profiles.name]` | `[profiles.top]` with `[profiles.top.aliases]` |
 | Default target | `VDM_DEFAULT_TARGET` env var | `VDM_DEFAULT_TARGET=top` |
 | Fallback aliases | `defaults.toml [defaults.aliases]` | See fallback-aliases.md |
-| TOML provider aliases | `vandamme-config.toml [provider.aliases]` | `[poe.aliases] haiku = "grok-4.1-fast"` |
+| TOML provider aliases | `vandamme-config.toml [provider.aliases]` | `[poe.aliases] haiku = "gpt-5.1-mini"` |
+| TOML config hierarchy | project > user > package | `./vandamme-config.toml` > `~/.config/vandamme-proxy/vandamme-config.toml` > `defaults.toml` |
 
 **Step 7: Add Troubleshooting section**
 
@@ -178,6 +182,8 @@ Common issues:
 - "My alias isn't matching" → check case-insensitivity, substring matching, provider scope
 - "Wrong provider selected" → check VDM_DEFAULT_TARGET, provider prefix, MatchRanker priority
 - "Profile aliases ignored" → check profile is the default target, bare model (no prefix)
+- "`!` + profile prefix combination" → `top:!my-model` works (profile + literal bypass); `!top:opus` would be misinterpreted as provider=`!top`, which is surprising
+- "Substring matching direction" → alias "fast" matches model "fast-chat" (alias is substring of input), but alias "fast-chat" does NOT match model "fast"
 - Debug: `LOG_LEVEL=DEBUG` to see each resolution phase
 
 **Step 8: Add Appendix A — AliasManager Architecture (for developers)**
@@ -197,7 +203,7 @@ hug commit -m "docs: complete model resolution guide (phases 4-7, examples, appe
 
 ---
 
-### Task 2: Fix `docs/model-aliases.md` — MatchRanker priority and tables
+### Task 2: Fix `docs/model-aliases.md` — MatchRanker priority, tables, and inaccuracies
 
 **Files:**
 - Modify: `docs/model-aliases.md`
@@ -224,15 +230,27 @@ Find any mention of match priority (search for "exact match", "longest", "alphab
 
 Note the **new item 3**: default-target provider preference. This was missing from all docs.
 
+**Step 2b: Fix "target values cannot use provider prefixes" (line 14)**
+
+The current doc says alias target values cannot use provider prefixes. This is INCORRECT for TOML-defined aliases, which CAN and DO use `provider:model` format (e.g., `haiku = "zai:haiku"` in defaults.toml). This restriction applies only to environment variable aliases (`{PROVIDER}_ALIAS_{NAME}`).
+
+Fix the text to clarify: "Environment variable alias values should not contain provider prefixes, as the provider is implied by the variable name. TOML-defined aliases (in `[provider.aliases]` or `[defaults.aliases]`) CAN use `provider:model` format for cross-provider chaining."
+
+**Step 2c: Fix "across all providers" claim (line 143)**
+
+The current doc says alias matching searches "across all providers." This is INCORRECT for bare model names. When a model has no `:` prefix, ModelManager scopes the search to the default provider only. Cross-provider search only happens when the model explicitly has a `provider:` prefix.
+
+Fix to: "For bare model names (no provider prefix), alias matching is scoped to the default provider only. For explicitly prefixed models (`provider:model`), matching is scoped to that provider."
+
 **Step 3: Fix the Built-in Fallback Aliases table**
 
-Currently only shows Poe provider. Replace with the full three-provider table from CLAUDE.md:
+Currently only shows Poe provider. Replace with the full three-provider table. **IMPORTANT: Pull values from `src/config/defaults.toml`, NOT from CLAUDE.md (which is stale).**
 
 | Special Name | Poe Provider | OpenAI Provider | Anthropic Provider |
 |--------------|-------------|-----------------|-------------------|
-| `haiku` | `grok-4.1-fast-non-reasoning` | `gpt-5.1-mini` | `claude-3-5-haiku-20241022` |
-| `sonnet` | `glm-4.6` | `gpt-5.1-codex` | `claude-3-5-sonnet-20241022` |
-| `opus` | `gpt-5.2` | `gpt-5.2` | `claude-3-opus-20240229` |
+| `haiku` | `gpt-5.1-mini` | `gpt-5.1-mini` | `claude-3-5-haiku-20241022` |
+| `sonnet` | `gpt-5.1-codex-mini` | `gpt-5.1-codex` | `claude-3-5-sonnet-20241022` |
+| `opus` | `gpt-5.1-codex-max` | `gpt-5.2` | `claude-3-opus-20240229` |
 
 **Step 4: Commit**
 
@@ -274,13 +292,21 @@ hug commit -m "docs: expand fallback aliases to all providers, add cross-referen
 - Modify: `README.md`
 - Modify: `docs/provider-routing-guide.md` (if it exists)
 
-**Step 1: Add link in CLAUDE.md**
+**Step 1: Add link in CLAUDE.md AND fix stale Poe fallback table**
 
 At line 543 (the "Using Model Aliases" section header area), add after the intro sentence:
 
 ```markdown
 > For the complete model resolution pipeline (how bare names, profiles, and aliases interact), see [Model Resolution Guide](docs/model-resolution.md).
 ```
+
+Also fix the stale Built-in Fallback Aliases table (around line 605). **IMPORTANT: Pull values from `src/config/defaults.toml`, NOT from any existing doc.** Current CLAUDE.md has stale Poe values. Replace with:
+
+| Alias  | Poe Provider | OpenAI Provider | Anthropic Provider |
+|--------|-------------|-----------------|-------------------|
+| haiku  | gpt-5.1-mini | gpt-5.1-mini   | claude-3-5-haiku-20241022 |
+| sonnet | gpt-5.1-codex-mini | gpt-5.1-codex | claude-3-5-sonnet-20241022 |
+| opus   | gpt-5.1-codex-max | gpt-5.2   | claude-3-opus-20240229 |
 
 **Step 2: Add section in README.md**
 
@@ -352,6 +378,9 @@ Replace with accurate 7-phase docstring:
 
     Returns:
         Tuple[str, str]: (provider_name, actual_model_name)
+
+    Note:
+        If you add or remove a phase, update docs/model-resolution.md.
     """
 ```
 
@@ -375,11 +404,18 @@ grep -o '\[.*\](.*)' docs/model-resolution.md
 ls docs/model-aliases.md docs/fallback-aliases.md docs/provider-routing-guide.md
 ```
 
-**Step 2: Verify consistency**
+**Step 2: Verify consistency (IMPORTANT: check against defaults.toml, not other docs)**
 
-- Fallback alias tables match across CLAUDE.md, docs/model-aliases.md, docs/fallback-aliases.md
+- Fallback alias tables in ALL locations (CLAUDE.md, docs/model-aliases.md, docs/fallback-aliases.md, docs/model-resolution.md) match `src/config/defaults.toml`
+- Verify by extracting actual values:
+  ```bash
+  grep -A5 '\[poe\.aliases\]' src/config/defaults.toml
+  grep -A5 '\[openai\.aliases\]' src/config/defaults.toml
+  grep -A5 '\[anthropic\.aliases\]' src/config/defaults.toml
+  ```
 - MatchRanker priority documented identically in docs/model-resolution.md and docs/model-aliases.md
 - resolve_model() docstring phases match the guide's phases
+- Provider scoping description is correct (":" scopes to that provider, not cross-provider)
 
 **Step 3: Run existing tests to ensure no code regressions**
 
