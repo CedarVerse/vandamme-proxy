@@ -108,6 +108,7 @@ class ProviderManager(ProviderClientFactory):
         self._default_selector = default_selector or DefaultProviderSelector(
             default_provider=target,  # DefaultProviderSelector still uses old naming internally
             source=source,
+            profile_manager=profile_manager,
         )
 
         # Load tracking
@@ -147,6 +148,15 @@ class ProviderManager(ProviderClientFactory):
         (which may be a profile or provider).
         """
         return self._default_selector.actual_default
+
+    @property
+    def default_profile(self) -> str | None:
+        """Get the configured default profile name, if any.
+
+        Returns None if the default target is a provider, not a profile.
+        Use this for request-time profile alias resolution.
+        """
+        return self._default_selector.default_profile
 
     @property
     def default_provider_source(self) -> str:

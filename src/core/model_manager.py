@@ -75,6 +75,18 @@ class ModelManager(ModelResolver):
                 # Continue with model_part for alias resolution
                 model = model_part
 
+        # If no explicit profile prefix was found and the default target is a profile,
+        # set the profile variable so the existing profile alias check handles it.
+        if profile is None and ":" not in model and not model.startswith("!"):
+            default_profile_name = getattr(self.provider_manager, "default_profile", None)
+            if default_profile_name:
+                _pm = getattr(self.provider_manager, "profile_manager", None)
+                if _pm:
+                    profile = _pm.get_profile(default_profile_name)
+                    logger.debug(
+                        f"Using default profile '{default_profile_name}' for bare model resolution"
+                    )
+
         # Apply alias resolution if available
         resolved_model = model
 
@@ -124,9 +136,10 @@ class ModelManager(ModelResolver):
 
         # Log the final resolution result
         if resolved_model != model:
+            via = "profile alias" if profile else "alias"
             logger.debug(
                 f"[ModelManager] Resolved: '{model}' -> "
-                f"'{provider_name}:{actual_model}' (via alias)"
+                f"'{provider_name}:{actual_model}' (via {via})"
             )
         else:
             logger.debug(
