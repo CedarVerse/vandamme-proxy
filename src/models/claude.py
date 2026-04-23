@@ -34,7 +34,7 @@ class ClaudeContentBlockThinking(BaseModel):
     dropping reasoning context when routing to Anthropic-compatible backends.
     """
 
-    type: Literal["thinking"] = "thinking"
+    type: Literal["thinking"]
     thinking: str
 
 
