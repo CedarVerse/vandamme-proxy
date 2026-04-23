@@ -677,7 +677,7 @@ ANTHROPIC_BASE_URL=http://localhost:8082 claude --model fast "Process this quick
 
 # Or rely on fallback defaults (no config needed!)
 export POE_API_KEY=your-key
-ANTHROPIC_BASE_URL=http://localhost:8082 claude --model sonnet "Uses glm-4.6 fallback"
+ANTHROPIC_BASE_URL=http://localhost:8082 claude --model sonnet "Uses gpt-5.1-codex-mini fallback"
 ```
 
 #### Provider Selection in Requests
