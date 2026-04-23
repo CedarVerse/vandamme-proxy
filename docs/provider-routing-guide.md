@@ -6,6 +6,8 @@ Vandamme Proxy transforms Claude Code's single-provider limitation into a flexib
 
 This guide explains how it works and helps you leverage its full capabilities.
 
+> For how model names are resolved (aliases, profiles, provider selection), see [Model Resolution Guide](model-resolution.md).
+
 ## From Single Provider to Multi-Provider Gateway
 
 ### Traditional Proxy Approach

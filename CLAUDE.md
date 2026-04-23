@@ -542,6 +542,8 @@ stat ~/.vandamme/oauth/chatgpt/auth.json
 
 Model aliases provide flexible model selection with case-insensitive substring matching and intelligent fallbacks.
 
+> For the complete model resolution pipeline (how bare names, profiles, and aliases interact), see [Model Resolution Guide](docs/model-resolution.md).
+
 #### Configuration Methods
 
 1. **Environment Variables** (highest priority):
@@ -602,11 +604,11 @@ haiku = "zai:haiku"
 
 The proxy automatically provides sensible defaults for common model names:
 
-| Alias  | Poe Provider              | OpenAI Provider       | Anthropic Provider               |
-|--------|--------------------------|-----------------------|----------------------------------|
-| haiku  | grok-4.1-fast-non-reasoning | gpt-5.1-mini          | claude-3-5-haiku-20241022        |
-| sonnet | glm-4.6                  | gpt-5.1-codex         | claude-3-5-sonnet-20241022       |
-| opus   | gpt-5.2                  | gpt-5.2               | claude-3-opus-20240229           |
+| Alias  | Poe Provider          | OpenAI Provider   | Anthropic Provider               |
+|--------|----------------------|-------------------|----------------------------------|
+| haiku  | gpt-5.1-mini         | gpt-5.1-mini      | claude-3-5-haiku-20241022        |
+| sonnet | gpt-5.1-codex-mini   | gpt-5.1-codex     | claude-3-5-sonnet-20241022       |
+| opus   | gpt-5.1-codex-max    | gpt-5.2           | claude-3-opus-20240229           |
 
 #### Discovering Recommended Models: Top Models Feature
 

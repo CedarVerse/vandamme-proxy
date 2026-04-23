@@ -294,6 +294,10 @@ ANTHROPIC_ALIAS_CHAT=claude-3-5-sonnet-20241022
 
 **[📚 Fallback Aliases →](docs/fallback-aliases.md)**
 
+Every model name passes through a 7-phase resolution pipeline: profile prefix → default profile → profile aliases → literal bypass → AliasManager → provider prefix → final result.
+
+For the full guide with examples, see **[Model Resolution →](docs/model-resolution.md)**.
+
 ---
 
 ### Dual API Format Support
