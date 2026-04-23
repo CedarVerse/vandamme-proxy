@@ -16,7 +16,7 @@ MAKEFLAGS += --no-print-directory
 # If user has a global VIRTUAL_ENV set, it can cause pytest to use wrong venv
 unexport VIRTUAL_ENV
 
-.PHONY: help dev-env-init dev-deps-sync run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick test-on-demand coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check playwright-install test-ui .ensure-server-running .ensure-external-opt-in
+.PHONY: help dev-env-init dev-deps-sync dev-env-link run dev health clean watch doctor check-install sanitize format lint typecheck security-check validate test test-unit test-integration test-external test-e2e test-all test-quick test-on-demand coverage check check-quick ci build all pre-commit docker-build docker-up docker-down docker-logs docker-restart docker-clean build-cli clean-binaries version version-set version-bump tag-release release-check release-build release-publish release release-full release-patch release-minor release-major info env-template deps-check playwright-install test-ui .ensure-server-running .ensure-external-opt-in
 
 # ============================================================================
 # Configuration
@@ -137,6 +137,15 @@ endif
 	@printf "$(CYAN)→ Verifying installation...$(RESET)\n"
 	$(MAKE) check-install
 	@printf "$(BOLD)$(CYAN)✅ Dependencies synced, CLI installed$(RESET)\n"
+
+dev-env-link: ## Install vdm + claude.vdm globally (~/.local/bin) via uv tool
+	@printf "$(BOLD)$(CYAN)Installing CLI tools to ~/.local/bin...$(RESET)\n"
+	$(UV) tool install --force -e .
+	@printf "$(CYAN)Checking vdm...$(RESET)\n"
+	@vdm version || (printf "$(RED)❌ vdm not on PATH$(RESET)\n" && exit 1)
+	@printf "$(CYAN)Checking claude.vdm...$(RESET)\n"
+	@command -v claude.vdm >/dev/null 2>&1 || (printf "$(RED)❌ claude.vdm not on PATH$(RESET)\n" && exit 1)
+	@printf "$(BOLD)$(GREEN)✅ vdm and claude.vdm available globally$(RESET)\n"
 
 # ============================================================================
 # Development
