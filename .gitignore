@@ -186,3 +186,4 @@ src/_version.py
 /vandamme-config.toml
 .tmp*
 .gstack/
+.worktrees/
