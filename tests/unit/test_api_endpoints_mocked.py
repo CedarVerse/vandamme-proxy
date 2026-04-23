@@ -1011,6 +1011,127 @@ def test_kimi_reasoning_content_response_streaming(mock_openai_api):
 
 
 @pytest.mark.unit
+def test_kimi_reasoning_with_tool_calls_multiturn(mock_openai_api):
+    """Multi-turn: assistant message with both thinking and tool_use preserves reasoning_content.
+
+    This reproduces the original error that motivated the reasoning-content passthrough
+    feature: Kimi's API returns 400 when ``reasoning_content`` is missing from assistant
+    tool-call messages in multi-turn conversations.  The proxy must forward thinking
+    blocks as ``reasoning_content`` *alongside* ``tool_calls`` in the upstream request,
+    and conversely convert ``reasoning_content`` + ``tool_calls`` in the upstream
+    response back into Claude-format thinking + tool_use content blocks.
+
+    Both directions are validated:
+    - Request path: Claude thinking blocks -> OpenAI ``reasoning_content`` field
+    - Response path: OpenAI ``reasoning_content`` -> Claude thinking content block
+    - Tool calls are preserved in both directions with name sanitization.
+    """
+    from src.main import app
+
+    mock_openai_api.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-kimi-mt",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "kimi-k2-thinking-turbo",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "reasoning_content": "I should call a tool.",
+                            "tool_calls": [
+                                {
+                                    "id": "call_abc",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_weather",
+                                        "arguments": '{"city": "NYC"}',
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "kimi:sonnet",
+                "max_tokens": 200,
+                "messages": [
+                    {"role": "user", "content": "Check weather in NYC"},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {"type": "thinking", "thinking": "I should call a tool."},
+                            {
+                                "type": "tool_use",
+                                "id": "toolu_prev",
+                                "name": "get weather",
+                                "input": {"city": "NYC"},
+                            },
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "toolu_prev",
+                                "content": "Sunny, 72F",
+                            }
+                        ],
+                    },
+                ],
+                "tools": [
+                    {
+                        "name": "get weather",
+                        "description": "Get weather",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                    }
+                ],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+
+    # Verify upstream request preserved reasoning_content on the assistant tool-call message.
+    # This is the critical assertion: without reasoning_content, Kimi returns 400.
+    upstream_json = json.loads(mock_openai_api.calls[-1].request.content)
+    assistant_msgs = [m for m in upstream_json["messages"] if m["role"] == "assistant"]
+    assert len(assistant_msgs) == 1
+    assert "reasoning_content" in assistant_msgs[0]
+    assert assistant_msgs[0]["reasoning_content"] == "I should call a tool."
+    assert "tool_calls" in assistant_msgs[0]
+    assert assistant_msgs[0]["tool_calls"][0]["function"]["name"] == "get_weather"
+
+    # Verify response includes thinking block from upstream reasoning_content
+    data = response.json()
+    thinking_blocks = [b for b in data["content"] if b.get("type") == "thinking"]
+    assert len(thinking_blocks) == 1
+    assert thinking_blocks[0]["thinking"] == "I should call a tool."
+    # Verify tool_use block is present with original (un-sanitized) name
+    tool_use_blocks = [b for b in data["content"] if b.get("type") == "tool_use"]
+    assert len(tool_use_blocks) == 1
+    assert tool_use_blocks[0]["name"] == "get weather"
+
+
+@pytest.mark.unit
 def test_non_thinking_provider_ignores_reasoning_content_streaming(mock_openai_api):
     """Providers without reasoning_content_passthrough must NOT produce thinking SSE events.
 
