@@ -116,7 +116,7 @@ def ingest_openai_chunk(state: OpenAIToClaudeStreamState, chunk: dict[str, Any])
     # block re-opens at index 1.  If content were processed first, it would emit to
     # index 0 (the text block) and then the reshuffle would leave orphaned events.
     reasoning = delta.get("reasoning_content")
-    if reasoning is not None and state.reasoning_content_passthrough:
+    if reasoning and state.reasoning_content_passthrough:
         if not state.reasoning_block_started:
             state.reasoning_block_started = True
             state.reasoning_block_index = 0
