@@ -262,6 +262,7 @@ async def convert_openai_streaming_to_claude(
     request_id: str | None = None,
     metrics: Any = None,
     enable_usage_tracking: bool | None = None,
+    reasoning_content_passthrough: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Convert OpenAI streaming response to Claude streaming format.
 
@@ -285,6 +286,10 @@ async def convert_openai_streaming_to_claude(
         openai_client: OpenAI client - used to cancel requests on disconnect.
         request_id: Unique request identifier for logging and cancellation.
         metrics: Metrics object from request tracker (populated if provided).
+        reasoning_content_passthrough: When True, convert upstream ``reasoning_content``
+            deltas into Claude-format ``thinking`` SSE events.  Must match the
+            provider's flag to prevent thinking blocks leaking to clients that
+            don't expect them.
 
     Yields:
         Server-Sent Event (SSE) formatted strings in Claude API format.
@@ -346,6 +351,7 @@ async def convert_openai_streaming_to_claude(
     state = OpenAIToClaudeStreamState(
         message_id=message_id,
         tool_name_map_inverse=tool_name_map_inverse,
+        reasoning_content_passthrough=reasoning_content_passthrough,
     )
 
     usage_data = {"input_tokens": 0, "output_tokens": 0}

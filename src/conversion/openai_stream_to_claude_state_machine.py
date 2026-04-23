@@ -27,6 +27,16 @@ class OpenAIToClaudeStreamState:
 
     final_stop_reason: str = Constants.STOP_END_TURN
 
+    # Reasoning content tracking for thinking models (Kimi, DeepSeek, etc.)
+    # When reasoning_content_passthrough is True, upstream reasoning_content deltas
+    # are converted to Claude-format thinking SSE events.
+    # Design: we gate on this flag rather than the raw presence of reasoning_content
+    # because non-thinking providers (e.g. OpenAI) may sometimes include the field
+    # unexpectedly, and the Claude client does not expect thinking blocks from them.
+    reasoning_content_passthrough: bool = False
+    reasoning_block_started: bool = False
+    reasoning_block_index: int = -1  # Set when first reasoning_content arrives
+
     def __post_init__(self) -> None:
         self.tool_id_allocator = ToolCallIdAllocator(id_prefix=f"toolu_{self.message_id}")
 
@@ -98,6 +108,60 @@ def ingest_openai_chunk(state: OpenAIToClaudeStreamState, chunk: dict[str, Any])
     finish_reason = choice.get("finish_reason")
 
     out: list[str] = []
+
+    # Handle reasoning_content deltas (thinking models: Kimi, DeepSeek, etc.)
+    # This MUST be checked before content deltas because the first reasoning chunk
+    # triggers a block-index reshuffle: the premature text block at index 0 (emitted
+    # by initial_events) is closed, a thinking block opens at index 0, and the text
+    # block re-opens at index 1.  If content were processed first, it would emit to
+    # index 0 (the text block) and then the reshuffle would leave orphaned events.
+    reasoning = delta.get("reasoning_content")
+    if reasoning is not None and state.reasoning_content_passthrough:
+        if not state.reasoning_block_started:
+            state.reasoning_block_started = True
+            state.reasoning_block_index = 0
+            # Close the premature text block that initial_events opened at index 0.
+            # The Claude client expects thinking blocks to precede text blocks, so
+            # we must insert the thinking block at index 0 and shift text to index 1.
+            out.append(
+                _sse(
+                    Constants.EVENT_CONTENT_BLOCK_STOP,
+                    {"type": Constants.EVENT_CONTENT_BLOCK_STOP, "index": 0},
+                )
+            )
+            # Open thinking block at index 0
+            out.append(
+                _sse(
+                    Constants.EVENT_CONTENT_BLOCK_START,
+                    {
+                        "type": Constants.EVENT_CONTENT_BLOCK_START,
+                        "index": 0,
+                        "content_block": {"type": Constants.CONTENT_THINKING, "thinking": ""},
+                    },
+                )
+            )
+            # Re-open text block at index 1
+            out.append(
+                _sse(
+                    Constants.EVENT_CONTENT_BLOCK_START,
+                    {
+                        "type": Constants.EVENT_CONTENT_BLOCK_START,
+                        "index": 1,
+                        "content_block": {"type": Constants.CONTENT_TEXT, "text": ""},
+                    },
+                )
+            )
+            state.text_block_index = 1
+        out.append(
+            _sse(
+                Constants.EVENT_CONTENT_BLOCK_DELTA,
+                {
+                    "type": Constants.EVENT_CONTENT_BLOCK_DELTA,
+                    "index": state.reasoning_block_index,
+                    "delta": {"type": "thinking_delta", "thinking": reasoning},
+                },
+            )
+        )
 
     if delta and "content" in delta and delta["content"] is not None:
         out.append(
@@ -207,6 +271,18 @@ def final_events(
     include_message_stop: bool = True,
 ) -> list[str]:
     out: list[str] = []
+
+    # Close reasoning block first if it was started (thinking blocks precede text)
+    if state.reasoning_block_started:
+        out.append(
+            _sse(
+                Constants.EVENT_CONTENT_BLOCK_STOP,
+                {
+                    "type": Constants.EVENT_CONTENT_BLOCK_STOP,
+                    "index": state.reasoning_block_index,
+                },
+            )
+        )
 
     out.append(
         _sse(

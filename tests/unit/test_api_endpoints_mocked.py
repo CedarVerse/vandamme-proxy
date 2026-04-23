@@ -944,3 +944,124 @@ def test_non_thinking_provider_ignores_reasoning_content_response(mock_openai_ap
     text_blocks = [b for b in data["content"] if b.get("type") == "text"]
     assert len(text_blocks) == 1
     assert text_blocks[0]["text"] == "The answer is 42."
+
+
+@pytest.mark.unit
+def test_kimi_reasoning_content_response_streaming(mock_openai_api):
+    """Streaming reasoning_content deltas are converted to thinking SSE events.
+
+    When a provider has reasoning_content_passthrough=True (e.g. Kimi), the proxy
+    must convert upstream reasoning_content deltas into Claude-format thinking
+    content_block_start/delta/stop SSE events during streaming.
+
+    This exercises the state machine's ability to:
+    1. Close the premature text block (opened by initial_events)
+    2. Open a thinking block at index 0
+    3. Re-open text block at index 1
+    4. Emit thinking_delta events for each reasoning_content chunk
+    5. Close both blocks in final_events
+    """
+    from src.main import app
+
+    def _chunk(delta: dict, finish_reason=None) -> bytes:
+        """Build a single OpenAI SSE chunk as raw bytes."""
+        payload = {
+            "id": "chatcmpl-rs1",
+            "object": "chat.completion.chunk",
+            "created": 1677652288,
+            "model": "kimi",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+        return f"data: {json.dumps(payload)}\n\n".encode()
+
+    chunks = [
+        _chunk({"role": "assistant"}),
+        _chunk({"reasoning_content": "Let me"}),
+        _chunk({"reasoning_content": " think..."}),
+        _chunk({"content": "The answer."}),
+        _chunk({}, finish_reason="stop"),
+        b"data: [DONE]\n\n",
+    ]
+
+    mock_openai_api.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=httpx.Response(200, content=b"".join(chunks))
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "kimi:sonnet",
+                "max_tokens": 200,
+                "stream": True,
+                "messages": [{"role": "user", "content": "Think and answer"}],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    body = response.text
+    # Should contain thinking content block start and delta events
+    assert '"type": "thinking"' in body, "Expected thinking content block start in SSE stream"
+    assert "thinking_delta" in body, "Expected thinking_delta event in SSE stream"
+    assert '"thinking": "Let me"' in body, "Expected first reasoning chunk as thinking delta"
+    assert '"thinking": " think..."' in body, "Expected second reasoning chunk as thinking delta"
+    # Should also contain the text content
+    assert "The answer." in body, "Expected text content in SSE stream"
+
+
+@pytest.mark.unit
+def test_non_thinking_provider_ignores_reasoning_content_streaming(mock_openai_api):
+    """Providers without reasoning_content_passthrough must NOT produce thinking SSE events.
+
+    Even if an upstream provider unexpectedly returns reasoning_content deltas in a
+    streaming response, the proxy must ignore them for providers that don't have the
+    flag enabled. This prevents thinking blocks from leaking into SSE streams for
+    clients that don't expect them.
+    """
+    from src.main import app
+
+    def _chunk(delta: dict, finish_reason=None) -> bytes:
+        """Build a single OpenAI SSE chunk as raw bytes."""
+        payload = {
+            "id": "chatcmpl-nr1",
+            "object": "chat.completion.chunk",
+            "created": 1677652288,
+            "model": "gpt-4",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        }
+        return f"data: {json.dumps(payload)}\n\n".encode()
+
+    chunks = [
+        _chunk({"role": "assistant"}),
+        _chunk({"reasoning_content": "Unexpected reasoning"}),
+        _chunk({"content": "Just text."}),
+        _chunk({}, finish_reason="stop"),
+        b"data: [DONE]\n\n",
+    ]
+
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
+        return_value=httpx.Response(200, content=b"".join(chunks))
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "openai:gpt-4",
+                "max_tokens": 200,
+                "stream": True,
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    body = response.text
+    # NO thinking events should be present for non-flagged providers
+    assert '"type": "thinking"' not in body, (
+        "Thinking block must NOT appear for non-flagged provider"
+    )
+    assert "thinking_delta" not in body, "Thinking delta must NOT appear for non-flagged provider"
+    # Text content should still be present
+    assert "Just text." in body
