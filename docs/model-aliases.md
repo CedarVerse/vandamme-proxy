@@ -4,6 +4,8 @@
 
 The provider-specific alias mechanism allows you to create flexible model aliases scoped to specific providers. Using the pattern `<PROVIDER>_ALIAS_<NAME>`, you can create case-insensitive substring matching for model selection. This feature makes it easier to work with multiple models and providers by creating memorable names and automatic matching patterns.
 
+> **See also:** [Model Name Resolution Guide](model-resolution.md) — the complete pipeline from input to output.
+
 ## Key Features
 
 - **Case-Insensitive Matching**: `OPENAI_ALIAS_FAST` matches "fast", "FAST", "FastModel", etc.
@@ -11,7 +13,7 @@ The provider-specific alias mechanism allows you to create flexible model aliase
 - **Flexible Hyphen/Underscore Matching**: Aliases match model names regardless of whether they use hyphens or underscores
   - `OPENAI_ALIAS_MY_ALIAS` matches "my-alias", "my_alias", "oh-my-alias-model", and "oh-my_alias_model"
 - **Provider-Scoped**: Each alias is tied to a specific provider, eliminating ambiguity
-- **Target Values**: Target values cannot use provider prefixes as the provider is specified in the key itself
+- **Target Values**: Environment variable alias values should not contain provider prefixes, as the provider is implied by the variable name. TOML-defined aliases (in `[provider.aliases]` or `[defaults.aliases]`) CAN use `provider:model` format for cross-provider chaining.
 - **Flexible Naming**: Support any alias name, not just tier-specific ones
 - **Automatic Fallbacks**: Sensible defaults for common Claude model names (haiku, sonnet, opus) when not explicitly configured
 
@@ -19,11 +21,11 @@ The provider-specific alias mechanism allows you to create flexible model aliase
 
 The proxy provides automatic fallback aliases for common Claude model names. These are used when you haven't explicitly configured an alias for a model name:
 
-| Special Name | Poe Provider (Default) | Description |
-|--------------|------------------------|-------------|
-| `haiku` | `grok-4.1-fast-non-reasoning` | Fast, lightweight model |
-| `sonnet` | `glm-4.6` | Balanced, versatile model |
-| `opus` | `gpt-5.2` | Powerful, advanced model |
+| Alias | Poe Provider | OpenAI Provider | Anthropic Provider |
+|-------|-------------|-----------------|-------------------|
+| `haiku` | `gpt-5.1-mini` | `gpt-5.1-mini` | `claude-3-5-haiku-20241022` |
+| `sonnet` | `gpt-5.1-codex-mini` | `gpt-5.1-codex` | `claude-3-5-sonnet-20241022` |
+| `opus` | `gpt-5.1-codex-max` | `gpt-5.2` | `claude-3-opus-20240229` |
 
 These fallbacks are automatically applied when:
 - You use the special model name (e.g., "haiku", "sonnet", "opus")
@@ -45,7 +47,7 @@ Configure aliases using environment variables. These take precedence over fallba
 ```bash
 # Provider-specific aliases
 OPENAI_ALIAS_CHAT=gpt-4o
-POE_ALIAS_HAIKU= grok-4.1-fast-non-reasoning
+POE_ALIAS_HAIKU=gpt-5.1-mini
 ```
 
 ### 2. TOML Configuration Files (Fallback Defaults)
@@ -81,15 +83,16 @@ default-target = "openai"
 # These are only used when users haven't configured the alias themselves
 
 [poe.aliases]
-haiku = "grok-4.1-fast-non-reasoning"
-sonnet = "glm-4.6"
-opus = "gpt-5.2"
+haiku = "gpt-5.1-mini"
+sonnet = "gpt-5.1-codex-mini"
+opus = "gpt-5.1-codex-max"
 # You can add more aliases as needed
 fast = "model-1-turbo"
 
 [openai.aliases]
-haiku = "gpt-4o-mini"
-fast = "gpt-4o"
+haiku = "gpt-5.1-mini"
+sonnet = "gpt-5.1-codex"
+opus = "gpt-5.2"
 
 [anthropic.aliases]
 haiku = "claude-3-5-haiku-20241022"
@@ -104,8 +107,8 @@ Create tier-based aliases for consistent model selection:
 
 ```bash
 # Tier-based aliases for Claude Code model selection
-POE_ALIAS_HAIKU=grok-4.1-fast-non-reasoning
-OPENAI_ALIAS_SONNET=gpt-4o
+POE_ALIAS_HAIKU=gpt-5.1-mini
+OPENAI_ALIAS_SONNET=gpt-5.1-codex
 ANTHROPIC_ALIAS_OPUS=claude-3-opus-20240229
 ```
 
@@ -116,7 +119,7 @@ Create aliases for specific use cases:
 ```bash
 # Use case-specific aliases
 ANTHROPIC_ALIAS_CHAT=claude-3-5-sonnet-20241022
-OPENAI_ALIAS_FAST=gpt-4o-mini
+OPENAI_ALIAS_FAST=gpt-5.1-mini
 OPENAI_ALIAS_SMART=o1-preview
 OPENAI_ALIAS_CODE=o1-preview
 OPENAI_ALIAS_EMBED=text-embedding-ada-002
@@ -128,9 +131,9 @@ Create aliases for the same use case across different providers:
 
 ```bash
 # Fast models from different providers
-OPENAI_ALIAS_FAST=gpt-4o-mini
+OPENAI_ALIAS_FAST=gpt-5.1-mini
 ANTHROPIC_FAST=claude-3-5-haiku-20241022
-POE_FAST=grok-4.1-fast-non-reasoning
+POE_FAST=gpt-5.1-mini
 ```
 
 ## How It Works
@@ -140,7 +143,7 @@ POE_FAST=grok-4.1-fast-non-reasoning
 1. **Load Aliases**: Read all `<PROVIDER>_ALIAS_*` environment variables at startup
 2. **Validate Providers**: Ensure each provider exists in the configuration
 3. **Normalize**: Store alias names in lowercase for case-insensitive matching
-4. **Match**: Find aliases across all providers where the alias name is a substring of the requested model
+4. **Match**: For bare model names (no provider prefix), alias matching is scoped to the default provider only. For explicitly prefixed models (`provider:model`), matching is scoped to that provider.
 5. **Prioritize**: Select the best match based on priority rules
 6. **Resolve**: Return the provider-prefixed target value
 
@@ -148,27 +151,28 @@ POE_FAST=grok-4.1-fast-non-reasoning
 
 When multiple aliases match a model name:
 
-1. **Exact Match First**: If an alias exactly matches the model name, it's chosen immediately
+1. **Exact Match Over Substring Match**: If an alias exactly matches the model name, it's chosen immediately
    - Underscores in aliases are converted to hyphens for exact matching
-2. **Longest Substring**: Among substring matches, the longest alias name wins
-3. **Provider Order**: If multiple aliases have the same length, sort by provider name alphabetically
-4. **Alphabetical Order**: Then sort by alias name alphabetically
+2. **Longer Alias Over Shorter**: Among substring matches, the longest alias name wins (more specific wins)
+3. **Default-Target Provider Preference**: The provider matching `VDM_DEFAULT_TARGET` wins ties
+4. **Provider Name, Alphabetical**: Sort by provider name alphabetically (e.g., "anthropic" before "openai")
+5. **Alias Name, Alphabetical**: Final tiebreaker — sort by alias name alphabetically
 
 ### Examples
 
 ```bash
 # Configuration
 ANTHROPIC_ALIAS_CHAT=claude-3-5-sonnet-20241022
-OPENAI_ALIAS_FAST=gpt-4o-mini
-POE_ALIAS_HAIKU=grok-4.1-fast-non-reasoning
+OPENAI_ALIAS_FAST=gpt-5.1-mini
+POE_ALIAS_HAIKU=gpt-5.1-mini
 ```
 
 **Resolution Examples**:
 
 - `"chat"` → `anthropic:claude-3-5-sonnet-20241022` (exact match)
 - `"ChatModel"` → `anthropic:claude-3-5-sonnet-20241022` (case-insensitive)
-- `"my-haiku-model"` → `poe:grok-4.1-fast-non-reasoning` (substring match)
-- `"Super-Fast-Response"` → `openai:gpt-4o-mini` (substring match)
+- `"my-haiku-model"` → `poe:gpt-5.1-mini` (substring match)
+- `"Super-Fast-Response"` → `openai:gpt-5.1-mini` (substring match)
 - `"chathaiiku"` → `anthropic:claude-3-5-sonnet-20241022` (longest match wins)
 - `"my-alias"` → `openai:gpt-4o` (from `OPENAI_ALIAS_MY_ALIAS`, underscore to hyphen)
 - `"oh-my-alias-is-great"` → `openai:gpt-4o` (from `OPENAI_ALIAS_MY_ALIAS`, substring match with normalization)
@@ -188,8 +192,8 @@ curl http://localhost:8082/v1/aliases
   "object": "list",
   "aliases": {
     "poe": {
-      "haiku": "grok-4.1-fast-non-reasoning",
-      "fast": "gpt-4o-mini"
+      "haiku": "gpt-5.1-mini",
+      "fast": "gpt-5.1-mini"
     },
     "openai": {
       "chat": "gpt-4o",
@@ -253,7 +257,7 @@ claude --model any-Haiku-model-will-do "Process this quickly"
 
 ```bash
 # Plain model name (provider is specified in the variable prefix)
-OPENAI_ALIAS_FAST=gpt-4o-mini
+OPENAI_ALIAS_FAST=gpt-5.1-mini
 
 # Model names with special characters
 CUSTOM_PROVIDER_ALIAS_SPECIAL=model-v1.2.3
@@ -272,21 +276,21 @@ CUSTOM_PROVIDER_ALIAS_SPECIAL=model-v1.2.3
 
 ```bash
 # Use descriptive, memorable names
-OPENAI_ALIAS_FAST=gpt-4o-mini
+OPENAI_ALIAS_FAST=gpt-5.1-mini
 OPENAI_ALIAS_SMART=o1-preview
 ANTHROPIC_ALIAS_CHAT=claude-3-5-sonnet-20241022
 
 # Use consistent patterns across providers
-OPENAI_ALIAS_FAST=gpt-4o-mini
+OPENAI_ALIAS_FAST=gpt-5.1-mini
 ANTHROPIC_ALIAS_FAST=claude-3-5-haiku-20241022
-POE_ALIAS_FAST=grok-4.1-fast-non-reasoning
+POE_ALIAS_FAST=gpt-5.1-mini
 ```
 
 ### Organize by Use Case
 
 ```bash
 # Development aliases
-OPENAI_ALIAS_DEV_FAST=gpt-4o-mini
+OPENAI_ALIAS_DEV_FAST=gpt-5.1-mini
 ANTHROPIC_ALIAS_DEV_SMART=o1-preview
 
 # Production aliases
@@ -294,7 +298,7 @@ ANTHROPIC_ALIAS_PROD_CHAT=claude-3-5-sonnet-20241022
 OPENAI_ALIAS_PROD_ANALYTICS=o1-preview
 
 # Testing aliases
-POE_ALIAS_TEST_MOCK=gpt-4o-mini
+POE_ALIAS_TEST_MOCK=gpt-5.1-mini
 ```
 
 ### Documentation
@@ -341,7 +345,7 @@ vdm server start
 
 **Sample Debug Output**:
 ```
-DEBUG: Resolved model alias 'my-haiku-model' -> 'poe:gpt-4o-mini' (matched alias 'haiku')
+DEBUG: Resolved model alias 'my-haiku-model' -> 'poe:gpt-5.1-mini' (matched alias 'haiku')
 ```
 
 ### Validation Commands
@@ -419,7 +423,7 @@ List all configured model aliases.
 
 | Variable | Format | Example | Description |
 |----------|--------|---------|-------------|
-| `<PROVIDER>_ALIAS_<NAME>` | `<TARGET_MODEL>` | `OPENAI_ALIAS_FAST=gpt-4o-mini` | Create a provider-scoped model alias |
+| `<PROVIDER>_ALIAS_<NAME>` | `<TARGET_MODEL>` | `OPENAI_ALIAS_FAST=gpt-5.1-mini` | Create a provider-scoped model alias |
 
 ### Error Codes
 
