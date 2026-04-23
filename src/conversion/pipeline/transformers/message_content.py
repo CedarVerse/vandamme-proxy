@@ -45,7 +45,13 @@ class MessageContentTransformer(RequestTransformer):
             if msg.role == Constants.ROLE_USER:
                 openai_messages.append(convert_claude_user_message(msg))
             elif msg.role == Constants.ROLE_ASSISTANT:
-                openai_messages.append(convert_claude_assistant_message(msg, context.tool_name_map))
+                openai_messages.append(
+                    convert_claude_assistant_message(
+                        msg,
+                        context.tool_name_map,
+                        reasoning_content_passthrough=context.reasoning_content_passthrough,
+                    )
+                )
                 # Lookahead: consume tool results if present
                 if self._should_consume_tool_results(messages, i):
                     i += 1

@@ -15,6 +15,7 @@ from src.core.logging import ConversationLogger
 from src.models.claude import (
     ClaudeContentBlockImage,
     ClaudeContentBlockText,
+    ClaudeContentBlockThinking,
     ClaudeContentBlockToolResult,
     ClaudeContentBlockToolUse,
     ClaudeMessage,
@@ -148,6 +149,9 @@ def _build_initial_context(
         tool_name_map=tool_name_map,
         tool_name_map_inverse=tool_name_map_inverse,
         openai_request=openai_request,
+        reasoning_content_passthrough=bool(
+            provider_config and provider_config.reasoning_content_passthrough
+        ),
     )
 
 
@@ -193,12 +197,24 @@ def convert_claude_user_message(msg: ClaudeMessage) -> dict[str, Any]:
 
 
 def convert_claude_assistant_message(
-    msg: ClaudeMessage, tool_name_map: dict[str, str] | None = None
+    msg: ClaudeMessage,
+    tool_name_map: dict[str, str] | None = None,
+    reasoning_content_passthrough: bool = False,
 ) -> dict[str, Any]:
-    """Convert Claude assistant message to OpenAI format."""
+    """Convert Claude assistant message to OpenAI format.
+
+    Args:
+        msg: The Claude assistant message to convert.
+        tool_name_map: Optional mapping of sanitized tool names.
+        reasoning_content_passthrough: When True, thinking blocks are extracted
+            and forwarded as the OpenAI 'reasoning_content' field.  Providers
+            like Kimi expose this field so reasoning models can consume
+            chain-of-thought context from previous assistant turns.
+    """
     tool_name_map = tool_name_map or {}
     text_parts = []
     tool_calls = []
+    reasoning_parts: list[str] = []
 
     if msg.content is None:
         return {"role": Constants.ROLE_ASSISTANT, "content": None}
@@ -222,6 +238,14 @@ def convert_claude_assistant_message(
                     },
                 }
             )
+        elif block.type == Constants.CONTENT_THINKING:
+            thinking_block = cast(ClaudeContentBlockThinking, block)
+            # Guard: only forward thinking content for providers that support it.
+            # Non-thinking providers should silently drop these blocks (current
+            # behavior preserved).  The `thinking` field may theoretically be
+            # None, so we check truthiness to avoid adding empty strings.
+            if reasoning_content_passthrough and thinking_block.thinking:
+                reasoning_parts.append(thinking_block.thinking)
 
     openai_message: dict[str, Any] = {"role": Constants.ROLE_ASSISTANT}
 
@@ -234,6 +258,12 @@ def convert_claude_assistant_message(
     # Set tool calls
     if tool_calls:
         openai_message["tool_calls"] = tool_calls
+
+    # Forward accumulated thinking blocks as reasoning_content for providers
+    # that support it (e.g. Kimi, OpenCodeGo).  Multiple thinking blocks are
+    # joined with newlines to preserve block boundaries.
+    if reasoning_parts:
+        openai_message["reasoning_content"] = "\n".join(reasoning_parts)
 
     return openai_message
 

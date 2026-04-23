@@ -38,6 +38,11 @@ class ConversionContext:
     tool_name_map: dict[str, str]
     tool_name_map_inverse: dict[str, str]
     openai_request: dict[str, Any]
+    # When True, thinking blocks in assistant messages are extracted and forwarded
+    # as the 'reasoning_content' field in the OpenAI request.  Providers like Kimi
+    # and OpenCodeGo set this so their reasoning models can consume chain-of-thought
+    # context from previous assistant turns.
+    reasoning_content_passthrough: bool = False
     metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 

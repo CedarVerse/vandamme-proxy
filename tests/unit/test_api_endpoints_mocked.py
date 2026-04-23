@@ -712,3 +712,121 @@ def test_openai_provider_no_reasoning_content_passthrough():
     openai_config = cfg.provider_manager.get_provider_config("openai")
     assert openai_config is not None
     assert openai_config.reasoning_content_passthrough is False
+
+
+@pytest.mark.unit
+def test_kimi_reasoning_content_request_passthrough(mock_openai_api):
+    """Thinking blocks in assistant messages are forwarded as reasoning_content to Kimi.
+
+    When a provider has reasoning_content_passthrough=True (e.g. Kimi), the proxy
+    must extract thinking blocks from Claude-format assistant messages and place them
+    into the OpenAI-format 'reasoning_content' field so the upstream provider can
+    consume chain-of-thought context.
+    """
+    from src.main import app
+
+    mock_openai_api.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-kimi-r1",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "kimi-k2-thinking-turbo",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Done"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "kimi:sonnet",
+                "max_tokens": 200,
+                "messages": [
+                    {"role": "user", "content": "Hello"},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {"type": "thinking", "thinking": "Let me think..."},
+                            {"type": "text", "text": "Hi there!"},
+                        ],
+                    },
+                    {"role": "user", "content": "Thanks"},
+                ],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+
+    # Verify the upstream request preserved reasoning_content
+    upstream_json = json.loads(mock_openai_api.calls[-1].request.content)
+    assistant_msg = [m for m in upstream_json["messages"] if m["role"] == "assistant"][0]
+    assert "reasoning_content" in assistant_msg
+    assert assistant_msg["reasoning_content"] == "Let me think..."
+
+
+@pytest.mark.unit
+def test_non_thinking_provider_no_reasoning_content(mock_openai_api):
+    """Non-thinking providers should NOT get reasoning_content in forwarded requests.
+
+    Providers without reasoning_content_passthrough (e.g. OpenAI) must silently
+    drop thinking blocks from assistant messages rather than forwarding them,
+    because those providers don't understand the reasoning_content field.
+    """
+    from src.main import app
+
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-1",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "gpt-4",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Done"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "openai:gpt-4",
+                "max_tokens": 200,
+                "messages": [
+                    {"role": "user", "content": "Hello"},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {"type": "thinking", "thinking": "Let me think..."},
+                            {"type": "text", "text": "Hi there!"},
+                        ],
+                    },
+                    {"role": "user", "content": "Thanks"},
+                ],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    upstream_json = json.loads(mock_openai_api.calls[-1].request.content)
+    assistant_msg = [m for m in upstream_json["messages"] if m["role"] == "assistant"][0]
+    assert "reasoning_content" not in assistant_msg
