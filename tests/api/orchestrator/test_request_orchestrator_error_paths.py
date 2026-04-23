@@ -12,116 +12,23 @@ Test Categories:
     6. Middleware Exception Handling - Middleware raises, malformed context
 """
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.api.orchestrator.request_orchestrator import RequestOrchestrator
 from src.models.claude import ClaudeMessagesRequest
 
+from .helpers import (
+    create_mock_config,
+    create_mock_model_manager,
+    create_mock_provider_config,
+    create_mock_provider_manager,
+)
+
 # =============================================================================
-# Helper Functions
+# Local helpers (only used in this file)
 # =============================================================================
-
-
-def _create_mock_provider_manager(
-    provider_config: Mock | None = None,
-    client: Mock | None = None,
-    api_key: str | None = "sk-prov-key",
-    has_middleware: bool = False,
-    middleware_chain: Mock | None = None,
-    get_client_raises: Exception | None = None,
-    get_api_key_raises: Exception | None = None,
-) -> Mock:
-    """Create a mock provider manager with proper attribute control.
-
-    Args:
-        provider_config: Mock provider config to return
-        client: Mock client to return
-        api_key: API key to return from get_next_provider_api_key
-        has_middleware: Whether to include middleware_chain attribute
-        middleware_chain: Mock middleware chain to use
-        get_client_raises: Exception to raise from get_client
-        get_api_key_raises: Exception to raise from get_next_provider_api_key
-
-    Returns:
-        A properly configured mock provider manager
-    """
-    if has_middleware and middleware_chain is not None:
-        pm = Mock(
-            spec_set=[
-                "get_provider_config",
-                "get_client",
-                "get_next_provider_api_key",
-                "middleware_chain",
-            ]
-        )
-        pm.middleware_chain = middleware_chain
-    else:
-        pm = Mock(spec_set=["get_provider_config", "get_client", "get_next_provider_api_key"])
-
-    pm.get_provider_config = Mock(return_value=provider_config)
-
-    if get_client_raises:
-        pm.get_client = Mock(side_effect=get_client_raises)
-    else:
-        pm.get_client = Mock(return_value=client)
-
-    if get_api_key_raises:
-        pm.get_next_provider_api_key = AsyncMock(side_effect=get_api_key_raises)
-    else:
-        pm.get_next_provider_api_key = AsyncMock(return_value=api_key)
-
-    return pm
-
-
-def _create_mock_provider_config(
-    name: str = "openai",
-    uses_passthrough: bool = False,
-    uses_oauth: bool = False,
-    is_anthropic_format: bool = False,
-) -> MagicMock:
-    """Create a mock ProviderConfig with explicit boolean defaults.
-
-    MagicMock auto-creates truthy attributes for undefined properties.
-    This factory forces every dispatch boolean to False so tests hit the
-    intended code path instead of accidentally entering the OAuth branch.
-
-    Background: _prepare_authentication has a three-way dispatch
-    (passthrough → oauth → api_key).  A bare MagicMock makes every
-    attribute truthy, so ``provider_config.uses_oauth`` evaluates as True
-    and the OAuth branch returns None before ``get_next_provider_api_key``
-    is ever called — breaking tests that expect a real API key.
-    """
-    config = MagicMock()
-    config.name = name
-    config.uses_passthrough = uses_passthrough
-    config.uses_oauth = uses_oauth
-    config.is_anthropic_format = is_anthropic_format
-    return config
-
-
-def _create_mock_model_manager(
-    provider: str = "openai", model: str = "gpt-4o", resolve_raises: Exception | None = None
-) -> Mock:
-    """Create a mock ModelManager.
-
-    Args:
-        provider: Provider name to return from resolve_model
-        model: Model name to return from resolve_model
-        resolve_raises: Exception to raise from resolve_model
-
-    Returns:
-        A mock ModelManager with resolve_model method.
-    """
-    mm = Mock(spec_set=["resolve_model"])
-
-    if resolve_raises:
-        mm.resolve_model = Mock(side_effect=resolve_raises)
-    else:
-        mm.resolve_model = Mock(return_value=(provider, model))
-
-    return mm
 
 
 def _create_base_request() -> ClaudeMessagesRequest:
@@ -131,70 +38,6 @@ def _create_base_request() -> ClaudeMessagesRequest:
         max_tokens=100,
         messages=[{"role": "user", "content": "Hello"}],
     )
-
-
-def _create_mock_config(
-    provider_config: Mock | None = None,
-    client: Mock | None = None,
-    api_key: str | None = "sk-prov-key",
-    has_middleware: bool = False,
-    middleware_chain: Mock | None = None,
-    log_request_metrics: bool = False,
-    get_client_raises: Exception | None = None,
-    get_api_key_raises: Exception | None = None,
-) -> Mock:
-    """Create a mock config with provider_manager and proper delegation.
-
-    Args:
-        provider_config: Mock provider config to return
-        client: Mock client to return
-        api_key: API key to return from get_next_provider_api_key
-        has_middleware: Whether to include middleware_chain attribute
-        middleware_chain: Mock middleware chain to use
-        log_request_metrics: Whether request metrics are enabled
-        get_client_raises: Exception to raise from get_client
-        get_api_key_raises: Exception to raise from get_next_provider_api_key
-
-    Returns:
-        A properly configured mock config that delegates to provider_manager
-    """
-    mock_provider_manager = _create_mock_provider_manager(
-        provider_config=provider_config,
-        client=client,
-        api_key=api_key,
-        has_middleware=has_middleware,
-        middleware_chain=middleware_chain,
-        get_client_raises=get_client_raises,
-        get_api_key_raises=get_api_key_raises,
-    )
-    # Build spec_set based on whether middleware is needed
-    if has_middleware:
-        spec = [
-            "log_request_metrics",
-            "provider_manager",
-            "get_provider_config",
-            "get_client",
-            "get_next_provider_api_key",
-            "middleware_chain",
-        ]
-    else:
-        spec = [
-            "log_request_metrics",
-            "provider_manager",
-            "get_provider_config",
-            "get_client",
-            "get_next_provider_api_key",
-        ]
-    mock_config = MagicMock(spec_set=spec)
-    mock_config.log_request_metrics = log_request_metrics
-    mock_config.provider_manager = mock_provider_manager
-    # Delegate client_factory methods to provider_manager
-    mock_config.get_provider_config = mock_provider_manager.get_provider_config
-    mock_config.get_client = mock_provider_manager.get_client
-    mock_config.get_next_provider_api_key = mock_provider_manager.get_next_provider_api_key
-    if has_middleware:
-        mock_config.middleware_chain = middleware_chain
-    return mock_config
 
 
 # =============================================================================
@@ -217,7 +60,7 @@ async def test_orchestrator_provider_resolution_failure_unknown_provider() -> No
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
     # Model manager raises exception for unknown provider
-    mock_model_manager = _create_mock_model_manager(
+    mock_model_manager = create_mock_model_manager(
         resolve_raises=ValueError("Unknown provider: 'unknown_provider'")
     )
 
@@ -253,7 +96,7 @@ async def test_orchestrator_provider_resolution_invalid_model_format() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_model_manager = _create_mock_model_manager(
+    mock_model_manager = create_mock_model_manager(
         resolve_raises=ValueError("Model name cannot be empty")
     )
 
@@ -289,7 +132,7 @@ async def test_orchestrator_provider_resolution_malformed_prefix() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_model_manager = _create_mock_model_manager(
+    mock_model_manager = create_mock_model_manager(
         resolve_raises=ValueError("Invalid model format: '::doublecolon'")
     )
 
@@ -322,10 +165,10 @@ async def test_orchestrator_provider_config_is_none() -> None:
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
     # Model manager returns provider name, but provider config is None
-    mock_model_manager = _create_mock_model_manager(provider="unknown", model="gpt-4o")
+    mock_model_manager = create_mock_model_manager(provider="unknown", model="gpt-4o")
 
     # Provider manager returns None for this provider
-    mock_config = _create_mock_config(provider_config=None)
+    mock_config = create_mock_config(provider_config=None)
 
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
@@ -369,14 +212,14 @@ async def test_orchestrator_request_conversion_pipeline_failure() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config()
+    mock_provider_config = create_mock_provider_config()
 
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -423,14 +266,14 @@ async def test_orchestrator_request_conversion_invalid_tool_schema() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config()
+    mock_provider_config = create_mock_provider_config()
 
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -463,14 +306,14 @@ async def test_orchestrator_request_conversion_missing_required_fields() -> None
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config()
+    mock_provider_config = create_mock_provider_config()
 
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -513,16 +356,16 @@ async def test_orchestrator_auth_provider_not_configured() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config(name="unconfigured")
+    mock_provider_config = create_mock_provider_config(name="unconfigured")
 
     # get_next_provider_api_key raises ValueError for unconfigured provider
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         get_api_key_raises=ValueError("Provider 'unconfigured' has no API keys configured"),
     )
 
-    mock_model_manager = _create_mock_model_manager(provider="unconfigured")
+    mock_model_manager = create_mock_model_manager(provider="unconfigured")
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -558,16 +401,16 @@ async def test_orchestrator_auth_empty_api_key_list() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config(name="empty_keys")
+    mock_provider_config = create_mock_provider_config(name="empty_keys")
 
     # get_next_provider_api_key raises for empty key list
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         get_api_key_raises=ValueError("Provider 'empty_keys' has no API keys configured"),
     )
 
-    mock_model_manager = _create_mock_model_manager(provider="empty_keys")
+    mock_model_manager = create_mock_model_manager(provider="empty_keys")
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -603,16 +446,16 @@ async def test_orchestrator_auth_rotation_failure() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config(name="rotation_fail")
+    mock_provider_config = create_mock_provider_config(name="rotation_fail")
 
     # get_next_provider_api_key raises during rotation
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         get_api_key_raises=RuntimeError("API key rotation failed"),
     )
 
-    mock_model_manager = _create_mock_model_manager(provider="rotation_fail")
+    mock_model_manager = create_mock_model_manager(provider="rotation_fail")
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -653,15 +496,15 @@ async def test_orchestrator_client_retrieval_unknown_provider() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config()
+    mock_provider_config = create_mock_provider_config()
 
     # get_client raises ValueError for unknown provider
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         get_client_raises=ValueError("Provider 'unknown' not found"),
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -701,15 +544,15 @@ async def test_orchestrator_client_initialization_failure() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config()
+    mock_provider_config = create_mock_provider_config()
 
     # get_client raises due to invalid config (e.g., bad base URL)
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         get_client_raises=ValueError("Invalid base URL: 'not-a-url'"),
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -754,15 +597,15 @@ async def test_orchestrator_metrics_tracker_not_configured() -> None:
     mock_http_request.app = MagicMock()
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
-    mock_provider_config = _create_mock_provider_config()
+    mock_provider_config = create_mock_provider_config()
 
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         log_request_metrics=True,
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch("src.api.orchestrator.request_orchestrator.get_request_tracker") as mock_get_tracker:
@@ -807,13 +650,13 @@ async def test_orchestrator_metrics_start_request_failure() -> None:
 
     mock_config = MagicMock(
         log_request_metrics=True,
-        provider_manager=_create_mock_provider_manager(
-            provider_config=_create_mock_provider_config(),
+        provider_manager=create_mock_provider_manager(
+            provider_config=create_mock_provider_config(),
             client=MagicMock(),
         ),
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
@@ -861,13 +704,13 @@ async def test_orchestrator_metrics_update_last_accessed_failure() -> None:
 
     mock_config = MagicMock(
         log_request_metrics=True,
-        provider_manager=_create_mock_provider_manager(
-            provider_config=_create_mock_provider_config(),
+        provider_manager=create_mock_provider_manager(
+            provider_config=create_mock_provider_config(),
             client=MagicMock(),
         ),
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with (
@@ -918,9 +761,9 @@ async def test_orchestrator_middleware_raises_exception() -> None:
         side_effect=ValueError("Middleware processing failed")
     )
 
-    mock_provider_config = _create_mock_provider_config(name="gemini")
+    mock_provider_config = create_mock_provider_config(name="gemini")
 
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="gemini-key",
@@ -928,7 +771,7 @@ async def test_orchestrator_middleware_raises_exception() -> None:
         middleware_chain=mock_middleware_chain,
     )
 
-    mock_model_manager = _create_mock_model_manager(provider="gemini")
+    mock_model_manager = create_mock_model_manager(provider="gemini")
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(
@@ -984,9 +827,9 @@ async def test_orchestrator_middleware_returns_malformed_context() -> None:
         )
     )
 
-    mock_provider_config = _create_mock_provider_config(name="gemini")
+    mock_provider_config = create_mock_provider_config(name="gemini")
 
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="gemini-key",
@@ -994,7 +837,7 @@ async def test_orchestrator_middleware_returns_malformed_context() -> None:
         middleware_chain=mock_middleware_chain,
     )
 
-    mock_model_manager = _create_mock_model_manager(provider="gemini")
+    mock_model_manager = create_mock_model_manager(provider="gemini")
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
     with patch(

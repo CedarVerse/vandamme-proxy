@@ -222,9 +222,7 @@ class ProviderConfigLoader:
             Provider configuration dictionary from TOML.
         """
         try:
-            from src.core.alias_config import AliasConfigLoader
-
-            loader = AliasConfigLoader()
+            loader = self._get_alias_config_loader()
             return loader.get_provider_config(provider_name)
         except ImportError:
             self._logger.debug(f"AliasConfigLoader not available for provider '{provider_name}'")

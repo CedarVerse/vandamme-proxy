@@ -49,7 +49,6 @@ if TYPE_CHECKING:
 
     from rich.console import Console
 
-    from src.core.alias_config import AliasConfigLoader
     from src.core.anthropic_client import AnthropicClient
     from src.core.config.middleware import MiddlewareConfig
     from src.core.profile_config import ProfileConfig
@@ -57,9 +56,6 @@ if TYPE_CHECKING:
     from src.core.responses_client import ResponsesAPIClient
 
 logger = logging.getLogger(__name__)
-
-# Lazy-loaded singleton for AliasConfigLoader
-_alias_config_loader: "AliasConfigLoader | None" = None
 
 
 class ProviderManager(ProviderClientFactory):
@@ -229,21 +225,6 @@ class ProviderManager(ProviderClientFactory):
         )
         # Update legacy attribute for backward compatibility
         self._default_provider = selected
-
-    # ==================== AliasConfigLoader Singleton ====================
-
-    def _get_alias_config_loader(self) -> "AliasConfigLoader":
-        """Get or create the singleton AliasConfigLoader instance.
-
-        Returns:
-            The shared AliasConfigLoader instance.
-        """
-        global _alias_config_loader
-        if _alias_config_loader is None:
-            from src.core.alias_config import AliasConfigLoader
-
-            _alias_config_loader = AliasConfigLoader()
-        return _alias_config_loader
 
     # ==================== Phase 4: Provider Name Normalization ====================
 

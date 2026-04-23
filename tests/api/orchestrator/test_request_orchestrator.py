@@ -1,7 +1,7 @@
 """Tests for RequestOrchestrator."""
 
 import time
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -9,143 +9,11 @@ from fastapi import HTTPException
 from src.api.orchestrator.request_orchestrator import RequestOrchestrator
 from src.models.claude import ClaudeMessagesRequest
 
-
-def _create_mock_provider_manager(
-    provider_config: Mock | None = None,
-    client: Mock | None = None,
-    api_key: str | None = "sk-prov-key",
-    has_middleware: bool = False,
-    middleware_chain: Mock | None = None,
-) -> Mock:
-    """Create a mock provider manager with proper attribute control.
-
-    Args:
-        provider_config: Mock provider config to return
-        client: Mock client to return
-        api_key: API key to return from get_next_provider_api_key
-        has_middleware: Whether to include middleware_chain attribute
-        middleware_chain: Mock middleware chain to use
-
-    Returns:
-        A properly configured mock provider manager
-    """
-    if has_middleware and middleware_chain is not None:
-        # Include middleware_chain in spec_set
-        pm = Mock(
-            spec_set=[
-                "get_provider_config",
-                "get_client",
-                "get_next_provider_api_key",
-                "middleware_chain",
-            ]
-        )
-        pm.middleware_chain = middleware_chain
-    else:
-        # No middleware_chain attribute at all
-        pm = Mock(spec_set=["get_provider_config", "get_client", "get_next_provider_api_key"])
-    pm.get_provider_config = Mock(return_value=provider_config)
-    pm.get_client = Mock(return_value=client)
-    pm.get_next_provider_api_key = AsyncMock(return_value=api_key)
-    return pm
-
-
-def _create_mock_provider_config(
-    name: str = "openai",
-    uses_passthrough: bool = False,
-    uses_oauth: bool = False,
-    is_anthropic_format: bool = False,
-) -> MagicMock:
-    """Create a mock ProviderConfig with explicit boolean defaults.
-
-    MagicMock auto-creates truthy attributes for undefined properties.
-    This factory forces every dispatch boolean to False so tests hit the
-    intended code path instead of accidentally entering the OAuth branch.
-
-    Background: _prepare_authentication has a three-way dispatch
-    (passthrough → oauth → api_key).  A bare MagicMock makes every
-    attribute truthy, so ``provider_config.uses_oauth`` evaluates as True
-    and the OAuth branch returns None before ``get_next_provider_api_key``
-    is ever called — breaking tests that expect a real API key.
-    """
-    config = MagicMock()
-    config.name = name
-    config.uses_passthrough = uses_passthrough
-    config.uses_oauth = uses_oauth
-    config.is_anthropic_format = is_anthropic_format
-    return config
-
-
-def _create_mock_model_manager(provider: str = "openai", model: str = "gpt-4o") -> Mock:
-    """Create a mock ModelManager.
-
-    Args:
-        provider: Provider name to return from resolve_model
-        model: Model name to return from resolve_model
-
-    Returns:
-        A mock ModelManager with resolve_model method.
-    """
-    mm = Mock(spec_set=["resolve_model"])
-    mm.resolve_model = Mock(return_value=(provider, model))
-    return mm
-
-
-def _create_mock_config(
-    provider_config: Mock | None = None,
-    client: Mock | None = None,
-    api_key: str | None = "sk-prov-key",
-    has_middleware: bool = False,
-    middleware_chain: Mock | None = None,
-    log_request_metrics: bool = False,
-) -> Mock:
-    """Create a mock config with provider_manager and proper delegation.
-
-    Args:
-        provider_config: Mock provider config to return
-        client: Mock client to return
-        api_key: API key to return from get_next_provider_api_key
-        has_middleware: Whether to include middleware_chain attribute
-        middleware_chain: Mock middleware chain to use
-        log_request_metrics: Whether request metrics are enabled
-
-    Returns:
-        A properly configured mock config that delegates to provider_manager
-    """
-    mock_provider_manager = _create_mock_provider_manager(
-        provider_config=provider_config,
-        client=client,
-        api_key=api_key,
-        has_middleware=has_middleware,
-        middleware_chain=middleware_chain,
-    )
-    # Build spec_set based on whether middleware is needed
-    if has_middleware:
-        spec = [
-            "log_request_metrics",
-            "provider_manager",
-            "get_provider_config",
-            "get_client",
-            "get_next_provider_api_key",
-            "middleware_chain",
-        ]
-    else:
-        spec = [
-            "log_request_metrics",
-            "provider_manager",
-            "get_provider_config",
-            "get_client",
-            "get_next_provider_api_key",
-        ]
-    mock_config = MagicMock(spec_set=spec)
-    mock_config.log_request_metrics = log_request_metrics
-    mock_config.provider_manager = mock_provider_manager
-    # Delegate client_factory methods to provider_manager
-    mock_config.get_provider_config = mock_provider_manager.get_provider_config
-    mock_config.get_client = mock_provider_manager.get_client
-    mock_config.get_next_provider_api_key = mock_provider_manager.get_next_provider_api_key
-    if has_middleware:
-        mock_config.middleware_chain = middleware_chain
-    return mock_config
+from .helpers import (
+    create_mock_config,
+    create_mock_model_manager,
+    create_mock_provider_config,
+)
 
 
 @pytest.mark.unit
@@ -167,8 +35,8 @@ async def test_orchestrator_prepares_basic_context() -> None:
     mock_http_request.app.state.request_tracker = create_request_tracker()
 
     # Create mock config with provider_manager
-    mock_provider_config = _create_mock_provider_config()
-    mock_config = _create_mock_config(
+    mock_provider_config = create_mock_provider_config()
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="sk-prov-key",
@@ -176,7 +44,7 @@ async def test_orchestrator_prepares_basic_context() -> None:
         log_request_metrics=False,
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
 
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
@@ -227,8 +95,8 @@ async def test_orchestrator_with_metrics_enabled() -> None:
     mock_tracker.end_request = AsyncMock()
 
     # Create mock config with provider_manager
-    mock_provider_config = _create_mock_provider_config()
-    mock_config = _create_mock_config(
+    mock_provider_config = create_mock_provider_config()
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="sk-prov-key",
@@ -236,7 +104,7 @@ async def test_orchestrator_with_metrics_enabled() -> None:
         log_request_metrics=True,
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
 
     with (
         patch(
@@ -286,12 +154,12 @@ async def test_orchestrator_passthrough_validation_requires_client_key() -> None
     mock_http_request.is_disconnected = AsyncMock(return_value=False)
 
     # Create mock config with provider_manager for passthrough provider
-    mock_provider_config = _create_mock_provider_config(
+    mock_provider_config = create_mock_provider_config(
         name="anthropic",
         uses_passthrough=True,
         is_anthropic_format=True,
     )
-    mock_config = _create_mock_config(
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key=None,
@@ -299,7 +167,7 @@ async def test_orchestrator_passthrough_validation_requires_client_key() -> None
         log_request_metrics=False,
     )
 
-    mock_model_manager = _create_mock_model_manager(
+    mock_model_manager = create_mock_model_manager(
         provider="anthropic", model="claude-3-5-sonnet-20241022"
     )
 
@@ -350,8 +218,8 @@ async def test_orchestrator_client_disconnect_before_processing() -> None:
     mock_tracker.end_request = AsyncMock()
 
     # Create mock config with provider_manager
-    mock_provider_config = _create_mock_provider_config()
-    mock_config = _create_mock_config(
+    mock_provider_config = create_mock_provider_config()
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="sk-prov-key",
@@ -359,7 +227,7 @@ async def test_orchestrator_client_disconnect_before_processing() -> None:
         log_request_metrics=True,
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
 
     with (
         patch(
@@ -415,8 +283,8 @@ async def test_orchestrator_applies_middleware_preprocessing() -> None:
     mock_middleware_chain.process_request = AsyncMock(return_value=mock_processed_context)
 
     # Create mock config with provider_manager and middleware
-    mock_provider_config = _create_mock_provider_config(name="gemini")
-    mock_config = _create_mock_config(
+    mock_provider_config = create_mock_provider_config(name="gemini")
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="gemini-key",
@@ -425,7 +293,7 @@ async def test_orchestrator_applies_middleware_preprocessing() -> None:
         log_request_metrics=False,
     )
 
-    mock_model_manager = _create_mock_model_manager(provider="gemini", model="gemini-2.0-flash")
+    mock_model_manager = create_mock_model_manager(provider="gemini", model="gemini-2.0-flash")
 
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
@@ -468,8 +336,8 @@ async def test_orchestrator_no_middleware_when_not_configured() -> None:
     mock_http_request.is_disconnected = AsyncMock(return_value=False)
 
     # Create mock config with provider_manager (no middleware)
-    mock_provider_config = _create_mock_provider_config()
-    mock_config = _create_mock_config(
+    mock_provider_config = create_mock_provider_config()
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="sk-prov-key",
@@ -477,7 +345,7 @@ async def test_orchestrator_no_middleware_when_not_configured() -> None:
         log_request_metrics=False,
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
 
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 
@@ -508,7 +376,7 @@ async def test_orchestrator_no_middleware_when_not_configured() -> None:
 def test_orchestrator_initialization() -> None:
     """Test RequestOrchestrator initialization."""
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
     # Default: metrics enabled
     orchestrator = RequestOrchestrator(
         config=MagicMock(log_request_metrics=True), model_manager=mock_model_manager
@@ -540,8 +408,8 @@ async def test_orchestrator_context_contains_all_required_fields() -> None:
     start = time.time()
 
     # Create mock config with provider_manager
-    mock_provider_config = _create_mock_provider_config()
-    mock_config = _create_mock_config(
+    mock_provider_config = create_mock_provider_config()
+    mock_config = create_mock_config(
         provider_config=mock_provider_config,
         client=MagicMock(),
         api_key="sk-test-key",
@@ -549,7 +417,7 @@ async def test_orchestrator_context_contains_all_required_fields() -> None:
         log_request_metrics=False,
     )
 
-    mock_model_manager = _create_mock_model_manager()
+    mock_model_manager = create_mock_model_manager()
 
     orchestrator = RequestOrchestrator(config=mock_config, model_manager=mock_model_manager)
 

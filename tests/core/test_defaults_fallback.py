@@ -16,24 +16,20 @@ from src.core.provider_manager import ProviderManager
 
 @pytest.fixture(autouse=True)
 def _reset_config_loader_singletons():
-    """Reset module-level AliasConfigLoader singletons so mocks take effect.
+    """Reset module-level AliasConfigLoader singleton so mocks take effect.
 
-    Two modules cache AliasConfigLoader in module-level globals:
+    ProviderConfigLoader caches AliasConfigLoader in a module-level global:
     - src.core.provider.provider_config_loader._alias_config_loader
-    - src.core.provider_manager._alias_config_loader
 
     Without this, a prior test's real instance persists and bypasses
     the patched AliasConfigLoader class, causing the real defaults.toml
     (e.g., timeout=90) to win over the test's mock (e.g., timeout=60).
     """
     import src.core.provider.provider_config_loader as pcl_mod
-    import src.core.provider_manager as pm_mod
 
     pcl_mod._alias_config_loader = None
-    pm_mod._alias_config_loader = None
     yield
     pcl_mod._alias_config_loader = None
-    pm_mod._alias_config_loader = None
 
 
 class TestDefaultsTimeoutMaxRetries:
@@ -230,7 +226,15 @@ class TestDefaultsTimeoutMaxRetries:
                 os.environ.pop("TESTPROVIDER_API_KEY", None)
 
     def test_max_retries_not_defined_raises_error(self):
-        """max-retries not defined anywhere raises ConfigurationError."""
+        """max-retries not defined anywhere raises ConfigurationError.
+
+        NOTE: Timeout MUST be present in the mock defaults so that the
+        timeout validation (which is checked first in production code) passes,
+        allowing execution to reach the max-retries validation.  Without a
+        valid timeout, the timeout error fires first and the test asserts
+        on the wrong error message.  See _get_config_with_fallback() in
+        provider_config_loader.py for the validation order.
+        """
         with (
             patch.dict(os.environ, {}, clear=True),
             patch("src.core.alias_config.AliasConfigLoader") as mock_loader,
@@ -238,10 +242,10 @@ class TestDefaultsTimeoutMaxRetries:
             mock_instance = mock_loader.return_value
             mock_instance.load_config.return_value = {
                 "providers": {"testprovider": {"base-url": "https://test.com"}},
-                "defaults": {},
+                "defaults": {"timeout": 90},
             }
             mock_instance.get_provider_config.return_value = {"base-url": "https://test.com"}
-            mock_instance.get_defaults.return_value = {}
+            mock_instance.get_defaults.return_value = {"timeout": 90}
             mock_instance.get_defaults_aliases.return_value = {}
 
             os.environ["TESTPROVIDER_API_KEY"] = "test-key"
