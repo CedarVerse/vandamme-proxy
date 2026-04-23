@@ -50,7 +50,16 @@ max-retries = 3
 # Precedence: {PROVIDER}_ALIAS_{NAME} env > [provider.aliases] > [defaults.aliases] > not found
 [defaults.aliases]
 per-message = "poe:per-message"
-haiku = "zai:GLM-4.5-Air"
+# WHY these use chained aliases (e.g. "zai:haiku" not raw model names): updating
+# [zai.aliases] or [opencodego.aliases] automatically updates all profiles and
+# defaults that reference them — one change point instead of N.
+haiku = "zai:haiku"
+sonnet = "zai:sonnet"
+# WHY opus/long route to opencodego (flat-rate) instead of zai (per-token):
+# high-tier models are expensive on token billing but free on Go's flat-rate quota.
+opus = "opencodego:kimi-k2.6"
+long = "opencodego:mimo-v2.5-pro"
+personalagent = "zai:personalagent"
 docs = "!poe:ds"
 
 # ============================================================================
@@ -69,9 +78,13 @@ opus = "agentrouter:opus"
 timeout = 120
 max-retries = 4
 [profiles.top.aliases]
-haiku = "zai:opus"
-sonnet = "poe:gemini-flash"
-opus = "agentrouter:opus"
+# WHY mirrors [defaults.aliases] exactly: keeps "top" profile as the authoritative
+# routing table. If you need a different routing, diverge intentionally here.
+haiku = "zai:haiku"
+sonnet = "zai:sonnet"
+opus = "opencodego:kimi-k2.6"
+long = "opencodego:mimo-v2.5-pro"
+personalagent = "zai:personalagent"
 
 # ============================================================================
 # Providers
@@ -210,9 +223,15 @@ api-format = "anthropic"
 timeout = 90
 max-retries = 2
 [zai.aliases]
-haiku = "GLM-4.5-Air"
-sonnet = "GLM-4.7"
-opus = "GLM-4.7"
+# WHY GLM-4.7-Flash for haiku (not GLM-5): Flash is faster and cheaper for
+# routine tasks; GLM-5's reasoning capabilities are wasted on haiku-tier work.
+haiku = "GLM-4.7-Flash"
+sonnet = "GLM-5-Turbo"
+opus = "GLM-5.1"
+# GLM 5 Turbo is specifically optimized for the OpenClaw scenario. It has been trained to enhance capabilities crucial for OpenClaw tasks,
+# such as tool invocation, command following, timed and persistent tasks, and long-chain execution
+# https://docs.z.ai/guides/llm/glm-5-turbo#:~:text=Overview%20GLM-5-Turbo%20is,and%20long-chain%20execution.
+personalagent = "GLM-5-Turbo"
 
 # Z.AI OpenAI-compatible provider defaults
 [zaio]

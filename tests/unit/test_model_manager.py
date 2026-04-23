@@ -252,10 +252,10 @@ class TestModelManager:
 
             # Request "haiku" with default provider "xpoe"
             # Where xpoe.aliases.haiku = "zai:haiku"
-            # With recursive resolution, this further resolves zai.aliases.haiku -> "GLM-4.5-Air"
+            # With recursive resolution, this further resolves zai.aliases.haiku -> "GLM-4.7-Flash"
             provider, actual_model = model_manager.resolve_model("haiku")
 
-            # The cross-provider alias "zai:haiku" gets recursively resolved to "zai:GLM-4.5-Air"
-            # because zai.aliases.haiku = "GLM-4.5-Air" (from defaults.toml fallback)
+            # The cross-provider alias "zai:haiku" gets recursively resolved to "zai:GLM-4.7-Flash"
+            # because zai.aliases.haiku = "GLM-4.7-Flash" (from defaults.toml fallback)
             assert provider == "zai"
-            assert actual_model == "GLM-4.5-Air"
+            assert actual_model == "GLM-4.7-Flash"
