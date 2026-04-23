@@ -78,14 +78,17 @@ class ModelManager(ModelResolver):
         # If no explicit profile prefix was found and the default target is a profile,
         # set the profile variable so the existing profile alias check handles it.
         if profile is None and ":" not in model and not model.startswith("!"):
-            default_profile_name = getattr(self.provider_manager, "default_profile", None)
+            default_profile_name = self.provider_manager.default_profile
             if default_profile_name:
-                _pm = getattr(self.provider_manager, "profile_manager", None)
+                _pm = self.provider_manager.profile_manager
                 if _pm:
+                    # get_profile may return None if profile was removed after select()
                     profile = _pm.get_profile(default_profile_name)
-                    logger.debug(
-                        f"Using default profile '{default_profile_name}' for bare model resolution"
-                    )
+                    if profile:
+                        logger.debug(
+                            f"Using default profile '{default_profile_name}' "
+                            f"for bare model resolution"
+                        )
 
         # Apply alias resolution if available
         resolved_model = model
