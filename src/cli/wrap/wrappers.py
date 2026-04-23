@@ -21,9 +21,12 @@ class BaseWrapper:
         env = os.environ.copy()
         env["ANTHROPIC_BASE_URL"] = self.proxy_url
 
-        # If proxy requires authentication, use placeholder
-        # The actual API key will be validated by the proxy
-        env["ANTHROPIC_API_KEY"] = "proxy-auth-required"
+        # WORKAROUND: Set to empty string instead of a placeholder to avoid Claude Code's
+        # auth conflict warning ("Both a token and an API key are set"). Claude Code treats
+        # a non-empty ANTHROPIC_API_KEY as API key auth, which conflicts with the claude.ai
+        # OAuth token. Empty string disables the API key path without unsetting the var.
+        # The proxy ignores the client's API key unless PROXY_API_KEY is configured.
+        env["ANTHROPIC_API_KEY"] = ""
 
         return env
 
