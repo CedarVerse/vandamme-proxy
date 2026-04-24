@@ -107,6 +107,21 @@ class RequestContext:
         return self.provider_config.is_responses_format if self.provider_config else False
 
     @property
+    def reasoning_content_passthrough(self) -> bool:
+        """Check if reasoning_content should be passed through for this provider/model.
+
+        Combines the explicit provider config flag with auto-detection from the
+        resolved model name.  Providers like OpenRouter may route to Kimi/DeepSeek
+        thinking models without having the flag explicitly set.
+        """
+        if self.provider_config and self.provider_config.reasoning_content_passthrough:
+            return True
+        # Auto-detect from model name for providers that don't set the flag.
+        from src.conversion.request_converter import _is_thinking_model
+
+        return _is_thinking_model(self.resolved_model)
+
+    @property
     def openai_messages(self) -> list[dict[str, Any]]:
         """Get messages from OpenAI request."""
         messages = self.openai_request.get("messages", [])

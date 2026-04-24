@@ -77,6 +77,36 @@ def _should_consume_tool_results(messages: list[ClaudeMessage], index: int) -> b
     return _is_tool_result_message(messages[index + 1])
 
 
+# Model-name substrings that indicate a thinking/reasoning model.
+# These models require `reasoning_content` on assistant messages with
+# `tool_calls`, even when no thinking block was present in the original
+# Claude message.  Must be lowercase for case-insensitive matching.
+_THINKING_MODEL_PATTERNS = (
+    "kimi-k2",
+    "kimi-k2.6",
+    "deepseek-r1",
+    "deepseek-reasoner",
+    "qwq",
+    "qwen3",
+    "glm-4.7-original",
+    "glm-5",
+    "think",
+    "reason",
+)
+
+
+def _is_thinking_model(model_name: str) -> bool:
+    """Check if a model name refers to a thinking/reasoning model.
+
+    Used as a fallback when the provider config doesn't explicitly set
+    ``reasoning_content_passthrough``.  Detects known model families that
+    use chain-of-thought reasoning and require ``reasoning_content`` in
+    assistant tool-call messages.
+    """
+    lower = model_name.lower()
+    return any(pattern in lower for pattern in _THINKING_MODEL_PATTERNS)
+
+
 def convert_claude_to_openai(
     claude_request: ClaudeMessagesRequest, model_manager: Any
 ) -> dict[str, Any]:
@@ -142,6 +172,16 @@ def _build_initial_context(
         "messages": [],
     }
 
+    # Determine reasoning_content_passthrough:
+    # 1. Explicit provider config takes priority
+    # 2. Fallback: auto-detect from model name for known thinking models.
+    #    Providers like nanogpt or openrouter may route to Kimi/DeepSeek thinking
+    #    models without having the flag explicitly set, causing Kimi to reject
+    #    requests where reasoning_content is missing from tool-call messages.
+    _rcpt = bool(provider_config and provider_config.reasoning_content_passthrough)
+    if not _rcpt:
+        _rcpt = _is_thinking_model(openai_model)
+
     return ConversionContext(
         claude_request=claude_request,
         provider_name=provider_name,
@@ -149,9 +189,7 @@ def _build_initial_context(
         tool_name_map=tool_name_map,
         tool_name_map_inverse=tool_name_map_inverse,
         openai_request=openai_request,
-        reasoning_content_passthrough=bool(
-            provider_config and provider_config.reasoning_content_passthrough
-        ),
+        reasoning_content_passthrough=_rcpt,
     )
 
 
@@ -262,7 +300,13 @@ def convert_claude_assistant_message(
     # Forward accumulated thinking blocks as reasoning_content for providers
     # that support it (e.g. Kimi, OpenCodeGo).  Multiple thinking blocks are
     # joined with newlines to preserve block boundaries.
-    if reasoning_parts:
+    #
+    # Kimi requires reasoning_content on ALL assistant messages with tool_calls
+    # when thinking is enabled — even if no thinking blocks were present in the
+    # original Claude message.  Without it, Kimi rejects the request with:
+    #   "thinking is enabled but reasoning_content is missing in assistant
+    #    tool call message at index N"
+    if reasoning_content_passthrough and tool_calls or reasoning_parts:
         openai_message["reasoning_content"] = "\n".join(reasoning_parts)
 
     return openai_message

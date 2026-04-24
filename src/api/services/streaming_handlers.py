@@ -158,11 +158,7 @@ class OpenAIStreamingHandler(StreamingHandler):
                 request_id=context.request_id,
                 metrics=context.metrics,
                 enable_usage_tracking=context.is_metrics_enabled,
-                reasoning_content_passthrough=(
-                    context.provider_config.reasoning_content_passthrough
-                    if context.provider_config
-                    else False
-                ),
+                reasoning_content_passthrough=context.reasoning_content_passthrough,
             )
 
             stream_with_error_handling = with_streaming_error_handling(
@@ -297,11 +293,7 @@ class ResponsesStreamingHandler(StreamingHandler):
                 request_id=context.request_id,
                 metrics=context.metrics,
                 enable_usage_tracking=context.is_metrics_enabled,
-                reasoning_content_passthrough=(
-                    context.provider_config.reasoning_content_passthrough
-                    if context.provider_config
-                    else False
-                ),
+                reasoning_content_passthrough=context.reasoning_content_passthrough,
             )
 
             # Step 5: Wrap with error handling and metrics finalisation.

@@ -1132,6 +1132,196 @@ def test_kimi_reasoning_with_tool_calls_multiturn(mock_openai_api):
 
 
 @pytest.mark.unit
+def test_kimi_tool_calls_without_thinking_block_still_sends_reasoning_content(mock_openai_api):
+    """Assistant message with tool_calls but NO thinking block must still include reasoning_content.
+
+    Kimi rejects requests where ``reasoning_content`` is absent from assistant tool-call
+    messages when thinking is enabled — even if the Claude client didn't include a thinking
+    block for that turn.  The proxy must emit an empty ``reasoning_content`` string in that
+    case to satisfy Kimi's validation.
+
+    Error without fix: "thinking is enabled but reasoning_content is missing in assistant
+    tool call message at index N"
+    """
+    from src.main import app
+
+    mock_openai_api.post("https://api.kimi.com/coding/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-kimi-nothink",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "kimi-k2-thinking-turbo",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Done.",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "kimi:sonnet",
+                "max_tokens": 200,
+                "messages": [
+                    {"role": "user", "content": "Check weather in NYC"},
+                    {
+                        # Assistant message with tool_use but NO thinking block
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "toolu_prev",
+                                "name": "get_weather",
+                                "input": {"city": "NYC"},
+                            },
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "toolu_prev",
+                                "content": "Sunny, 72F",
+                            }
+                        ],
+                    },
+                ],
+                "tools": [
+                    {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                    }
+                ],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+
+    # The critical assertion: reasoning_content must be present (even if empty)
+    # on assistant messages with tool_calls for Kimi/thinking-enabled providers.
+    upstream_json = json.loads(mock_openai_api.calls[-1].request.content)
+    assistant_msgs = [m for m in upstream_json["messages"] if m["role"] == "assistant"]
+    assert len(assistant_msgs) == 1
+    assert "reasoning_content" in assistant_msgs[0], (
+        "Kimi requires reasoning_content on tool-call messages"
+    )
+    assert assistant_msgs[0]["reasoning_content"] == ""
+    assert "tool_calls" in assistant_msgs[0]
+
+
+@pytest.mark.unit
+def test_thinking_model_auto_detection_sends_reasoning_content(mock_openai_api):
+    """Provider without passthrough flag still sends reasoning_content for thinking models.
+
+    When a provider like openrouter routes to a Kimi thinking model but doesn't
+    have ``reasoning-content-passthrough = true`` in config, the proxy must
+    auto-detect the model name and include ``reasoning_content`` on assistant
+    tool-call messages.  Without this, Kimi returns:
+      "thinking is enabled but reasoning_content is missing in assistant
+       tool call message at index N"
+    """
+    from src.main import app
+
+    # openrouter does NOT have reasoning-content-passthrough in defaults.toml
+    mock_openai_api.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-or",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "moonshotai/kimi-k2.6",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Done."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                # Direct model name with openrouter prefix triggers auto-detect
+                "model": "openrouter:moonshotai/kimi-k2.6",
+                "max_tokens": 200,
+                "messages": [
+                    {"role": "user", "content": "Check weather"},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_use",
+                                "id": "toolu_prev",
+                                "name": "get_weather",
+                                "input": {"city": "NYC"},
+                            },
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "toolu_prev",
+                                "content": "Sunny, 72F",
+                            }
+                        ],
+                    },
+                ],
+                "tools": [
+                    {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                    }
+                ],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+
+    # Auto-detection from model name must kick in even though provider
+    # lacks the explicit flag.
+    upstream_json = json.loads(mock_openai_api.calls[-1].request.content)
+    assistant_msgs = [m for m in upstream_json["messages"] if m["role"] == "assistant"]
+    assert len(assistant_msgs) == 1
+    assert "reasoning_content" in assistant_msgs[0], (
+        "Auto-detect should enable reasoning_content for kimi models"
+    )
+    assert assistant_msgs[0]["reasoning_content"] == ""
+
+
+@pytest.mark.unit
 def test_non_thinking_provider_ignores_reasoning_content_streaming(mock_openai_api):
     """Providers without reasoning_content_passthrough must NOT produce thinking SSE events.
 
