@@ -1376,3 +1376,92 @@ def test_non_thinking_provider_ignores_reasoning_content_streaming(mock_openai_a
     assert "thinking_delta" not in body, "Thinking delta must NOT appear for non-flagged provider"
     # Text content should still be present
     assert "Just text." in body
+
+
+@pytest.mark.unit
+def test_non_thinking_provider_no_reasoning_content_with_tool_calls(mock_openai_api):
+    """Non-thinking provider must NOT get reasoning_content, even with tool_calls + thinking blocks.
+
+    Guards against operator precedence bug in the condition:
+      `reasoning_content_passthrough and tool_calls or reasoning_parts`
+    Without parentheses, `reasoning_parts` being non-empty would bypass the
+    `reasoning_content_passthrough` gate and leak thinking content to providers
+    that don't understand it.
+    """
+    from src.main import app
+
+    mock_openai_api.post("https://api.openai.com/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-1",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "gpt-4",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Done"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            },
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/messages",
+            json={
+                "model": "openai:gpt-4",
+                "max_tokens": 200,
+                "messages": [
+                    {"role": "user", "content": "Hello"},
+                    {
+                        # Assistant with thinking + tool_use — both present
+                        "role": "assistant",
+                        "content": [
+                            {"type": "thinking", "thinking": "I should call a tool"},
+                            {
+                                "type": "tool_use",
+                                "id": "toolu_123",
+                                "name": "get_weather",
+                                "input": {"city": "NYC"},
+                            },
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "toolu_123",
+                                "content": "Sunny, 72F",
+                            }
+                        ],
+                    },
+                ],
+                "tools": [
+                    {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"],
+                        },
+                    }
+                ],
+            },
+            headers=TEST_HEADERS,
+        )
+
+    assert response.status_code == 200
+    upstream_json = json.loads(mock_openai_api.calls[-1].request.content)
+    assistant_msg = [m for m in upstream_json["messages"] if m["role"] == "assistant"][0]
+    assert "reasoning_content" not in assistant_msg, (
+        "Non-thinking provider must NOT receive reasoning_content, "
+        "even when thinking blocks + tool_calls are both present"
+    )
+    assert "tool_calls" in assistant_msg

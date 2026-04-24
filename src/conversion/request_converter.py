@@ -306,7 +306,7 @@ def convert_claude_assistant_message(
     # original Claude message.  Without it, Kimi rejects the request with:
     #   "thinking is enabled but reasoning_content is missing in assistant
     #    tool call message at index N"
-    if reasoning_content_passthrough and tool_calls or reasoning_parts:
+    if reasoning_content_passthrough and (tool_calls or reasoning_parts):
         openai_message["reasoning_content"] = "\n".join(reasoning_parts)
 
     return openai_message
