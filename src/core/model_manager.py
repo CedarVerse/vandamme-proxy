@@ -246,14 +246,8 @@ class ModelManager(ModelResolver):
                         resolved_model = (
                             self.alias_manager.resolve_alias(model, trace=trace) or model
                         )
-                    self._record_phase(
-                        trace,
-                        "AliasManager",
-                        model,
-                        "literal_bypass",
-                        resolved_model,
-                        reason="literal prefix '!' bypasses substring matching",
-                    )
+                    # AliasManager records its own "AliasManager resolution" phase when
+                    # trace is provided, so we don't duplicate it here.
                 else:
                     alias_count = self.alias_manager.get_alias_count()
                     logger.debug(f"Alias manager available with {alias_count} aliases")
@@ -278,26 +272,13 @@ class ModelManager(ModelResolver):
                             f"[ModelManager] Alias resolved: '{model}' -> '{alias_target}'"
                         )
                         resolved_model = alias_target
-                        self._record_phase(
-                            trace,
-                            "AliasManager",
-                            model,
-                            "matched",
-                            resolved_model,
-                            alias_target=alias_target,
-                        )
+                        # AliasManager records its own "AliasManager resolution" phase
                     else:
                         logger.debug(
                             f"No alias match found for '{model}', using original model name"
                         )
-                        self._record_phase(
-                            trace,
-                            "AliasManager",
-                            model,
-                            "no_match",
-                            model,
-                            reason="no alias found",
-                        )
+                        # AliasManager records its own "AliasManager resolution" phase
+                        # (with "no match" result) when trace is provided.
             else:
                 logger.debug("No aliases configured or alias manager unavailable")
                 self._record_phase(
