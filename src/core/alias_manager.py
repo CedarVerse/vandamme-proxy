@@ -561,6 +561,8 @@ class AliasManager:
         *during* chain execution, not available in the original context. Instead,
         we infer whether MatchRanker participated from the result structure.
         """
+        from src.core.model_resolution_trace import ResolverStep
+
         steps: list[ResolverStep] = []
         sorted_resolvers = sorted(self._resolver_chain._resolvers, key=lambda r: r.priority)
 
