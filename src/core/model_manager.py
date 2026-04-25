@@ -10,6 +10,7 @@ dependency inversion, eliminating circular imports.
 import logging
 from typing import TYPE_CHECKING
 
+from src.core.model_resolution_trace import ResolutionPhase, ResolutionTrace
 from src.core.protocols import ConfigProvider, ModelResolver
 
 if TYPE_CHECKING:
@@ -49,7 +50,40 @@ class ModelManager(ModelResolver):
         self.provider_manager = config.provider_manager  # type: ignore[attr-defined]
         self.alias_manager: AliasManager | None = getattr(config, "alias_manager", None)  # type: ignore[attr-defined]
 
-    def resolve_model(self, model: str) -> tuple[str, str]:
+    @staticmethod
+    def _record_phase(
+        trace: ResolutionTrace | None,
+        name: str,
+        input_model: str,
+        result: str,
+        output: str,
+        **details: object,
+    ) -> None:
+        """Append a resolution phase to the trace, if tracing is active.
+
+        This is a static method (no ``self`` dependency) so it can be called
+        from anywhere in the resolution pipeline without coupling to instance state.
+
+        Args:
+            trace: The ResolutionTrace accumulator, or None to silently skip.
+            name: Human-readable phase name (e.g., "Profile prefix detection").
+            input_model: Model name entering this phase.
+            result: "matched", "skipped", "parsed", or a descriptive label.
+            output: Model name leaving this phase.
+            **details: Phase-specific context for diagnostics (e.g., reason, profile_name).
+        """
+        if trace is not None:
+            trace.phases.append(
+                ResolutionPhase(
+                    name=name,
+                    input=input_model,
+                    result=result,
+                    output=output,
+                    details=details,
+                )
+            )
+
+    def resolve_model(self, model: str, *, trace: ResolutionTrace | None = None) -> tuple[str, str]:
         """Resolve model name to (provider, actual_model).
 
         The resolution pipeline runs these phases in order (first match wins):
@@ -72,7 +106,12 @@ class ModelManager(ModelResolver):
         """
         logger.debug(f"Starting model resolution for: '{model}'")
 
-        # NEW: Check for profile prefix FIRST (before provider)
+        # Save the original model name for trace recording (it may be mutated below).
+        original_model = model
+
+        # ---- Phase 1: Profile prefix detection ----
+        # Check for profile prefix FIRST (before provider).
+        # "top:haiku" -> if "top" is a profile, strip it and continue with "haiku".
         profile: ProfileConfig | None = None
         if ":" in model:
             potential_profile, model_part = model.split(":", 1)
@@ -80,11 +119,45 @@ class ModelManager(ModelResolver):
             if profile_manager and profile_manager.is_profile(potential_profile):
                 profile = profile_manager.get_profile(potential_profile)
                 logger.debug(f"Using profile '{profile.name}' for model resolution")
+                self._record_phase(
+                    trace,
+                    "Profile prefix detection",
+                    model,
+                    "matched",
+                    model_part,
+                    potential_profile=potential_profile,
+                    profile_name=profile.name if profile else None,
+                )
                 # Continue with model_part for alias resolution
                 model = model_part
+            else:
+                # Has colon but prefix is not a profile (e.g., "openai:gpt-5.1")
+                reason = (
+                    f"'{potential_profile}' is not a profile"
+                    if profile_manager
+                    else "no profile_manager"
+                )
+                self._record_phase(
+                    trace,
+                    "Profile prefix detection",
+                    model,
+                    "skipped",
+                    model,
+                    reason=reason,
+                )
+        else:
+            self._record_phase(
+                trace,
+                "Profile prefix detection",
+                model,
+                "skipped",
+                model,
+                reason="no colon in model",
+            )
 
-        # If no explicit profile prefix was found and the default target is a profile,
-        # set the profile variable so the existing profile alias check handles it.
+        # ---- Phase 2: Default profile resolution ----
+        # If no explicit profile prefix was found and a default profile is configured,
+        # apply it to bare model names (no colon, no literal bypass).
         if profile is None and ":" not in model and not model.startswith("!"):
             default_profile_name = self.provider_manager.default_profile
             if default_profile_name:
@@ -97,53 +170,164 @@ class ModelManager(ModelResolver):
                             f"Using default profile '{default_profile_name}' "
                             f"for bare model resolution"
                         )
+        # Record phase 2 after the entire block, covering all outcomes.
+        if profile is not None and ":" not in original_model and not original_model.startswith("!"):
+            self._record_phase(
+                trace,
+                "Default profile resolution",
+                model,
+                "matched",
+                model,
+                default_target=self.provider_manager.default_profile,
+                profile_name=profile.name,
+            )
+        else:
+            # Determine the skip reason for diagnostic clarity.
+            if ":" in original_model:
+                reason = "model has explicit prefix"
+            elif original_model.startswith("!"):
+                reason = "literal bypass model"
+            elif self.provider_manager.default_profile is None:
+                reason = "no default profile configured"
+            else:
+                reason = "default profile not found"
+            self._record_phase(
+                trace,
+                "Default profile resolution",
+                model,
+                "skipped",
+                model,
+                reason=reason,
+            )
 
-        # Apply alias resolution if available
+        # ---- Phase 3: Profile alias lookup ----
+        # Check profile aliases first if a profile is active.
         resolved_model = model
-
-        # NEW: Check profile aliases first if a profile is active
         if profile and model.lower() in profile.aliases:
             resolved_model = profile.aliases[model.lower()]
             logger.debug(f"[ModelManager] Profile alias resolved: '{model}' -> '{resolved_model}'")
-        elif self.alias_manager and self.alias_manager.has_aliases():
-            # Literal model names (prefixed with '!') must bypass alias matching.
-            # Still allow AliasManager to normalize into provider:model form when needed.
-            if model.startswith("!"):
-                if ":" not in model:
-                    default_target = self.provider_manager.default_target
-                    resolved_model = (
-                        self.alias_manager.resolve_alias(model, provider=default_target) or model
+            self._record_phase(
+                trace,
+                "Profile alias lookup",
+                model,
+                "matched",
+                resolved_model,
+                alias_key=model.lower(),
+                alias_target=resolved_model,
+                match_type="exact",
+            )
+        else:
+            reason = (
+                "no active profile" if not profile else f"'{model.lower()}' not in profile aliases"
+            )
+            self._record_phase(
+                trace,
+                "Profile alias lookup",
+                model,
+                "skipped",
+                model,
+                reason=reason,
+            )
+            # Fall through to AliasManager resolution
+            # ---- Phase 3b: AliasManager resolution ----
+            if self.alias_manager and self.alias_manager.has_aliases():
+                # Literal model names (prefixed with '!') must bypass alias matching.
+                # Still allow AliasManager to normalize into provider:model form when needed.
+                if model.startswith("!"):
+                    if ":" not in model:
+                        default_target = self.provider_manager.default_target
+                        resolved_model = (
+                            self.alias_manager.resolve_alias(
+                                model, provider=default_target, trace=trace
+                            )
+                            or model
+                        )
+                    else:
+                        resolved_model = (
+                            self.alias_manager.resolve_alias(model, trace=trace) or model
+                        )
+                    self._record_phase(
+                        trace,
+                        "AliasManager",
+                        model,
+                        "literal_bypass",
+                        resolved_model,
+                        reason="literal prefix '!' bypasses substring matching",
                     )
                 else:
-                    resolved_model = self.alias_manager.resolve_alias(model) or model
+                    alias_count = self.alias_manager.get_alias_count()
+                    logger.debug(f"Alias manager available with {alias_count} aliases")
+
+                    # Check if model already has provider prefix
+                    if ":" not in model:
+                        # No provider prefix - resolve using default target only
+                        default_target = self.provider_manager.default_target
+                        logger.debug(
+                            f"Resolving alias '{model}' with target scope '{default_target}'"
+                        )
+                        alias_target = self.alias_manager.resolve_alias(
+                            model, provider=default_target, trace=trace
+                        )
+                    else:
+                        # Has provider prefix - allow cross-provider resolution
+                        logger.debug(f"Resolving alias '{model}' across all providers")
+                        alias_target = self.alias_manager.resolve_alias(model, trace=trace)
+
+                    if alias_target:
+                        logger.debug(
+                            f"[ModelManager] Alias resolved: '{model}' -> '{alias_target}'"
+                        )
+                        resolved_model = alias_target
+                        self._record_phase(
+                            trace,
+                            "AliasManager",
+                            model,
+                            "matched",
+                            resolved_model,
+                            alias_target=alias_target,
+                        )
+                    else:
+                        logger.debug(
+                            f"No alias match found for '{model}', using original model name"
+                        )
+                        self._record_phase(
+                            trace,
+                            "AliasManager",
+                            model,
+                            "no_match",
+                            model,
+                            reason="no alias found",
+                        )
             else:
-                logger.debug(
-                    f"Alias manager available with {self.alias_manager.get_alias_count()} aliases"
+                logger.debug("No aliases configured or alias manager unavailable")
+                self._record_phase(
+                    trace,
+                    "AliasManager",
+                    model,
+                    "skipped",
+                    model,
+                    reason="no aliases configured or alias manager unavailable",
                 )
 
-                # Check if model already has provider prefix
-                if ":" not in model:
-                    # No provider prefix - resolve using default target only
-                    default_target = self.provider_manager.default_target
-                    logger.debug(f"Resolving alias '{model}' with target scope '{default_target}'")
-                    alias_target = self.alias_manager.resolve_alias(model, provider=default_target)
-                else:
-                    # Has provider prefix - allow cross-provider resolution
-                    logger.debug(f"Resolving alias '{model}' across all providers")
-                    alias_target = self.alias_manager.resolve_alias(model)
-
-                if alias_target:
-                    logger.debug(f"[ModelManager] Alias resolved: '{model}' -> '{alias_target}'")
-                    resolved_model = alias_target
-                else:
-                    logger.debug(f"No alias match found for '{model}', using original model name")
-        else:
-            logger.debug("No aliases configured or alias manager unavailable")
-
-        # Parse provider prefix
+        # ---- Phase 4: Provider prefix parsing ----
         logger.debug(f"Parsing provider prefix from resolved model: '{resolved_model}'")
         provider_name, actual_model = self.provider_manager.parse_model_name(resolved_model)
         logger.debug(f"Parsed provider: '{provider_name}', actual model: '{actual_model}'")
+        self._record_phase(
+            trace,
+            "Provider prefix parsing",
+            resolved_model,
+            "parsed",
+            f"{provider_name}:{actual_model}",
+            provider=provider_name,
+            model=actual_model,
+            default_target=self.provider_manager.default_target,
+        )
+
+        # ---- Final result ----
+        if trace is not None:
+            trace.final_provider = provider_name
+            trace.final_model = actual_model
 
         # Log the final resolution result
         if resolved_model != model:

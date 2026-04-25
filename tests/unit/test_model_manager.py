@@ -63,7 +63,9 @@ class TestModelManager:
         provider, actual_model = model_manager.resolve_model("haiku")
 
         # Should call resolve_alias with default provider
-        mock_config.alias_manager.resolve_alias.assert_called_once_with("haiku", provider="poe")
+        mock_config.alias_manager.resolve_alias.assert_called_once_with(
+            "haiku", provider="poe", trace=None
+        )
         mock_config.provider_manager.parse_model_name.assert_called_once_with("poe:grok-4.1-fast")
 
         assert provider == "poe"
@@ -80,7 +82,7 @@ class TestModelManager:
         provider, actual_model = model_manager.resolve_model("openai:haiku")
 
         # Should call resolve_alias without provider parameter (for cross-provider search)
-        mock_config.alias_manager.resolve_alias.assert_called_once_with("openai:haiku")
+        mock_config.alias_manager.resolve_alias.assert_called_once_with("openai:haiku", trace=None)
         mock_config.provider_manager.parse_model_name.assert_called_once_with("openai:gpt-4o-mini")
 
         assert provider == "openai"
@@ -98,7 +100,7 @@ class TestModelManager:
 
         # Should call resolve_alias with default provider
         mock_config.alias_manager.resolve_alias.assert_called_once_with(
-            "unknown-model", provider="poe"
+            "unknown-model", provider="poe", trace=None
         )
         mock_config.provider_manager.parse_model_name.assert_called_once_with("unknown-model")
 
@@ -147,7 +149,9 @@ class TestModelManager:
         provider, actual_model = model_manager.resolve_model("fast")
 
         # Should call resolve_alias with new default provider
-        mock_config.alias_manager.resolve_alias.assert_called_once_with("fast", provider="openai")
+        mock_config.alias_manager.resolve_alias.assert_called_once_with(
+            "fast", provider="openai", trace=None
+        )
         mock_config.provider_manager.parse_model_name.assert_called_once_with("openai:gpt-4o-mini")
 
         assert provider == "openai"
@@ -164,7 +168,7 @@ class TestModelManager:
         provider, actual_model = model_manager.resolve_model("OPENAI:haiku")
 
         # Should call resolve_alias without provider parameter (cross-provider search)
-        mock_config.alias_manager.resolve_alias.assert_called_once_with("OPENAI:haiku")
+        mock_config.alias_manager.resolve_alias.assert_called_once_with("OPENAI:haiku", trace=None)
         mock_config.provider_manager.parse_model_name.assert_called_once_with("OPENAI:gpt-4o-mini")
 
         # parse_model_name should handle case normalization
