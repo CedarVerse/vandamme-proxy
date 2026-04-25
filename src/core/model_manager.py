@@ -216,6 +216,15 @@ class ModelManager(ModelResolver):
                 alias_target=resolved_model,
                 match_type="exact",
             )
+            # AliasManager is skipped when profile alias already matched
+            self._record_phase(
+                trace,
+                "AliasManager resolution",
+                model,
+                "skipped",
+                model,
+                reason="profile alias already matched",
+            )
         else:
             reason = (
                 "no active profile" if not profile else f"'{model.lower()}' not in profile aliases"
@@ -283,7 +292,7 @@ class ModelManager(ModelResolver):
                 logger.debug("No aliases configured or alias manager unavailable")
                 self._record_phase(
                     trace,
-                    "AliasManager",
+                    "AliasManager resolution",
                     model,
                     "skipped",
                     model,

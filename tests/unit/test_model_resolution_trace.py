@@ -76,7 +76,7 @@ class TestBareModelNoAliases:
         assert "Profile prefix detection" in phase_names
         assert "Default profile resolution" in phase_names
         assert "Profile alias lookup" in phase_names
-        assert "AliasManager" in phase_names or "AliasManager resolution" in phase_names
+        assert "AliasManager resolution" in phase_names
         assert "Provider prefix parsing" in phase_names
 
         # Profile prefix detection should be skipped (no colon)
@@ -217,7 +217,7 @@ class TestTraceByPhaseNameNotIndex:
             "Profile prefix detection",
             "Default profile resolution",
             "Profile alias lookup",
-            "AliasManager",
+            "AliasManager resolution",
             "Provider prefix parsing",
         ]
         for name in expected_phases:
