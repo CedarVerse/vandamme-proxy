@@ -517,6 +517,60 @@ DEBUG [model_manager] Parsing provider prefix from resolved model: 'zai:my-exact
 DEBUG [model_manager] Parsed provider: 'zai', actual model: 'my-exact-model'
 ```
 
+### `vdm debug model-resolution` command
+
+For interactive debugging, use the dedicated CLI command to trace the full
+resolution pipeline for any model name:
+
+```bash
+# Trace how a model name resolves through all phases
+vdm debug model-resolution haiku
+
+# JSON output for scripting or piping to jq
+vdm debug model-resolution "openai:gpt-5.1" --json
+
+# Debug a profile alias
+vdm debug model-resolution "top:haiku"
+```
+
+The command shows each resolution phase with its input, output, and the
+reason for each match or skip. Example text output for `vdm debug model-resolution haiku`:
+
+```
+Resolving model: haiku
+
+  Profile prefix detection
+    Input: haiku
+    Skipped: no colon in model
+
+  Default profile resolution
+    Input: haiku
+    Matched: haiku
+    default_target: top
+    profile_name: top
+
+  Profile alias lookup
+    Input: haiku
+    Matched: zai:haiku
+    alias_key: haiku
+    alias_target: zai:haiku
+
+  AliasManager resolution
+    Input: haiku
+    Skipped: profile alias already matched
+
+  Provider prefix parsing
+    Input: zai:haiku
+    provider: zai
+    model: haiku
+
+  Result: zai:haiku
+```
+
+For programmatic use, `--json` produces the same data as a JSON object with
+`original_model`, `phases` (each with `name`, `input`, `result`, `output`, `details`),
+`final_provider`, and `final_model`.
+
 ---
 
 ## End-to-End Examples
@@ -761,10 +815,15 @@ the other way around.
 
 ### Debug mode
 
-Set `LOG_LEVEL=DEBUG` to see each resolution phase in the logs. This is the
-single most useful debugging tool for understanding why a model resolved the
-way it did. See [Phase 7: Final Result](#phase-7-final-result) for example log
-output.
+Two complementary tools for diagnosing resolution issues:
+
+1. **`vdm debug model-resolution <model>`** — traces the full pipeline step by
+   step, showing each phase's input, output, and reasoning. See [the debug
+   command section](#vdm-debug-model-resolution-command) for details and examples.
+
+2. **`LOG_LEVEL=DEBUG`** — adds per-phase log lines to the running server's
+   output. Useful for diagnosing issues during live request processing.
+   See [Phase 7: Final Result](#phase-7-final-result) for example log output.
 
 ---
 
