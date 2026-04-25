@@ -13,7 +13,8 @@ from time import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.core.alias.resolver import AliasResolverChain
+    from src.core.alias.resolver import AliasResolverChain, ResolutionContext, ResolutionResult
+    from src.core.model_resolution_trace import ResolutionTrace, ResolverStep
 
 logger = logging.getLogger(__name__)
 
@@ -413,7 +414,13 @@ class AliasManager:
                             f"Applied global default alias: {provider}:{alias} -> {target}"
                         )
 
-    def resolve_alias(self, model: str, provider: str | None = None) -> str | None:
+    def resolve_alias(
+        self,
+        model: str,
+        provider: str | None = None,
+        *,
+        trace: "ResolutionTrace | None" = None,
+    ) -> str | None:
         """
         Resolve model name to alias value using the resolver chain with caching.
 
@@ -426,6 +433,8 @@ class AliasManager:
             model: The requested model name
             provider: Optional provider name to scope the search. If None, searches
                      across all providers (backward compatible behavior).
+            trace: Optional ResolutionTrace to record resolution steps for debugging.
+                   When None (default), behavior is identical to omitting the parameter.
 
         Returns:
             The resolved alias target with provider prefix (e.g., "poe:grok-4.1-fast")
@@ -443,6 +452,18 @@ class AliasManager:
             cached_result = self._cache.get(cache_key)
             if cached_result is not None:
                 logger.debug(f"[AliasCache] HIT for '{model}' -> '{cached_result}'")
+                if trace is not None:
+                    from src.core.model_resolution_trace import ResolutionPhase
+
+                    trace.phases.append(
+                        ResolutionPhase(
+                            name="AliasManager resolution",
+                            input=model,
+                            result="matched",
+                            output=cached_result,
+                            details={"cache_hit": True, "source": "cache"},
+                        )
+                    )
                 return cached_result
             logger.debug(f"[AliasCache] MISS for '{model}', performing resolution")
         else:
@@ -467,6 +488,36 @@ class AliasManager:
         # Resolve through the resolver chain
         result = self._resolver_chain.resolve(context)
 
+        # Record trace from ResolutionResult fields (no coupling to chain internals).
+        # We reconstruct resolver steps by inspecting each resolver's can_resolve()
+        # and cross-referencing with the final result, rather than threading trace
+        # into the chain itself. This keeps the resolver chain a pure strategy pipeline.
+        if trace is not None:
+            from src.core.model_resolution_trace import ResolutionPhase
+
+            steps = self._reconstruct_steps(context, result)
+            trace.phases.append(
+                ResolutionPhase(
+                    name="AliasManager resolution",
+                    input=model,
+                    result="matched" if result.was_resolved else "no match",
+                    output=result.resolved_model if result.was_resolved else model,
+                    details={
+                        "resolver_steps": [
+                            {
+                                "name": s.name,
+                                "could_resolve": s.could_resolve,
+                                "was_resolved": s.was_resolved,
+                                "output_model": s.output_model,
+                            }
+                            for s in steps
+                        ],
+                        "resolution_path": list(result.resolution_path),
+                        "cache_hit": False,
+                    },
+                )
+            )
+
         # If no alias was found, return None
         if not result.was_resolved:
             logger.debug(f"No alias matched model name '{model}'")
@@ -490,6 +541,144 @@ class AliasManager:
             )
 
         return resolved_model
+
+    def _reconstruct_steps(
+        self,
+        context: "ResolutionContext",
+        result: "ResolutionResult",
+    ) -> list["ResolverStep"]:
+        """Reconstruct resolver steps from ResolutionResult for trace output.
+
+        Design rationale: Rather than threading a trace object through the
+        resolver chain (which would couple the chain to tracing infrastructure),
+        we reconstruct what happened by examining structural characteristics of
+        the final ``ResolutionResult``. This is a post-hoc reconstruction --
+        not as precise as in-flight tracing, but it keeps the resolver chain
+        clean and independently testable.
+
+        Important caveat: ``can_resolve()`` is NOT used for MatchRanker because
+        it checks ``context.metadata["substring_matches"]`` which is populated
+        *during* chain execution, not available in the original context. Instead,
+        we infer whether MatchRanker participated from the result structure.
+        """
+        steps: list[ResolverStep] = []
+        sorted_resolvers = sorted(self._resolver_chain._resolvers, key=lambda r: r.priority)
+
+        # Determine which resolution path was taken based on result characteristics.
+        # This classification drives which resolvers we mark as "could resolve" / "resolved".
+        model = context.model
+        has_literal_prefix = model.startswith("!")
+        has_provider_prefix = ":" in model
+        has_aliases = bool(context.aliases)
+
+        for resolver in sorted_resolvers:
+            name = resolver.name
+
+            # --- LiteralPrefixResolver ---
+            if name == "LiteralPrefixResolver":
+                could = has_literal_prefix
+                # LiteralPrefix always returns was_resolved=False (bypass, not alias match)
+                # but it does produce a result. We mark it as was_resolved=True to
+                # indicate it handled the request, since the model was transformed.
+                was = could and result.resolved_model != model
+                steps.append(
+                    ResolverStep(
+                        name=name,
+                        could_resolve=could,
+                        was_resolved=was,
+                        input_model=model,
+                        output_model=result.resolved_model if was else model,
+                    )
+                )
+                continue
+
+            # --- ChainedAliasResolver ---
+            if name == "ChainedAliasResolver":
+                could = has_provider_prefix
+                # Chained resolver fires when the model contains ':' and an alias
+                # is found at that provider scope. Multi-step chains produce
+                # resolution_path with len > 1 (e.g., intermediate -> haiku).
+                was = (
+                    could
+                    and result.was_resolved
+                    and (
+                        len(result.resolution_path) > 1
+                        or (has_provider_prefix and len(result.resolution_path) >= 1)
+                    )
+                )
+                steps.append(
+                    ResolverStep(
+                        name=name,
+                        could_resolve=could,
+                        was_resolved=was,
+                        input_model=model,
+                        output_model=result.resolved_model if was else model,
+                    )
+                )
+                continue
+
+            # --- SubstringMatcher ---
+            if name == "SubstringMatcher":
+                could = has_aliases and not has_literal_prefix
+                # SubstringMatcher never resolves on its own -- it collects matches
+                # and passes them to MatchRanker via context metadata.
+                # It "participated" if the result came from substring matching,
+                # which is true when: not literal, not provider-prefixed chain,
+                # and was_resolved=True.
+                was = (
+                    could
+                    and result.was_resolved
+                    and not has_literal_prefix
+                    and not has_provider_prefix
+                )
+                steps.append(
+                    ResolverStep(
+                        name=name,
+                        could_resolve=could,
+                        was_resolved=was,
+                        input_model=model,
+                        output_model=result.resolved_model if was else model,
+                    )
+                )
+                continue
+
+            # --- MatchRanker ---
+            if name == "MatchRanker":
+                # MatchRanker's can_resolve() checks context.metadata which is
+                # only populated during chain execution. We infer participation
+                # from result structure: it fires after SubstringMatcher finds matches.
+                could = (
+                    has_aliases
+                    and not has_literal_prefix
+                    and not has_provider_prefix
+                    and result.was_resolved
+                )
+                # MatchRanker is the final resolver that selects the best match.
+                # It "resolved" if the result came from substring matching path.
+                was = could
+                steps.append(
+                    ResolverStep(
+                        name=name,
+                        could_resolve=could,
+                        was_resolved=was,
+                        input_model=model,
+                        output_model=result.resolved_model if was else model,
+                    )
+                )
+                continue
+
+            # --- Unknown resolver (future-proofing) ---
+            steps.append(
+                ResolverStep(
+                    name=name,
+                    could_resolve=resolver.can_resolve(context),
+                    was_resolved=False,
+                    input_model=model,
+                    output_model=model,
+                )
+            )
+
+        return steps
 
     def get_all_aliases(self) -> dict[str, dict[str, str]]:
         """
