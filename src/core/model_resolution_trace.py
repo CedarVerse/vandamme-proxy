@@ -17,6 +17,8 @@ Design notes
 
 from dataclasses import dataclass, field
 
+__all__ = ["ResolverStep", "ResolutionPhase", "ResolutionTrace"]
+
 
 @dataclass(frozen=True)
 class ResolverStep:
@@ -40,7 +42,7 @@ class ResolverStep:
     was_resolved: bool
     input_model: str
     output_model: str
-    details: dict = field(default_factory=dict)
+    details: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -63,7 +65,7 @@ class ResolutionPhase:
     input: str
     result: str
     output: str
-    details: dict = field(default_factory=dict)
+    details: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass  # Mutable accumulator — phases are appended during resolution
