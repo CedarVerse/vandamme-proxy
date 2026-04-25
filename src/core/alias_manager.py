@@ -496,11 +496,20 @@ class AliasManager:
             from src.core.model_resolution_trace import ResolutionPhase
 
             steps = self._reconstruct_steps(context, result)
+
+            # Literal bypass is "handled but not an alias match" — use a distinct label
+            # so the debug output can render it differently from a true "no match".
+            has_literal_prefix = model.startswith("!")
+            if has_literal_prefix and result.resolved_model != model:
+                result_label = "literal bypass"
+            else:
+                result_label = "matched" if result.was_resolved else "no match"
+
             trace.phases.append(
                 ResolutionPhase(
                     name="AliasManager resolution",
                     input=model,
-                    result="matched" if result.was_resolved else "no match",
+                    result=result_label,
                     output=result.resolved_model if result.was_resolved else model,
                     details={
                         "resolver_steps": [
@@ -597,9 +606,14 @@ class AliasManager:
             # --- ChainedAliasResolver ---
             if name == "ChainedAliasResolver":
                 could = has_provider_prefix
-                # Chained resolver fires when the model contains ':' and an alias
-                # is found at that provider scope. Multi-step chains produce
-                # resolution_path with len > 1 (e.g., intermediate -> haiku).
+                # Second-pass chain resolution (resolver.py:512-544) fires when
+                # MatchRanker produces a provider-prefixed result that itself is
+                # an alias. Detect this from a multi-step resolution_path.
+                second_pass_chain = (
+                    not has_provider_prefix
+                    and result.was_resolved
+                    and len(result.resolution_path) > 1
+                )
                 was = (
                     could
                     and result.was_resolved
@@ -607,7 +621,7 @@ class AliasManager:
                         len(result.resolution_path) > 1
                         or (has_provider_prefix and len(result.resolution_path) >= 1)
                     )
-                )
+                ) or second_pass_chain
                 steps.append(
                     ResolverStep(
                         name=name,

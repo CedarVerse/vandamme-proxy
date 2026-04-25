@@ -124,9 +124,9 @@ class TestTraceLiteralBypass:
 
         assert phase.name == "AliasManager resolution"
         assert phase.input == "!haiku"
-        # LiteralPrefixResolver returns was_resolved=False, so the phase
-        # should indicate "no match" (literal bypass is not alias resolution)
-        assert phase.result == "no match"
+        # Literal bypass uses a distinct result label so debug output can
+        # distinguish it from a true "no match" (unresolved alias attempt)
+        assert phase.result == "literal bypass"
         assert phase.details["cache_hit"] is False
 
         # The resolver steps should show LiteralPrefixResolver participated
