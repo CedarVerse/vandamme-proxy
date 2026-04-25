@@ -472,6 +472,18 @@ class AliasManager:
         # Early return if no aliases configured
         if not self.aliases:
             logger.debug("No aliases configured, returning None")
+            if trace is not None:
+                from src.core.model_resolution_trace import ResolutionPhase
+
+                trace.phases.append(
+                    ResolutionPhase(
+                        name="AliasManager resolution",
+                        input=model,
+                        result="skipped",
+                        output=model,
+                        details={"reason": "no aliases configured"},
+                    )
+                )
             return None
 
         # Import here to avoid circular dependency

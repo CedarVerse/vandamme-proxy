@@ -96,6 +96,10 @@ def _print_text(trace: ResolutionTrace, console: Console) -> None:
         elif phase.result == "parsed":
             for key, value in phase.details.items():
                 console.print(f"    {key}: {value}")
+        else:
+            console.print(f"    {phase.result}: {phase.output}")
+            for key, value in phase.details.items():
+                console.print(f"    {key}: {value}")
 
         console.print()
 
