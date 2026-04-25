@@ -332,4 +332,13 @@ class ModelManager(ModelResolver):
                 f"'{provider_name}:{actual_model}' (no alias)"
             )
 
+        # Suggest the debug CLI command when alias resolution changed the model name.
+        # This hint only fires at DEBUG level so it never clutters production logs,
+        # but saves developers time when they need to trace a non-trivial resolution.
+        final = f"{provider_name}:{actual_model}"
+        if final != original_model and logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"Hint: run 'vdm debug model-resolution {original_model}' for full resolution trace"
+            )
+
         return provider_name, actual_model

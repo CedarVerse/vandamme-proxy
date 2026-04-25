@@ -79,6 +79,10 @@ vdm test connection
 vdm test models
 vdm health upstream
 vdm config validate
+
+# Debug model resolution
+vdm debug model-resolution <model-name>          # Trace resolution pipeline
+vdm debug model-resolution <model-name> --json   # JSON output for piping to jq
 ```
 
 **External Test Opt-In:**
@@ -753,6 +757,25 @@ curl -X POST http://localhost:8082/v1/messages \
 ### Debugging
 
 - Set `LOG_LEVEL=DEBUG` to see detailed request/response conversions and middleware operations
+- The proxy also logs a hint in debug mode when a model alias was resolved, pointing to the `vdm debug model-resolution` command for a full trace
+
+#### Debugging Model Resolution
+
+The `vdm debug model-resolution` command traces every phase of the model resolution pipeline:
+
+```bash
+# Trace how a model name resolves through profiles, aliases, and providers
+vdm debug model-resolution haiku
+
+# JSON output for scripting
+vdm debug model-resolution "openai:gpt-4o" --json | jq '.final_provider'
+
+# Debug a profile alias
+vdm debug model-resolution "top:haiku"
+```
+
+The command shows each resolution phase (profile prefix detection, default profile, profile alias lookup, AliasManager resolution, provider prefix parsing) with input, output, and the reason for each match or skip.
+
 - HTTP client noise (OpenAI/httpx/httpcore request traces) is intentionally downgraded to DEBUG; raise the global log level to DEBUG if you need to inspect raw HTTP calls
 - Check `src/core/logging.py` for logging configuration
 - Request/response conversion is logged in `request_converter.py`
