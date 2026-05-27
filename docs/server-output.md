@@ -17,6 +17,7 @@ Shows core server settings:
 | Default Profile | The default profile (when a profile is the default) |
 | `{Provider} Base URL` | Base URL for the Default Target (only shown when provider is default) |
 | `{Provider} API Key` | Hash of the API key for the Default Target (only shown when provider is default) |
+| Bridge | Bridge provider and URL (only shown when `--bridge` is used) |
 
 **Note:** When a profile is set as the default, the Base URL and API Key rows are omitted because profile aliases may point to different providers.
 

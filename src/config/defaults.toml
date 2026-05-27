@@ -120,6 +120,43 @@ haiku = "gpt-5"
 sonnet = "gpt-5.2-codex"
 opus = "gpt-5.2"
 
+# Cursor Agent provider — uses agent-cli-to-api bridge on localhost.
+# Requires: `agent-cli-to-api cursor-agent` running on port 8766.
+# Install: pip install git+https://github.com/leeguooooo/agent-cli-to-api
+# Streaming-only: non-streaming mode times out on cursor-agent backend.
+# Auth: reuses IDE session from ~/.config/cursor/auth.json (auto-detected by bridge).
+[cursor]
+base-url = "http://127.0.0.1:8766"
+api-format = "openai"
+auth-mode = "passthrough"
+timeout = 300
+max-retries = 0
+[cursor.aliases]
+# Tiered defaults (match openai/poe/chatgpt alias convention)
+# Composer has no effort variants — composer-2.5 is its max quality.
+# For other families, effort is baked into the model name suffix (-low/-medium/-high/-xhigh/-max).
+haiku  = "composer-2.5-fast"                       # Fast — quick tasks
+sonnet = "composer-2.5"                             # Balanced — coding (max quality for composer)
+opus   = "claude-opus-4-7-thinking-max"             # Deep reasoning — heavy lifting
+fast   = "composer-2-fast"                          # Fastest response
+
+# GPT-5.5 family (newest OpenAI)
+gpt55         = "gpt-5.5-medium"
+gpt55-fast    = "gpt-5.5-medium-fast"
+gpt55-deep    = "gpt-5.5-extra-high"                # Max effort for GPT-5.5
+
+# Claude family (thinking = extended reasoning)
+claude        = "claude-opus-4-7-high"
+claude-think  = "claude-opus-4-7-thinking-max"       # Max reasoning effort
+
+# Gemini
+gemini        = "gemini-3.1-pro"
+gemini-flash  = "gemini-3-flash"
+
+# Other
+grok          = "grok-4.3"
+kimi          = "kimi-k2.5"
+
 # Poe provider defaults
 [poe]
 base-url = "https://api.poe.com/v1"

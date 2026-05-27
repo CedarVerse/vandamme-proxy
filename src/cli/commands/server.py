@@ -1,5 +1,6 @@
 """Server management commands for the vdm CLI."""
 
+import atexit
 from pathlib import Path
 
 import typer
@@ -7,6 +8,7 @@ import uvicorn
 from rich.console import Console
 from rich.table import Table
 
+from src.cli.bridge_manager import BRIDGE_PROVIDERS, BridgeManager
 from src.core.dependencies import get_config, initialize_app
 from src.core.logging.configuration import configure_root_logging
 
@@ -23,9 +25,25 @@ def start(
     systemd: bool = typer.Option(
         False, "--systemd", help="Send logs to systemd journal instead of console"
     ),
+    bridge: str = typer.Option(
+        None,
+        "--bridge",
+        help=f"Auto-start agent-cli-to-api bridge. Values: {', '.join(BRIDGE_PROVIDERS)}",
+    ),
 ) -> None:
     """Start the proxy server."""
-    # Initialize all dependencies first
+    # Start bridge first (if requested) so the env var is set before dependency init
+    bridge_mgr: BridgeManager | None = None
+    if bridge:
+        bridge_mgr = BridgeManager(bridge)
+        print(f"Starting {bridge} bridge on {bridge_mgr.base_url}...")
+        if not bridge_mgr.start():
+            print(f"Failed to start {bridge} bridge. Is agent-cli-to-api installed?")
+            raise SystemExit(1)
+        print(f"Bridge ready at {bridge_mgr.base_url}")
+        atexit.register(bridge_mgr.cleanup)
+
+    # Initialize all dependencies (picks up CURSOR_API_KEY=bridge set by BridgeManager)
     initialize_app()
 
     # Get the initialized config
@@ -89,6 +107,9 @@ def start(
         table.add_column("Value", style="green")
 
         table.add_row("Server URL", f"http://{server_host}:{server_port}")
+
+        if bridge_mgr:
+            table.add_row("Bridge", f"{bridge} @ {bridge_mgr.base_url}")
 
         if is_default_profile:
             # Show "Default Profile" instead of "Default Target"

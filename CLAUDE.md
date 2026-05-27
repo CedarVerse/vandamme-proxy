@@ -32,6 +32,9 @@ uv sync --extra cli
 # Using the vdm CLI (recommended)
 vdm server start
 
+# With bridge (auto-starts agent-cli-to-api for cursor/codex/gemini/claude)
+vdm server start --bridge cursor
+
 # Direct execution
 python start_proxy.py
 
@@ -376,6 +379,14 @@ OPENAI_ALIAS_FAST=gpt-4o
 # ChatGPT provider with OAuth authentication
 CHATGPT_AUTH_MODE=oauth
 CHATGPT_BASE_URL=https://api.openai.com/v1
+
+# Cursor Agent provider (via agent-cli-to-api bridge)
+# Option A: Use --bridge flag (recommended) — auto-starts bridge and sets env vars
+vdm server start --bridge cursor
+
+# Option B: Manual setup — set env vars yourself
+CURSOR_API_KEY=bridge          # Dummy key to trigger auto-discovery
+VDM_DEFAULT_TARGET=cursor      # Set cursor as default provider
 ```
 
 Security (Proxy Authentication):
@@ -541,6 +552,53 @@ ls -la ~/.vandamme/oauth/chatgpt/
 # Verify file permissions (should be 0600)
 stat ~/.vandamme/oauth/chatgpt/auth.json
 ```
+
+### Using Cursor Agent Provider
+
+The Cursor Agent provider exposes your Cursor subscription-backed models
+through vandamme-proxy via the `agent-cli-to-api` bridge. No code changes
+needed — it works as a standard OpenAI provider.
+
+> **Warning:** This uses the `cursor-agent` CLI session tokens. Review
+> Cursor's Terms of Service before using in production. The bridge is a
+> third-party project and may break if Cursor changes their backend.
+
+**Prerequisites:**
+1. Install the Cursor agent CLI: `curl https://cursor.com/install -fsS | bash`
+2. Authenticate: `agent login`
+3. Install the bridge: `uv tool install git+https://github.com/leeguooooo/agent-cli-to-api`
+
+**Setup (one command with `--bridge`):**
+
+```bash
+# The --bridge flag auto-starts the bridge and sets CURSOR_API_KEY
+vdm server start --bridge cursor
+```
+
+**Setup (manual, if you prefer separate terminals):**
+
+```bash
+# 1. Start the bridge in a separate terminal
+agent-cli-to-api cursor-agent --host 127.0.0.1 --port 8766
+
+# 2. Set env vars for the proxy
+export CURSOR_API_KEY="bridge"  # Dummy key to trigger auto-discovery
+export VDM_DEFAULT_TARGET=cursor
+
+# 3. Start the proxy
+vdm server start
+```
+
+**Usage with Claude Code:**
+
+```bash
+# Streaming (primary path — non-streaming times out)
+ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY=bridge claude --model cursor:auto
+```
+
+**Known Limitations:**
+- **Streaming only** — non-streaming requests time out (cursor-agent backend buffers output)
+- **Model names** — use `auto` (default routing) or cursor-agent model names
 
 ### Using Model Aliases
 
