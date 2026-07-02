@@ -64,6 +64,38 @@ def test_setup_dry_run_does_not_write_file(tmp_path) -> None:
 
 
 @pytest.mark.unit
+def test_setup_dry_run_redacts_secret_values(tmp_path) -> None:
+    """Dry-run should not print sensitive proxy credentials."""
+    settings_path = tmp_path / "settings.json"
+    secret_key = "secret-proxy-key"
+    secret_token = "secret-proxy-token"
+
+    result = runner.invoke(
+        app,
+        [
+            "claude-code",
+            "setup",
+            "--settings-path",
+            str(settings_path),
+            "--api-key",
+            secret_key,
+            "--auth-token",
+            secret_token,
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not settings_path.exists()
+    assert secret_key not in result.output
+    assert secret_token not in result.output
+    plain_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    rendered = json.loads(plain_output.split("\nConfigured env keys:")[0])
+    assert rendered["env"]["ANTHROPIC_API_KEY"] == "***"
+    assert rendered["env"]["ANTHROPIC_AUTH_TOKEN"] == "***"
+
+
+@pytest.mark.unit
 def test_setup_uses_generic_defaults_not_provider_specific(tmp_path) -> None:
     """Defaults should enable generic Vandamme gateway discovery aliases."""
     settings_path = tmp_path / "settings.json"
@@ -109,11 +141,13 @@ def test_setup_honors_custom_base_url_for_all_gateway_keys(tmp_path) -> None:
 def test_setup_preserves_existing_vandamme_keys_without_force(tmp_path) -> None:
     """Existing Claude Code gateway env values should not be overwritten unless forced."""
     settings_path = tmp_path / "settings.json"
+    secret_existing_key = "existing-secret-key"
     settings_path.write_text(
         json.dumps(
             {
                 "env": {
                     "ANTHROPIC_MODEL": "custom-existing-model",
+                    "ANTHROPIC_API_KEY": secret_existing_key,
                     "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "0",
                 }
             }
@@ -121,13 +155,26 @@ def test_setup_preserves_existing_vandamme_keys_without_force(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    result = runner.invoke(app, ["claude-code", "setup", "--settings-path", str(settings_path)])
+    result = runner.invoke(
+        app,
+        [
+            "claude-code",
+            "setup",
+            "--settings-path",
+            str(settings_path),
+            "--api-key",
+            "new-secret-key",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     data = json.loads(settings_path.read_text(encoding="utf-8"))
     assert data["env"]["ANTHROPIC_MODEL"] == "custom-existing-model"
+    assert data["env"]["ANTHROPIC_API_KEY"] == secret_existing_key
     assert data["env"]["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"] == "0"
     assert "Preserved existing values" in result.output
+    assert secret_existing_key not in result.output
+    assert "new-secret-key" not in result.output
 
 
 @pytest.mark.unit

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -67,13 +68,13 @@ def merge_settings(
     new_env: dict[str, str],
     *,
     force: bool = False,
-) -> tuple[dict[str, Any], dict[str, str]]:
+) -> tuple[dict[str, Any], set[str]]:
     """Merge Vandamme env settings into an existing Claude Code settings object.
 
-    Returns the merged settings and a mapping of skipped keys. Keys are skipped
+    Returns the merged settings and the names of skipped keys. Keys are skipped
     when they already exist with a different value and ``force`` is false.
     """
-    merged = dict(existing)
+    merged = copy.deepcopy(existing)
     existing_env = merged.get("env", {})
     if existing_env is None:
         existing_env = {}
@@ -81,16 +82,27 @@ def merge_settings(
         raise ValueError("settings.json field 'env' must be a JSON object when present")
 
     env = dict(existing_env)
-    skipped: dict[str, str] = {}
+    skipped: set[str] = set()
     for key, value in new_env.items():
         current = env.get(key)
         if current is not None and current != value and not force:
-            skipped[key] = str(current)
+            skipped.add(key)
             continue
         env[key] = value
 
     merged["env"] = env
     return merged, skipped
+
+
+def redact_settings_for_display(settings: dict[str, Any]) -> dict[str, Any]:
+    """Return settings safe for terminal display by redacting secret env values."""
+    redacted = copy.deepcopy(settings)
+    env = redacted.get("env")
+    if isinstance(env, dict):
+        for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+            if key in env:
+                env[key] = "***"
+    return redacted
 
 
 def write_settings(path: Path, settings: dict[str, Any]) -> None:
@@ -168,7 +180,7 @@ def setup(
         raise typer.Exit(1) from None
 
     if dry_run:
-        console.print(json.dumps(merged, indent=2, sort_keys=True))
+        console.print(json.dumps(redact_settings_for_display(merged), indent=2, sort_keys=True))
     else:
         write_settings(path, merged)
         console.print(f"[green]✅ Claude Code settings updated:[/green] {path}")
@@ -177,7 +189,7 @@ def setup(
         skipped_list = ", ".join(sorted(skipped))
         console.print(
             Panel(
-                f"Preserved existing values for: {skipped_list}\n"
+                f"Preserved existing values for keys: {skipped_list}\n"
                 "Run again with --force to overwrite these keys.",
                 title="Existing Claude Code env preserved",
                 style="yellow",
