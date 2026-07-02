@@ -14,6 +14,20 @@ from src.models.claude import (
 class TestCountToolCalls:
     """Test the count_tool_calls helper function."""
 
+    def test_claude_request_promotes_system_role_messages(self):
+        request = ClaudeMessagesRequest(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=100,
+            messages=[
+                {"role": "user", "content": "Hello"},
+                {"role": "system", "content": "Use concise answers."},
+                {"role": "assistant", "content": "Hi."},
+            ],
+        )
+
+        assert request.system == "Use concise answers."
+        assert [message.role for message in request.messages] == ["user", "assistant"]
+
     def test_count_tool_calls_empty_request(self):
         """Test counting tool calls in a request with no tools."""
         from src.api.services.metrics_helper import count_tool_calls

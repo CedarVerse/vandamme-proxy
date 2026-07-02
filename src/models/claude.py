@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class ClaudeContentBlockText(BaseModel):
@@ -82,6 +82,11 @@ class ClaudeMessagesRequest(BaseModel):
     tool_choice: dict[str, Any] | None = None
     thinking: ClaudeThinkingConfig | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def promote_system_role_messages(cls, data: Any) -> Any:
+        return _promote_system_role_messages(data)
+
 
 class ClaudeTokenCountRequest(BaseModel):
     model: str
@@ -90,3 +95,56 @@ class ClaudeTokenCountRequest(BaseModel):
     tools: list[ClaudeTool] | None = None
     thinking: ClaudeThinkingConfig | None = None
     tool_choice: dict[str, Any] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def promote_system_role_messages(cls, data: Any) -> Any:
+        return _promote_system_role_messages(data)
+
+
+def _promote_system_role_messages(data: Any) -> Any:
+    if not isinstance(data, dict):
+        return data
+
+    messages = data.get("messages")
+    if not isinstance(messages, list):
+        return data
+
+    system_parts: list[str] = []
+    normalized_messages: list[Any] = []
+    for message in messages:
+        if isinstance(message, dict) and message.get("role") == "system":
+            system_parts.append(_system_text_from_content(message.get("content")))
+        else:
+            normalized_messages.append(message)
+
+    if not system_parts:
+        return data
+
+    return {
+        **data,
+        "system": _merge_system_content(data.get("system"), system_parts),
+        "messages": normalized_messages,
+    }
+
+
+def _system_text_from_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n\n".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return ""
+
+
+def _merge_system_content(existing: Any, promoted_parts: list[str]) -> str:
+    parts: list[str] = []
+    if isinstance(existing, str):
+        parts.append(existing)
+    elif isinstance(existing, list):
+        parts.append(_system_text_from_content(existing))
+    parts.extend(part for part in promoted_parts if part)
+    return "\n\n".join(part for part in parts if part)
