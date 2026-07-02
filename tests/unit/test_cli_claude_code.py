@@ -56,6 +56,8 @@ def test_setup_dry_run_does_not_write_file(tmp_path) -> None:
     assert not settings_path.exists()
     plain_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
     rendered = json.loads(plain_output.split("\nConfigured env keys:")[0])
+    assert rendered["settings_path"] == str(settings_path)
+    assert rendered["skipped_env_keys"] == []
     assert rendered["env"]["CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"] == "1"
     assert rendered["env"]["ANTHROPIC_API_BASE_URL"] == "http://localhost:8082"
     assert rendered["env"]["CLAUDE_AGENT_API_BASE_URL"] == "http://localhost:8082"
@@ -91,6 +93,8 @@ def test_setup_dry_run_redacts_secret_values(tmp_path) -> None:
     assert secret_token not in result.output
     plain_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
     rendered = json.loads(plain_output.split("\nConfigured env keys:")[0])
+    assert rendered["settings_path"] == str(settings_path)
+    assert rendered["skipped_env_keys"] == []
     assert rendered["env"]["ANTHROPIC_API_KEY"] == "***"
     assert rendered["env"]["ANTHROPIC_AUTH_TOKEN"] == "***"
 
@@ -175,6 +179,30 @@ def test_setup_preserves_existing_vandamme_keys_without_force(tmp_path) -> None:
     assert "Preserved existing values" in result.output
     assert secret_existing_key not in result.output
     assert "new-secret-key" not in result.output
+
+
+@pytest.mark.unit
+def test_setup_dry_run_only_shows_vandamme_delta_not_existing_env(tmp_path) -> None:
+    """Dry-run should not dump unrelated existing environment values."""
+    settings_path = tmp_path / "settings.json"
+    unrelated_secret = "unrelated-existing-secret"
+    settings_path.write_text(
+        json.dumps({"env": {"UNRELATED_SECRET": unrelated_secret, "EXISTING": "keep-me"}}),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["claude-code", "setup", "--settings-path", str(settings_path), "--dry-run"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert unrelated_secret not in result.output
+    plain_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    rendered = json.loads(plain_output.split("\nConfigured env keys:")[0])
+    assert "UNRELATED_SECRET" not in rendered["env"]
+    assert "EXISTING" not in rendered["env"]
+    assert rendered["env"]["ANTHROPIC_MODEL"] == DEFAULT_MODEL
 
 
 @pytest.mark.unit

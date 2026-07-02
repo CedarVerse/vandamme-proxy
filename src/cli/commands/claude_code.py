@@ -94,15 +94,18 @@ def merge_settings(
     return merged, skipped
 
 
-def redact_settings_for_display(settings: dict[str, Any]) -> dict[str, Any]:
-    """Return settings safe for terminal display by redacting secret env values."""
-    redacted = copy.deepcopy(settings)
-    env = redacted.get("env")
-    if isinstance(env, dict):
-        for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
-            if key in env:
-                env[key] = "***"
-    return redacted
+SECRET_ENV_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+
+
+def is_secret_env_key(key: str) -> bool:
+    """Return true when an environment key name conventionally carries a secret."""
+    upper_key = key.upper()
+    return any(marker in upper_key for marker in SECRET_ENV_MARKERS)
+
+
+def redact_env_for_display(env: dict[str, str]) -> dict[str, str]:
+    """Return env entries safe for terminal display by redacting secret-like keys."""
+    return {key: "***" if is_secret_env_key(key) else value for key, value in env.items()}
 
 
 def write_settings(path: Path, settings: dict[str, Any]) -> None:
@@ -180,7 +183,19 @@ def setup(
         raise typer.Exit(1) from None
 
     if dry_run:
-        console.print(json.dumps(redact_settings_for_display(merged), indent=2, sort_keys=True))
+        typer.echo(
+            json.dumps(
+                {
+                    "settings_path": str(path),
+                    "env": redact_env_for_display(
+                        {key: value for key, value in new_env.items() if key not in skipped}
+                    ),
+                    "skipped_env_keys": sorted(skipped),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
     else:
         write_settings(path, merged)
         console.print(f"[green]✅ Claude Code settings updated:[/green] {path}")

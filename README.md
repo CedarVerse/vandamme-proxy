@@ -189,7 +189,7 @@ vdm server start --host 0.0.0.0 --port 8082
 vdm claude-code setup
 
 # If your proxy requires client auth, include the token/key
-# (the value is written to settings.json but redacted from --dry-run output)
+# (--dry-run shows only the Vandamme env delta and redacts secret-like keys)
 vdm claude-code setup --api-key your-proxy-key
 
 # Use generic aliases, provider-prefixed models, or Claude Code's model picker
