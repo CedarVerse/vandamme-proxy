@@ -7,7 +7,7 @@ import sys
 import typer
 
 # Import command modules
-from src.cli.commands import config, debug, health, models, oauth, server, test
+from src.cli.commands import claude_code, config, debug, health, models, oauth, server, test
 from src.cli.commands.wrap import wrap
 
 app = typer.Typer(
@@ -25,6 +25,7 @@ app.add_typer(models.app, name="models", help="Model discovery")
 app.add_typer(test.app, name="test", help="Test commands")
 app.add_typer(debug.app, name="debug", help="Debug and diagnostic commands")
 app.add_typer(oauth.app, name="oauth", help="OAuth authentication management")
+app.add_typer(claude_code.app, name="claude-code", help="Claude Code integration")
 
 # Add wrap as a command directly with support for extra arguments
 app.command(context_settings={"allow_extra_args": True})(wrap)

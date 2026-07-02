@@ -30,19 +30,21 @@ uv tool install vandamme-proxy
 # Configure 1 or multiple API keys for production resilience
 export POE_API_KEY="sk-key1 sk-key2 sk-key3"
 
-# Run Claude Code CLI wrapped by Vandamme
-claude.vdm
+# Configure Claude Code to discover gateway models through Vandamme
+# (enables CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY and Vandamme base URLs)
+vdm claude-code setup
+
+# Start Claude Code with generic Vandamme aliases or model picker entries
+claude --model sonnet
 
 # Open dashboard page for monitoring
 open http://localhost:8082/dashboard/
 ```
 
 ```shell
-`# Use with Claude Code CLI
-export ANTHROPIC_BASE_URL=http://localhost:8082
-claude --model openai:gpt-4o "Analyze this code"
-claude --model poe:gemini-flash "Quick question"
-claude --model fast "Fast response"  # Smart alias
+# Or run Claude Code CLI wrapped by Vandamme for a single session
+claude.vdm --model sonnet
+claude.vdm --model haiku "Fast response"
 ```
 
 ### For LLM Gateway Users
@@ -181,20 +183,31 @@ vdm server start --host 0.0.0.0 --port 8082
 ### 4️⃣ Use with Claude Code CLI
 
 ```bash
-# Point Claude Code to proxy
-export ANTHROPIC_BASE_URL=http://localhost:8082
+# Safely merge Vandamme settings into ~/.claude/settings.json
+# Enables gateway model discovery and uses provider-agnostic aliases:
+# model=sonnet, small/fast=haiku
+vdm claude-code setup
 
-# Use provider routing
-claude --model openai:gpt-4o "Analyze this code"
-claude --model poe:gemini-flash "Quick question"
+# If your proxy requires client auth, include the token/key
+vdm claude-code setup --api-key your-proxy-key
 
-# Use smart aliases
-claude --model fast "Fast response needed"
-claude --model chat "Deep conversation"
+# Use generic aliases, provider-prefixed models, or Claude Code's model picker
+claude --model sonnet "Analyze this code"
+claude --model haiku "Quick question"
+claude --model openai:gpt-4o "Use a specific provider/model"
 
-# For passthrough providers (!PASSTHRU), provide your API key
+# For passthrough providers (!PASSTHRU), provide your upstream API key
 ANTHROPIC_API_KEY=your-poe-key claude --model poe:gemini-flash "..."
 ```
+
+`vdm claude-code setup` writes these Claude Code environment keys:
+
+- `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`
+- `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_BASE_URL`, and `CLAUDE_AGENT_API_BASE_URL` pointing to Vandamme
+- `ANTHROPIC_MODEL=sonnet` and `ANTHROPIC_SMALL_FAST_MODEL=haiku` by default
+- Optional `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` when passed
+
+Restart Claude Code after changing these settings.
 
 ### 5️⃣ Verify Your Setup
 
@@ -594,6 +607,19 @@ LOG_LEVEL=INFO                  # Logging level
 MAX_TOKENS_LIMIT=4096           # Maximum tokens
 REQUEST_TIMEOUT=90              # Request timeout in seconds
 MAX_RETRIES=2                   # Retry attempts
+```
+
+#### ChatGPT OAuth Provider Example
+
+ChatGPT can be configured as one possible provider using OAuth, but it is not required for the generic Claude Code quickstart.
+
+```bash
+export CHATGPT_AUTH_MODE=oauth
+export CHATGPT_BASE_URL=https://api.openai.com/v1
+export VDM_DEFAULT_TARGET=chatgpt
+vdm oauth login chatgpt
+vdm server start
+vdm claude-code setup --model sonnet --small-fast-model haiku
 ```
 
 #### Middleware Configuration
