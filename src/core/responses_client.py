@@ -387,7 +387,7 @@ class ResponsesAPIClient(OAuthClientMixin):
         if "not supported" in error_str:
             return (
                 "Model not supported by ChatGPT Responses API. "
-                "Use a ChatGPT-compatible model (e.g., gpt-5, gpt-5.2-codex)."
+                "Use a ChatGPT-compatible model (e.g., gpt-5.4, gpt-5.5)."
             )
         if "instructions are required" in error_str:
             return (

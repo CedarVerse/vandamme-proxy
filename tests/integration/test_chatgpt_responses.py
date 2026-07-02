@@ -64,9 +64,7 @@ from tests.config import TEST_HEADERS
 _CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex"
 _RESPONSES_API_URL = f"{_CHATGPT_BASE_URL}/responses"
 
-# Model name to use in Claude requests — must match a known chatgpt alias or
-# a valid Responses API model name.  "gpt-5" is the haiku alias in defaults.toml.
-_CHATGPT_MODEL = "chatgpt:gpt-5"
+_CHATGPT_MODEL = "chatgpt:gpt-5.4"
 
 # Fake OAuth credentials (never used for real HTTP calls — RESPX intercepts)
 _FAKE_ACCESS_TOKEN = "fake_oauth_access_token_for_testing"
@@ -137,6 +135,7 @@ def chatgpt_provider_env() -> Generator[None, None, None]:
     modules_to_clear = [
         "src.core.config",
         "src.core.dependencies",
+        "src.core.provider",
         "src.core.provider_manager",
         "src.core.provider.client_factory",
         "src.main",

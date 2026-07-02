@@ -115,10 +115,10 @@ auth-mode = "oauth"
 timeout = 300
 max-retries = 2
 [chatgpt.aliases]
-# Confirmed working via spike test (2026-03-25). Model availability may change.
-haiku = "gpt-5"
-sonnet = "gpt-5.2-codex"
-opus = "gpt-5.2"
+# Confirmed working via local probe (2026-07-02). Model availability may change.
+haiku = "gpt-5.4"
+sonnet = "gpt-5.5"
+opus = "gpt-5.5"
 
 # Cursor Agent provider — uses agent-cli-to-api bridge on localhost.
 # Requires: `agent-cli-to-api cursor-agent` running on port 8766.
@@ -403,4 +403,3 @@ kimi = "kimi-k2.6"
 mimo = "mimo-v2.5-pro"
 minimax = "minimax-m2.7"
 qwen = "qwen3.6-plus"
-

@@ -28,7 +28,8 @@ Set the `AUTH_MODE` environment variable for your provider:
 
 ```bash
 export CHATGPT_AUTH_MODE=oauth
-export CHATGPT_BASE_URL=https://api.openai.com/v1
+export CHATGPT_BASE_URL=https://chatgpt.com/backend-api/codex
+export CHATGPT_API_FORMAT=responses
 export VDM_DEFAULT_TARGET=chatgpt
 ```
 
@@ -36,7 +37,8 @@ Alternatively, use the `!OAUTH` sentinel value:
 
 ```bash
 export CHATGPT_API_KEY=!OAUTH
-export CHATGPT_BASE_URL=https://api.openai.com/v1
+export CHATGPT_BASE_URL=https://chatgpt.com/backend-api/codex
+export CHATGPT_API_FORMAT=responses
 ```
 
 Or configure via TOML in `~/.config/vandamme-proxy/vandamme-config.toml`:
@@ -44,7 +46,8 @@ Or configure via TOML in `~/.config/vandamme-proxy/vandamme-config.toml`:
 ```toml
 [chatgpt]
 auth-mode = "oauth"
-base-url = "https://api.openai.com/v1"
+api-format = "responses"
+base-url = "https://chatgpt.com/backend-api/codex"
 ```
 
 ### Step 2: Authenticate
@@ -72,7 +75,7 @@ This will:
 ┃ [green]✅ Successfully authenticated![/green]  ┃
 ┃                                          ┃
 ┃ Provider: chatgpt                        ┃
-┃ Account ID: user_abc123xyz               ┃
+┃ Account ID: 00000000-0000-4000-8000-000000000000 ┃
 ┃ Token expires at: 2026-01-17T12:34:56Z   ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
@@ -94,7 +97,7 @@ vdm oauth status chatgpt
 ├─────────────────────────────────────────────────────┨
 ┃ Provider           chatgpt                          ┃
 ┃ Status             [green]✅ Authenticated[/green]  ┃
-┃ Account ID         user_abc123xyz                   ┃
+┃ Account ID         00000000-0000-4000-8000-000000000000 ┃
 ┃ Expires At         2026-01-17T12:34:56Z             ┃
 ┃ Last Refresh       2026-01-16T10:15:30Z             ┃
 ┃ Storage Path       /home/user/.vandamme/oauth/chatgpt/ ┃
@@ -110,7 +113,7 @@ vdm server start
 ### Step 5: Use with Claude Code
 
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:8082 claude "Hello, world!"
+ANTHROPIC_BASE_URL=http://localhost:8082 claude --model gpt-5.4 "Hello, world!"
 ```
 
 ## Configuration Methods
