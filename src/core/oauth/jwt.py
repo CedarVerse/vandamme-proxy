@@ -81,9 +81,10 @@ def extract_account_id(token: str, raise_on_error: bool = False) -> str | None:
         TokenError: If raise_on_error is True and token is malformed
 
     The account ID may be found in:
-    1. https://api.openai.com/auth.user_id (OpenAI custom claim)
-    2. user_id (direct claim)
-    3. sub (standard subject claim)
+    1. https://api.openai.com/auth.chatgpt_account_id (ChatGPT account UUID)
+    2. https://api.openai.com/auth.user_id (OpenAI user ID)
+    3. user_id (direct claim)
+    4. sub (standard subject claim)
     """
     try:
         claims = parse_jwt_claims(token)
@@ -95,9 +96,13 @@ def extract_account_id(token: str, raise_on_error: bool = False) -> str | None:
     # Try OpenAI's custom claim first
     openai_auth = claims.get("https://api.openai.com/auth")
     if isinstance(openai_auth, dict):
-        account_id = openai_auth.get("user_id")
-        if isinstance(account_id, str):
-            return account_id
+        chatgpt_account_id = openai_auth.get("chatgpt_account_id")
+        if isinstance(chatgpt_account_id, str):
+            return chatgpt_account_id
+
+        user_id = openai_auth.get("user_id")
+        if isinstance(user_id, str):
+            return user_id
 
     # Try direct user_id claim
     account_id = claims.get("user_id")
