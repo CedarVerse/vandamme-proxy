@@ -12,7 +12,7 @@ env:
 jobs:
   code-quality:
     name: Code Quality
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
@@ -52,7 +52,7 @@ jobs:
 
   tests:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
@@ -113,7 +113,7 @@ jobs:
 
   build:
     name: Build Package
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [code-quality, tests]
     steps:
       - name: Checkout code

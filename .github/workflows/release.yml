@@ -8,7 +8,7 @@ on:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
       contents: write  # Required to create GitHub releases
@@ -79,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, blacksmith-4vcpu-windows-2025]
         include:
           - os: ubuntu-latest
             platform_os: linux
@@ -87,7 +87,7 @@ jobs:
           - os: macos-latest
             platform_os: darwin
             binary_ext: ""
-          - os: windows-latest
+          - os: blacksmith-4vcpu-windows-2025
             platform_os: windows
             binary_ext: ".exe"
     runs-on: ${{ matrix.os }}
